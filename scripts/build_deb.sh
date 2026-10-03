@@ -54,10 +54,17 @@ chmod 0755 "${BUILD_DIR}/usr/bin/${PKG}"
 # --- Data files -------------------------------------------------------------
 install -m 0644 "${REPO_DIR}/data/${PKG}.svg" \
     "${BUILD_DIR}/usr/share/icons/hicolor/scalable/apps/${PKG}.svg"
-install -m 0644 "${REPO_DIR}/data/${PKG}.desktop" \
-    "${BUILD_DIR}/usr/share/applications/${PKG}.desktop"
-install -m 0644 "${REPO_DIR}/data/${PKG}.service" \
-    "${BUILD_DIR}/usr/lib/systemd/user/${PKG}.service"
+# The service and desktop files carry a "@BIN@" placeholder for the launcher
+# path: install.sh renders it with the venv binary, the .deb with /usr/bin.
+render_unit() {
+    local src="$1" dest="$2" bin="$3"
+    sed "s|@BIN@|${bin}|g" "${src}" > "${dest}"
+    chmod 0644 "${dest}"
+}
+render_unit "${REPO_DIR}/data/${PKG}.desktop" \
+    "${BUILD_DIR}/usr/share/applications/${PKG}.desktop" "/usr/bin/${PKG}"
+render_unit "${REPO_DIR}/data/${PKG}.service" \
+    "${BUILD_DIR}/usr/lib/systemd/user/${PKG}.service" "/usr/bin/${PKG}"
 install -m 0644 "${REPO_DIR}/data/99-${PKG}.rules" \
     "${BUILD_DIR}/lib/udev/rules.d/99-${PKG}.rules"
 
@@ -69,7 +76,7 @@ Version: ${VERSION}
 Section: utils
 Priority: optional
 Architecture: ${ARCH}
-Depends: python3 (>= 3.10), python3-tomli-w, python3-evdev, libnotify-bin, wtype
+Depends: python3 (>= 3.10), python3-tomli | python3 (>= 3.11), python3-tomli-w, python3-evdev, libnotify-bin, wtype
 Recommends: python3-uinput, g3kb-switch, xdotool, python3-gi, gir1.2-appindicator3-0.1
 Installed-Size: ${INSTALLED_SIZE}
 Maintainer: Pavel1778 <noreply@github.com>

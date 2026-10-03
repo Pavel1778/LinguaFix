@@ -7,6 +7,8 @@
 set -uo pipefail
 
 APP_NAME="linguafix"
+# USER is not guaranteed to be set (cron, su, some containers). Fall back to id.
+CURRENT_USER="${SUDO_USER:-${USER:-$(id -un)}}"
 VENV_DIR="${HOME}/.local/share/${APP_NAME}/venv"
 BIN="${VENV_DIR}/bin/${APP_NAME}"
 UNIT_DIR="${HOME}/.config/systemd/user"
@@ -147,9 +149,12 @@ log "Устанавливаю пакет (editable) из ${REPO_DIR}"
 # ---------------------------------------------------------------------------
 if [ -f "${REPO_DIR}/data/99-${APP_NAME}.rules" ]; then
     if confirm "Установить udev-правило в ${UDEV_RULE} (нужен sudo)?"; then
+        sudo mkdir -p "$(dirname "${UDEV_RULE}")"
         sudo install -m 0644 "${REPO_DIR}/data/99-${APP_NAME}.rules" "${UDEV_RULE}"
-        sudo udevadm control --reload-rules || true
-        sudo udevadm trigger || true
+        if have udevadm; then
+            sudo udevadm control --reload-rules || true
+            sudo udevadm trigger || true
+        fi
     else
         log "Пропускаю установку udev-правила."
     fi
@@ -158,11 +163,11 @@ fi
 # ---------------------------------------------------------------------------
 # 7. input group
 # ---------------------------------------------------------------------------
-if id -nG "${USER}" | grep -qw input; then
-    log "Пользователь ${USER} уже состоит в группе input."
+if id -nG "${CURRENT_USER}" | grep -qw input; then
+    log "Пользователь ${CURRENT_USER} уже состоит в группе input."
 else
-    if confirm "Добавить ${USER} в группу input (нужен sudo)?"; then
-        sudo usermod -aG input "${USER}"
+    if confirm "Добавить ${CURRENT_USER} в группу input (нужен sudo)?"; then
+        sudo usermod -aG input "${CURRENT_USER}"
         NEEDS_RELOGIN=1
     else
         warn "Без группы input демон не сможет читать /dev/input/event*."
@@ -174,7 +179,11 @@ fi
 # ---------------------------------------------------------------------------
 mkdir -p "${UNIT_DIR}"
 if [ -f "${REPO_DIR}/data/${APP_NAME}.service" ]; then
-    install -m 0644 "${REPO_DIR}/data/${APP_NAME}.service" "${UNIT_DIR}/${APP_NAME}.service"
+    # data/*.service and data/*.desktop carry a "@BIN@" placeholder so that both
+    # install.sh (venv launcher) and the .deb (/usr/bin/linguafix) can share them.
+    sed "s|@BIN@|${BIN}|g" "${REPO_DIR}/data/${APP_NAME}.service" \
+        > "${UNIT_DIR}/${APP_NAME}.service"
+    chmod 0644 "${UNIT_DIR}/${APP_NAME}.service"
     log "Установлен systemd user service: ${UNIT_DIR}/${APP_NAME}.service"
 fi
 
@@ -183,7 +192,9 @@ fi
 # ---------------------------------------------------------------------------
 mkdir -p "${AUTOSTART_DIR}"
 if [ -f "${REPO_DIR}/data/${APP_NAME}.desktop" ]; then
-    install -m 0644 "${REPO_DIR}/data/${APP_NAME}.desktop" "${AUTOSTART_DIR}/${APP_NAME}.desktop"
+    sed "s|@BIN@|${BIN}|g" "${REPO_DIR}/data/${APP_NAME}.desktop" \
+        > "${AUTOSTART_DIR}/${APP_NAME}.desktop"
+    chmod 0644 "${AUTOSTART_DIR}/${APP_NAME}.desktop"
     log "Установлен автозапуск: ${AUTOSTART_DIR}/${APP_NAME}.desktop"
 fi
 

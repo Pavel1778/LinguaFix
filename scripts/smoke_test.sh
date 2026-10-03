@@ -42,6 +42,10 @@ set -e
 apt-get update -qq
 apt-get install -y -qq "/pkg/'"${DEB_NAME}"'" >/dev/null
 
+echo "--- entry point ---"
+command -v linguafix >/dev/null || { echo "linguafix not on PATH"; exit 1; }
+test -x /usr/bin/linguafix || { echo "/usr/bin/linguafix missing or not executable"; exit 1; }
+
 echo "--- version ---"
 linguafix version | grep -q "LinguaFix" || { echo "version check failed"; exit 1; }
 
@@ -50,6 +54,36 @@ linguafix --help | grep -q "doctor" || { echo "help missing doctor"; exit 1; }
 
 echo "--- status ---"
 linguafix status >/dev/null
+
+echo "--- data files present and loadable ---"
+DATA=/usr/lib/linguafix/linguafix/data
+for f in layouts.json ngrams_en.json ngrams_ru.json stop_words.txt; do
+    test -f "${DATA}/${f}" || { echo "missing data file ${f}"; exit 1; }
+done
+python3 - <<PY || { echo "data files failed to load"; exit 1; }
+import sys
+sys.path.insert(0, "/usr/lib/linguafix")
+from linguafix.converter import LayoutConverter
+from linguafix.detector import LanguageDetector
+assert LayoutConverter().convert("ghbdtn", "us", "ru") == "привет"
+assert LanguageDetector().detect("привет") == "ru"
+print("data load OK")
+PY
+
+echo "--- systemd unit points at the packaged launcher ---"
+grep -q "^ExecStart=/usr/bin/linguafix " /usr/lib/systemd/user/linguafix.service \
+    || { echo "unit ExecStart does not point at /usr/bin/linguafix"; exit 1; }
+! grep -q "@BIN@" /usr/lib/systemd/user/linguafix.service \
+    || { echo "unit still contains @BIN@ placeholder"; exit 1; }
+! grep -q "@BIN@" /usr/share/applications/linguafix.desktop \
+    || { echo "desktop file still contains @BIN@ placeholder"; exit 1; }
+
+echo "--- install-autostart renders the packaged launcher ---"
+linguafix install-autostart >/dev/null
+grep -q "^Exec=/usr/bin/linguafix start" "${HOME}/.config/autostart/linguafix.desktop" \
+    || { echo "autostart Exec not rendered"; exit 1; }
+grep -q "^ExecStart=/usr/bin/linguafix start" "${HOME}/.config/systemd/user/linguafix.service" \
+    || { echo "installed unit ExecStart not rendered"; exit 1; }
 
 echo "--- doctor (expected to report failures in a bare container) ---"
 linguafix doctor || true

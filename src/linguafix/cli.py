@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -156,7 +157,12 @@ def cmd_config(args: argparse.Namespace) -> int:
         editor = os.environ.get("EDITOR", "nano")
         if not config_path().exists():
             save_config(Config())
-        return subprocess.run([editor, str(config_path())], check=False).returncode
+        try:
+            # Not captured: the editor needs the terminal.
+            return subprocess.run([editor, str(config_path())], check=False).returncode
+        except OSError as exc:
+            print(f"Не удалось запустить редактор {editor}: {exc}")
+            return 1
     if args.config_action == "reset":
         save_config(Config())
         print(MSG_CONFIG_RESET)
@@ -221,6 +227,32 @@ def _bundled_data_file(name: str) -> Path | None:
     return fallback if fallback.exists() else None
 
 
+def _run_quiet(argv: list[str]) -> int:
+    """Run ``argv`` ignoring failures, including a missing executable.
+
+    ``check=False`` does not suppress ``FileNotFoundError`` when the binary is
+    absent (for example ``systemctl`` in a container), so it is caught here.
+    """
+    try:
+        return subprocess.run(argv, check=False, capture_output=True).returncode
+    except OSError as exc:
+        logger.debug("Command %s failed: %s", argv, exc)
+        return 127
+
+
+def _launcher_path() -> str:
+    """Return the path used to launch the daemon from the unit/autostart files."""
+    launcher = shutil.which("linguafix")
+    if launcher:
+        return launcher
+    return str(Path(sys.executable).with_name("linguafix"))
+
+
+def _render_template(text: str) -> str:
+    """Substitute the ``@BIN@`` placeholder with the launcher path."""
+    return text.replace("@BIN@", _launcher_path())
+
+
 def cmd_install_autostart(_args: argparse.Namespace) -> int:
     """Install the XDG autostart entry and enable the systemd user unit."""
     source = _bundled_data_file("linguafix.desktop")
@@ -229,16 +261,16 @@ def cmd_install_autostart(_args: argparse.Namespace) -> int:
         return 1
     target = _autostart_path()
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    target.write_text(_render_template(source.read_text(encoding="utf-8")), encoding="utf-8")
 
     unit_source = _bundled_data_file("linguafix.service")
     if unit_source is not None:
         unit_dir = Path.home() / ".config" / "systemd" / "user"
         unit_dir.mkdir(parents=True, exist_ok=True)
         (unit_dir / "linguafix.service").write_text(
-            unit_source.read_text(encoding="utf-8"), encoding="utf-8"
+            _render_template(unit_source.read_text(encoding="utf-8")), encoding="utf-8"
         )
-        subprocess.run(["systemctl", "--user", "daemon-reload"], check=False, capture_output=True)
+        _run_quiet(["systemctl", "--user", "daemon-reload"])
     print(MSG_AUTOSTART_INSTALLED)
     return 0
 
@@ -248,11 +280,7 @@ def cmd_uninstall_autostart(_args: argparse.Namespace) -> int:
     target = _autostart_path()
     if target.exists():
         target.unlink()
-    subprocess.run(
-        ["systemctl", "--user", "disable", "--now", "linguafix.service"],
-        check=False,
-        capture_output=True,
-    )
+    _run_quiet(["systemctl", "--user", "disable", "--now", "linguafix.service"])
     print(MSG_AUTOSTART_REMOVED)
     return 0
 

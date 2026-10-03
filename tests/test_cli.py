@@ -208,16 +208,72 @@ def test_install_autostart_missing_source(
     assert cli.main(["install-autostart"]) == 1
 
 
+def test_install_autostart_renders_bin_placeholder(
+    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    desktop = isolated_env / "src" / "linguafix.desktop"
+    desktop.parent.mkdir(parents=True, exist_ok=True)
+    desktop.write_text("[Desktop Entry]\nExec=@BIN@ start --foreground\n", encoding="utf-8")
+    monkeypatch.setattr(
+        cli, "_bundled_data_file", lambda name: desktop if name.endswith("desktop") else None
+    )
+    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_launcher_path", lambda: "/usr/bin/linguafix")
+    assert cli.main(["install-autostart"]) == 0
+    written = cli._autostart_path().read_text(encoding="utf-8")
+    assert "@BIN@" not in written
+    assert "Exec=/usr/bin/linguafix start --foreground" in written
+
+
+def test_bundled_unit_and_desktop_are_templates() -> None:
+    """The shipped files must keep the placeholder for installers to render."""
+    from importlib import resources
+
+    base = resources.files("linguafix") / "data"
+    assert "@BIN@" in (base / "linguafix.service").read_text(encoding="utf-8")
+    assert "@BIN@" in (base / "linguafix.desktop").read_text(encoding="utf-8")
+
+
+def test_repo_and_packaged_data_files_match() -> None:
+    """``data/`` and ``src/linguafix/data/`` must not drift apart."""
+    from importlib import resources
+
+    packaged = Path(str(resources.files("linguafix") / "data"))
+    repo_data = Path(__file__).resolve().parent.parent / "data"
+    for name in ("linguafix.service", "linguafix.desktop", "linguafix.svg"):
+        assert (repo_data / name).read_bytes() == (packaged / name).read_bytes(), name
+
+
 def test_uninstall_autostart(
     isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     target = cli._autostart_path()
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text("x", encoding="utf-8")
-    monkeypatch.setattr(cli.subprocess, "run", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "_run_quiet", lambda *a, **k: 0)
     assert cli.main(["uninstall-autostart"]) == 0
     assert not target.exists()
     assert "Автозапуск удалён" in capsys.readouterr().out
+
+
+def test_run_quiet_survives_missing_binary() -> None:
+    assert cli._run_quiet(["definitely-not-a-real-binary-xyz"]) == 127
+
+
+def test_install_autostart_survives_missing_systemctl(
+    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    desktop = isolated_env / "src" / "linguafix.desktop"
+    desktop.parent.mkdir(parents=True, exist_ok=True)
+    desktop.write_text("Exec=@BIN@ start\n", encoding="utf-8")
+    unit = isolated_env / "src" / "linguafix.service"
+    unit.write_text("ExecStart=@BIN@ start\n", encoding="utf-8")
+
+    def fake(name: str) -> Path:
+        return unit if name.endswith("service") else desktop
+
+    monkeypatch.setattr(cli, "_bundled_data_file", fake)
+    assert cli.main(["install-autostart"]) == 0
 
 
 def test_pid_alive_for_current_process() -> None:

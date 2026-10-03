@@ -34,6 +34,35 @@ with fakes. It cannot verify permissions, D-Bus behaviour or how real
 applications react to synthetic input. This plan covers what must be checked by
 hand on a real desktop.
 
+### Quick start (copy-paste)
+
+Run this block first. It installs LinguaFix, relogs the session state and prints
+a diagnosis. It is safe to paste as one piece.
+
+```bash
+# 1. Get the code and install (non-interactive).
+git clone https://github.com/Pavel1778/LinguaFix.git
+cd LinguaFix
+git checkout feat/linguafix-initial-implementation
+bash install.sh --yes
+
+# 2. A relogin is required after being added to the input group.
+echo ">>> Log out completely and back in, then run the rest."
+
+# 3. After the relogin — verify the environment.
+groups | grep input && echo "OK: in input group"
+ls -l /dev/input/event* | head
+linguafix doctor
+linguafix status
+
+# 4. Watch the daemon while you test (Ctrl-C to stop).
+journalctl --user -u linguafix.service -f
+```
+
+If `linguafix doctor` shows no ❌, continue with the scenarios below. If it
+shows a ❌, stop and attach the output to issue #5 — that is already a useful
+result.
+
 ### Environments
 
 Test on both, in a virtual machine:

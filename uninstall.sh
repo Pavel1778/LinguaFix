@@ -5,13 +5,17 @@
 set -uo pipefail
 
 APP_NAME="linguafix"
-VENV_DIR="${HOME}/.local/share/${APP_NAME}/venv"
+SHARE_DIR="${HOME}/.local/share/${APP_NAME}"
+VENV_DIR="${SHARE_DIR}/venv"
 UNIT_DIR="${HOME}/.config/systemd/user"
 AUTOSTART_DIR="${HOME}/.config/autostart"
 ICON_DIR="${HOME}/.local/share/icons/hicolor/scalable/apps"
 CONFIG_DIR="${HOME}/.config/${APP_NAME}"
 STATE_DIR="${HOME}/.local/state/${APP_NAME}"
+CACHE_DIR="${HOME}/.cache/${APP_NAME}"
 UDEV_RULE="/etc/udev/rules.d/99-${APP_NAME}.rules"
+
+have() { command -v "$1" >/dev/null 2>&1; }
 
 ASSUME_YES=0
 PURGE=0
@@ -53,15 +57,19 @@ rm -f "${ICON_DIR}/${APP_NAME}.svg"
 
 if [ -f "${UDEV_RULE}" ] && confirm "Удалить udev-правило ${UDEV_RULE} (нужен sudo)?"; then
     sudo rm -f "${UDEV_RULE}"
-    sudo udevadm control --reload-rules || true
+    if have udevadm; then
+        sudo udevadm control --reload-rules || true
+    fi
 fi
 
 if confirm "Удалить виртуальное окружение ${VENV_DIR}?"; then
     rm -rf "${VENV_DIR}"
+    # Remove the parent directory too when the venv was the only thing in it.
+    rmdir "${SHARE_DIR}" 2>/dev/null || true
 fi
 
 if [ "${PURGE}" -eq 1 ] || confirm "Удалить конфигурацию и логи (${CONFIG_DIR}, ${STATE_DIR})?"; then
-    rm -rf "${CONFIG_DIR}" "${STATE_DIR}"
+    rm -rf "${CONFIG_DIR}" "${STATE_DIR}" "${CACHE_DIR}"
 fi
 
 log "LinguaFix удалён. Группу input пользователю не удаляю (её используют другие инструменты)."

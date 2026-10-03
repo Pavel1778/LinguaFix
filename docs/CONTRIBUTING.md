@@ -78,6 +78,25 @@ bash scripts/build_deb.sh
 This produces `dist/linguafix_<version>_all.deb`. The script builds the package
 tree by hand (no `dh_make` required) and runs `dpkg-deb --build`.
 
+Test the package before publishing:
+
+```bash
+make smoke-test                      # installs the .deb in a clean debian:12
+SMOKE_IMAGE=ubuntu:22.04 make smoke-test   # Python 3.10 path
+```
+
+`make smoke-test` installs the real package into a clean container and checks
+the entry point, the data files, the systemd unit path and `collect-logs`. It
+catches packaging bugs that the pytest suite cannot, because pytest replaces the
+operating-system boundary with fakes. When you add a runtime dependency, add it
+to the `Depends:` line in `scripts/build_deb.sh` too — the two dependency lists
+(apt and pip) must stay in sync.
+
+Two files exist in both `data/` and `src/linguafix/data/`: `linguafix.service`,
+`linguafix.desktop` and `linguafix.svg`. Keep them identical — a test enforces
+this. `data/` is the source for `install.sh`; `src/linguafix/data/` is what the
+installed package ships.
+
 ## Pull requests
 
 - Keep the change focused; describe the motivation in the PR body.
