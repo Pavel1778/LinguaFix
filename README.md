@@ -49,7 +49,7 @@ Caramba Switcher for Windows.
 - 🔔 Уведомления (`notify-send`) и иконка в трее (AppIndicator)
 - 🛡️ Стоп-слова для защиты паролей и логинов
 - ⚙️ Настраиваемые таймауты, языки и backend'ы
-- 🧩 CLI: `start`, `stop`, `status`, `config`, `fix`, `doctor`, `collect-logs`
+- 🧩 CLI: `start`, `stop`, `kill`, `status`, `config`, `fix`, `doctor`, `collect-logs`
 - 🩺 `linguafix doctor` — самодиагностика окружения с таблицей ✅/❌ и подсказками
 - 📦 `linguafix collect-logs` — один tarball со всей диагностикой для баг-репорта
 - 🔁 Горячая перезагрузка конфига по `SIGHUP`
@@ -139,6 +139,7 @@ systemctl --user status linguafix.service
 ```toml
 analysis_timeout = 1.5     # пауза перед анализом, секунды
 min_word_length = 3        # не анализировать короткие слова
+max_buffer_size = 200      # верхняя граница буфера нажатий
 layouts = ["us", "ru"]     # порядок раскладок
 backend = "auto"           # auto | uinput | wtype | xdotool
 switch_method = "auto"     # auto | g3kb-switch | setxkbmap
@@ -228,6 +229,12 @@ make build-deb                # собрать .deb в dist/
 - Доступ через `uaccess` применяется при входе в сессию: если пакет установлен
   в уже активной сессии, права появятся после следующего входа/перезагрузки.
 - Переключение раскладки в GNOME Wayland требует `g3kb-switch`.
+- Замена текста атомарна только на бэкенде `uinput`. На фолбэках `wtype` и
+  `xdotool` удаление и ввод идут отдельными вызовами, поэтому при аварийном
+  завершении посреди замены текст может остаться обрезанным. Используйте
+  `uinput` (значение по умолчанию в Debian-пакете), где это возможно.
+- Демон слушает все доступные клавиатуры; устройство с именем, содержащим
+  `linguafix` или `uinput`, намеренно пропускается (защита от петли).
 
 ## 🤝 Contributing
 

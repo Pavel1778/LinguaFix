@@ -20,7 +20,9 @@ import os
 import selectors
 import signal
 import subprocess
+import threading
 import time
+import traceback
 from typing import TYPE_CHECKING, Final
 
 from .config import Config, cache_dir
@@ -38,6 +40,8 @@ logger = logging.getLogger(__name__)
 LOCK_FILE_NAME: Final[str] = "daemon.lock"
 SELECT_TIMEOUT: Final[float] = 0.25
 NOTIFY_TIMEOUT: Final[float] = 3.0
+# Pause between keyboard re-discovery attempts after the last device vanished.
+DEVICE_RESCAN_DELAY: Final[float] = 2.0
 
 # evdev key name -> (unshifted US character, shifted US character).
 _US_KEY_NAMES: Final[dict[str, tuple[str, str]]] = {
@@ -162,8 +166,14 @@ class LinguaFixDaemon:
         self._shift = False
         self._running = False
         self._reload_requested = False
+        self._shutdown_requested = False
         self._lock_handle: object | None = None
         self._tray: TrayIcon | None = None
+        # Guards ``buffer``/``last_key_time``/``_shift`` against the tray thread,
+        # which may call ``_process_buffer`` (via ``_tray_fix``) concurrently with
+        # the event loop. ``_lock`` serialises buffer processing so the same text
+        # is never corrected twice.
+        self._lock = threading.RLock()
 
     # ------------------------------------------------------------------
     # Device discovery
@@ -248,7 +258,10 @@ class LinguaFixDaemon:
         signal.signal(signal.SIGHUP, self._handle_reload)
 
     def _handle_stop(self, signum: int, _frame: object) -> None:
+        # Only set flags here: the handler may run between any two bytecodes, so
+        # it must not call anything that allocates or locks.
         logger.info("Received signal %s; shutting down", signum)
+        self._shutdown_requested = True
         self._running = False
 
     def _handle_reload(self, _signum: int, _frame: object) -> None:
@@ -259,11 +272,20 @@ class LinguaFixDaemon:
     # Event handling
     # ------------------------------------------------------------------
     def _handle_event(self, event: object) -> None:
-        """Process a single evdev event.
+        """Process a single evdev event, surviving any per-event failure.
 
         Args:
             event: An object exposing ``type``, ``code`` and ``value`` attributes.
         """
+        try:
+            self._handle_event_inner(event)
+        except Exception as exc:  # the daemon must survive any per-event failure
+            with self._lock:
+                sensitive = self.buffer.strip()
+            self._log_sanitized("Failed to handle a key event", exc, sensitive)
+
+    def _handle_event_inner(self, event: object) -> None:
+        """Inner implementation of :meth:`_handle_event`."""
         try:
             import evdev
         except ImportError:  # pragma: no cover
@@ -278,7 +300,8 @@ class LinguaFixDaemon:
 
         if name in _SHIFT_KEYS:
             if name != "KEY_CAPSLOCK":
-                self._shift = value in (1, 2)
+                with self._lock:
+                    self._shift = value in (1, 2)
             return
 
         if value == 0:  # key release
@@ -293,8 +316,6 @@ class LinguaFixDaemon:
                 self._handle_backspace()
             return
 
-        self.last_key_time = time.time()
-
         if name == "KEY_BACKSPACE":
             self._handle_backspace()
             return
@@ -304,8 +325,18 @@ class LinguaFixDaemon:
             return
 
         char = self._key_to_char(code)
-        if char is not None:
+        if char is None:
+            return
+        with self._lock:
             self.buffer += char
+            self.last_key_time = time.time()
+            overflow = len(self.buffer) > self.config.max_buffer_size
+        # A held key (auto-repeat) or a paste-like burst can grow the buffer
+        # without bound; analyse and clear it instead of waiting for the idle
+        # timeout so memory stays bounded.
+        if overflow:
+            logger.info("Buffer exceeded %d chars; analysing early", self.config.max_buffer_size)
+            self._process_buffer()
 
     def _code_to_name(self, code: int) -> str:
         """Return the evdev key name for ``code`` (or an empty string)."""
@@ -332,13 +363,47 @@ class LinguaFixDaemon:
 
     def _handle_backspace(self) -> None:
         """Remove the last character from the buffer."""
-        if self.buffer:
-            self.buffer = self.buffer[:-1]
+        with self._lock:
+            if self.buffer:
+                self.buffer = self.buffer[:-1]
 
     def _process_buffer(self) -> None:
+        """Analyse the buffer, never letting an error escape.
+
+        A failure in the detector, converter, switcher or injector must not kill
+        the daemon: it is logged and the loop continues.
+        """
+        # Capture the text so a traceback can be scrubbed of it before logging.
+        with self._lock:
+            sensitive = self.buffer.strip()
+        try:
+            self._process_buffer_inner()
+        except Exception as exc:  # the daemon must survive any failure
+            self._log_sanitized("Failed to process the buffer", exc, sensitive)
+
+    @staticmethod
+    def _log_sanitized(message: str, exc: BaseException, sensitive: str) -> None:
+        """Log an exception traceback with any typed text redacted.
+
+        Standard tracebacks do not include local variables, so the only way the
+        buffer can reach the log is through an exception *message* that embeds
+        it. Redacting the buffer (and its stripped form) from the formatted
+        traceback closes that hole while keeping the traceback for debugging.
+        """
+        formatted = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        for needle in {sensitive, sensitive.strip()}:
+            if needle:
+                formatted = formatted.replace(needle, "<redacted>")
+        logger.error("%s\n%s", message, formatted.rstrip())
+
+    def _process_buffer_inner(self) -> None:
         """Analyse the buffer and apply a correction when appropriate."""
-        buffer = self.buffer.strip()
-        self.buffer = ""
+        # Snapshot and clear the buffer under the lock, then release it before
+        # the (slow) switch/inject so typing during a fix is never lost. Holding
+        # the lock for the whole fix would stall the event loop and drop keys.
+        with self._lock:
+            buffer = self.buffer.strip()
+            self.buffer = ""
         if not buffer or len(buffer) < self.config.min_word_length:
             return
 
@@ -362,16 +427,27 @@ class LinguaFixDaemon:
             logger.info("Dry run: skipping layout switch and text replacement")
             return
 
+        # If a shutdown was already requested, do not begin: the whole fix must
+        # be all-or-nothing. Once we start, we finish it, because the injector
+        # emits backspaces and the new text as one atomic batch, so a SIGTERM
+        # arriving mid-fix cannot leave truncated text.
+        if self._shutdown_requested:
+            logger.info("Shutdown requested; skipping replacement")
+            return
+
         self.switcher.switch_to(target)
         time.sleep(0.05)
         if self.injector.replace_text(buffer, converted, target) and self.config.notify_on_fix:
-            self._notify(converted)
+            self._notify()
 
-    def _notify(self, text: str) -> None:
+    def _notify(self) -> None:
         """Show a desktop notification about a correction."""
+        # The notification text is a *fixed* label. The typed text is never put
+        # into the argv of any subprocess, so it cannot leak through ``ps``,
+        # ``/proc`` or the journal.
         try:
             subprocess.run(
-                ["notify-send", "--app-name=LinguaFix", "LinguaFix", f"Исправлено: {text}"],
+                ["notify-send", "--app-name=LinguaFix", "LinguaFix", "Раскладка исправлена"],
                 check=False,
                 capture_output=True,
                 timeout=NOTIFY_TIMEOUT,
@@ -439,8 +515,13 @@ class LinguaFixDaemon:
         try:
             self._loop(selector)
         finally:
+            # Close the initial devices and any picked up by a re-discovery pass,
+            # so a keyboard reconnected during the run is not leaked.
+            open_devices = {id(device): device for device in devices}
+            for key in selector.get_map().values():
+                open_devices[id(key.data)] = key.data
             selector.close()
-            for device in devices:
+            for device in open_devices.values():
                 with contextlib.suppress(OSError):
                     device.close()
             self._stop_tray()
@@ -468,7 +549,9 @@ class LinguaFixDaemon:
 
     def _tray_fix(self) -> None:
         """Tray callback: analyse the current buffer immediately."""
-        if self.buffer:
+        with self._lock:
+            has_buffer = bool(self.buffer)
+        if has_buffer:
             self._process_buffer()
 
     def status_text(self) -> str:
@@ -482,10 +565,29 @@ class LinguaFixDaemon:
 
     def _loop(self, selector: selectors.BaseSelector) -> None:
         """Run the event loop until ``self._running`` becomes false."""
+        registered = len(selector.get_map())
         while self._running:
             if self._reload_requested:
                 self._reload_requested = False
                 self.reload_config()
+
+            if registered == 0:
+                # Every keyboard disappeared (for example a USB keyboard was
+                # unplugged). Retry discovery instead of spinning: systemd's
+                # ``Restart=always`` would also restart us, but recovering in
+                # place keeps the single-instance lock and avoids a restart
+                # storm. The device path is rediscovered, never cached.
+                logger.warning("No keyboard devices remain; attempting to reconnect")
+                time.sleep(DEVICE_RESCAN_DELAY)
+                for device in self.discover_devices():
+                    try:
+                        selector.register(device.fd, selectors.EVENT_READ, device)
+                        registered += 1
+                    except (OSError, ValueError) as exc:
+                        logger.debug("Cannot re-register %s: %s", device, exc)
+                        with contextlib.suppress(OSError):
+                            device.close()
+                continue
 
             try:
                 ready = selector.select(SELECT_TIMEOUT)
@@ -501,9 +603,12 @@ class LinguaFixDaemon:
                     for event in device.read():
                         self._handle_event(event)
                 except OSError as exc:
-                    logger.debug("Device read error: %s", exc)
+                    logger.warning("Device read error (device removed?): %s", exc)
                     with contextlib.suppress(KeyError, ValueError):
                         selector.unregister(device.fd)
+                        registered -= 1
+                    with contextlib.suppress(OSError):
+                        device.close()
 
             if (
                 self.buffer
@@ -514,6 +619,7 @@ class LinguaFixDaemon:
 
     def stop(self) -> None:
         """Request a graceful shutdown (useful for in-process tests)."""
+        self._shutdown_requested = True
         self._running = False
 
     @property

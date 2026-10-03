@@ -252,3 +252,53 @@ def test_uinput_missing_modules(monkeypatch: pytest.MonkeyPatch) -> None:
     injector = TextInjector(backend="uinput")
     assert injector._type_uinput("a", "us") is False
     assert injector._uinput_tap("KEY_A") is False
+
+
+def test_uinput_batch_is_atomic(
+    monkeypatch: pytest.MonkeyPatch, fake_uinput: type[_FakeUInputDevice]
+) -> None:
+    """Backspaces and the new text must be flushed with a single ``syn``.
+
+    The kernel only delivers the batch once ``syn`` is called, so a crash before
+    that point leaves the text untouched instead of half-deleted.
+    """
+    created: list[_FakeUInputDevice] = []
+
+    class RecordingUInput(_FakeUInputDevice):
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            super().__init__(*args, **kwargs)
+            created.append(self)
+
+    monkeypatch.setattr(TextInjector, "_uinput_available", lambda self: True)
+    fake_uinput_mod = sys.modules["uinput"]
+    monkeypatch.setattr(fake_uinput_mod, "UInput", RecordingUInput)
+
+    injector = TextInjector(backend="uinput")
+    assert injector.replace_text("ghbdtn", "привет", "ru") is True
+
+    assert len(created) == 1
+    device = created[0]
+    # Exactly one syn for the whole replacement: nothing is applied until then.
+    assert device.synced == 1
+    # Six backspaces (press + release each) precede the typed characters.
+    backspaces = [e for e in device.events if e[1] == _KNOWN_FAKE_KEYS["KEY_BACKSPACE"]]
+    assert len(backspaces) == 12
+
+
+def test_uinput_batch_no_syn_means_nothing_applied(
+    monkeypatch: pytest.MonkeyPatch, fake_uinput: type[_FakeUInputDevice]
+) -> None:
+    """If the batch fails before ``syn``, no key event is delivered."""
+
+    class FailingUInput(_FakeUInputDevice):
+        def write(self, event_type: int, code: int, value: int) -> None:
+            super().write(event_type, code, value)
+            if len(self.events) == 3:
+                raise OSError("simulated crash mid-batch")
+
+    monkeypatch.setattr(TextInjector, "_uinput_available", lambda self: True)
+    fake_uinput_mod = sys.modules["uinput"]
+    monkeypatch.setattr(fake_uinput_mod, "UInput", FailingUInput)
+
+    injector = TextInjector(backend="uinput")
+    assert injector.replace_text("ghbdtn", "привет", "ru") is False

@@ -132,6 +132,45 @@ which is rotated at 5 MB with three backups
 logs the same metadata without switching the layout or touching the text, which
 makes it safe to run while investigating behaviour.
 
+The same rule applies to every other surface:
+
+- **Notifications.** The desktop notification is a fixed label, never the
+  corrected text, so nothing typed reaches the notification history.
+- **Subprocesses.** No argv ever contains the typed text. This matters because
+  argv is world-readable through `/proc` and is echoed into the journal.
+- **Tracebacks.** If a fix raises, the traceback is formatted and the buffer is
+  replaced with `<redacted>` before it is logged, so an exception message that
+  happens to embed the text cannot leak it.
+
+`tests/test_privacy_audit.py` enforces all of this: it runs a session with a
+distinctive secret string and then searches the log, cache, state directory,
+config file, user journal and every subprocess argv for any trace of it.
+
+## Failure handling
+
+The daemon is designed to survive the failures that a long-running, keystroke-
+reading process will meet in practice:
+
+- **Atomic replacement.** The `uinput` backend writes every backspace and every
+  character of the corrected text and flushes them with a single `syn`. The
+  kernel delivers the batch together, so a crash or `SIGKILL` mid-fix cannot
+  leave the text half-deleted. The `wtype`/`xdotool` backends cannot be atomic;
+  that residual window is documented in the troubleshooting guide.
+- **Races.** The buffer is snapshotted and cleared under a lock, but the lock is
+  released before the slow switch/inject, so keys pressed during a fix are
+  buffered for the next pass instead of being dropped.
+- **Bounded memory.** The buffer is capped at `max_buffer_size` (default 200).
+  A held key or a paste-like burst is analysed and cleared early rather than
+  growing without bound.
+- **Shutdown.** `SIGTERM`/`SIGINT` set a flag. A fix is skipped if shutdown was
+  requested before it started, and always finishes once started. `linguafix
+  stop` escalates to `SIGKILL` if the daemon does not exit within 2 seconds;
+  `linguafix kill` skips the graceful attempt.
+- **Device loss.** When a keyboard disappears the device is dropped and
+  discovery is retried in place; `Restart=always` in the unit is the backstop.
+- **Every event and every buffer is guarded.** An exception in the detector,
+  converter, switcher or injector is logged (redacted) and the loop continues.
+
 ## Extension points
 
 - `LanguageDetector` — add a language by dropping `ngrams_<lang>.json` and a

@@ -52,6 +52,26 @@ SMOKE_IMAGE=ubuntu:22.04 make smoke-test    # Python 3.10 path (tomli)
   `/usr/lib/linguafix`, which dpkg does not track; `postrm` cleans it with
   `py3clean` + `rm -rf`.
 
+## Security / privacy invariants (audited)
+
+- The typed text must never reach disk or a subprocess argv. `_process_buffer`
+  and `_handle_event` catch every exception and log a **sanitized** traceback:
+  the buffer is replaced with `<redacted>` before logging, because an exception
+  message could otherwise embed it. `tests/test_privacy_audit.py` greps the log,
+  cache, state, config, journal and argv for a known secret and must stay green.
+- The desktop notification is a fixed label, never the corrected text.
+- Replacement on the `uinput` backend is **atomic**: all backspaces and the new
+  text are written and flushed with a single `syn`. `wtype`/`xdotool` are not
+  atomic (documented limitation).
+- `_process_buffer` snapshots and clears the buffer under `self._lock`, then
+  releases the lock before the slow switch/inject so keys typed during a fix are
+  buffered, not dropped. Do not hold the lock across `replace_text`.
+- The buffer is bounded by `Config.max_buffer_size` (default 200) and flushed
+  early on overflow, so a held key cannot grow it without bound.
+- `linguafix stop` escalates to `SIGKILL` after 2 s; `linguafix kill` forces it.
+- When the last keyboard disappears the loop re-runs discovery in place (never
+  caches a device path); `Restart=always` is the backstop.
+
 ## Known limitation
 
 The daemon works on a real GNOME desktop only; the CI and smoke tests do not

@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 APP_NAME: Final[str] = "linguafix"
 DEFAULT_ANALYSIS_TIMEOUT: Final[float] = 1.5
 DEFAULT_MIN_WORD_LENGTH: Final[int] = 3
+DEFAULT_MAX_BUFFER_SIZE: Final[int] = 200
 VALID_BACKENDS: Final[tuple[str, ...]] = ("auto", "uinput", "wtype", "xdotool")
 VALID_SWITCH_METHODS: Final[tuple[str, ...]] = ("auto", "g3kb-switch", "setxkbmap")
 VALID_LOG_LEVELS: Final[tuple[str, ...]] = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
@@ -90,6 +91,8 @@ class Config:
     Attributes:
         analysis_timeout: Seconds of inactivity before the buffer is analysed.
         min_word_length: Words shorter than this are never auto-corrected.
+        max_buffer_size: Upper bound on the keystroke buffer; when exceeded the
+            buffer is analysed and cleared early so memory stays bounded.
         stop_words: Tokens that disable automatic correction (passwords, etc.).
         layouts: Ordered list of layouts, primary first (for example ``["us", "ru"]``).
         backend: Text injection backend, one of :data:`VALID_BACKENDS`.
@@ -102,6 +105,7 @@ class Config:
 
     analysis_timeout: float = DEFAULT_ANALYSIS_TIMEOUT
     min_word_length: int = DEFAULT_MIN_WORD_LENGTH
+    max_buffer_size: int = DEFAULT_MAX_BUFFER_SIZE
     stop_words: list[str] = field(default_factory=load_default_stop_words)
     layouts: list[str] = field(default_factory=lambda: ["us", "ru"])
     backend: str = "auto"
@@ -127,6 +131,10 @@ class Config:
         self.min_word_length = int(self.min_word_length)
         if self.min_word_length < 1:
             raise ValueError("min_word_length must be >= 1")
+
+        self.max_buffer_size = int(self.max_buffer_size)
+        if self.max_buffer_size < 1:
+            raise ValueError("max_buffer_size must be >= 1")
 
         if not self.layouts:
             raise ValueError("layouts must contain at least one layout")

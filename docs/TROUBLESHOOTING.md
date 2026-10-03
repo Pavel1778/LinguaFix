@@ -289,6 +289,69 @@ password field from a text field. Mitigations:
 - Disable LinguaFix while entering credentials: `linguafix stop` and
   `linguafix start` afterwards.
 
+## Several keyboards: text typed on the "other" one is not corrected
+
+The daemon listens to every keyboard it can find, not just the first one. If a
+keyboard is present but its events never reach the daemon, check:
+
+- The device is not filtered out. Devices whose name contains `linguafix` or
+  `uinput` are skipped on purpose to avoid a feedback loop; a keyboard with such
+  a name is ignored.
+- You have read access to that device's `/dev/input/event*` node (see the
+  permission section above). A keyboard that appears after login may need the
+  session to be refreshed (`loginctl terminate-session $XDG_SESSION_ID`) for the
+  `uaccess` ACL to apply.
+- Run `linguafix doctor` and check the "Устройства /dev/input/event*" row.
+
+## The daemon stopped after unplugging a USB keyboard
+
+Expected and handled. When the last keyboard disappears the daemon logs
+`Device read error (device removed?)`, drops that device and re-runs discovery
+every 2 seconds until a keyboard is back. If recovery ever fails the systemd
+unit has `Restart=always`, so the service is restarted with a fresh device list
+(the path is rediscovered, never cached). To confirm:
+
+```bash
+systemctl --user status linguafix.service
+journalctl --user -u linguafix.service -n 50 --no-pager
+```
+
+## `linguafix stop` does not stop the daemon
+
+`stop` sends `SIGTERM` and waits up to 2 seconds. If the process is wedged (for
+example blocked in a subprocess), `stop` escalates to `SIGKILL` automatically
+and prints a warning. To skip the graceful attempt entirely:
+
+```bash
+linguafix kill
+```
+
+## Corrections trigger while typing a password
+
+On Wayland the daemon cannot see which window has focus, so it cannot tell a
+password field from a text field. Mitigations:
+
+- Keep the default `stop_words` (`password`, `login`, `token`, `secret`, ...).
+- Add the words that appear around your passwords to `stop_words`.
+- Raise `min_word_length` so short passwords are ignored.
+- Disable LinguaFix while entering credentials: `linguafix stop` and
+  `linguafix start` afterwards.
+
+## Privacy: what LinguaFix does and does not store
+
+LinguaFix never writes the text you type to disk. The log records only metadata
+(buffer length, layout names). The tests in `tests/test_privacy_audit.py`
+enforce this: they run a session with a distinctive secret string and then
+search the log, cache, state directory, config file, systemd journal and every
+subprocess argv for any trace of it.
+
+Two consequences worth knowing:
+
+- The desktop notification is a fixed label ("Раскладка исправлена"), not the
+  corrected text, so it never appears in the notification history.
+- If a fix fails, the exception traceback is redacted of the buffer before it is
+  logged.
+
 ## Collecting diagnostics
 
 The fastest way is one command that gathers everything:

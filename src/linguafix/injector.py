@@ -202,6 +202,13 @@ class TextInjector:
             logger.error("No text injection backend available")
             return False
 
+        # The uinput backend emits the backspaces and the new text as one atomic
+        # batch (all events written, then a single ``syn``). That closes the
+        # crash window in which the daemon had deleted the old text but not yet
+        # typed the replacement, which would leave the user with truncated text.
+        if self._backend == BACKEND_UINPUT:
+            return self._uinput_batch(len(old), new, layout)
+
         if not self._send_backspaces(len(old)):
             logger.warning("Failed to send backspaces; aborting replacement")
             return False
@@ -213,8 +220,6 @@ class TextInjector:
         """Send ``count`` backspace presses."""
         if count <= 0:
             return True
-        if self._backend == BACKEND_UINPUT:
-            return self._uinput_tap("KEY_BACKSPACE", count=count, delay=BACKSPACE_DELAY)
         command = [self._backend, "key", "BackSpace"]
         for _ in range(count):
             result = _run(command)
@@ -286,6 +291,36 @@ class TextInjector:
             return False
         return True
 
+    def _resolve_uinput_keys(
+        self, text: str, layout: str
+    ) -> tuple[list[tuple[int, bool]], dict[int, int]] | None:
+        """Resolve ``text`` into ``(keycode, shift)`` pairs and an event set.
+
+        Returns ``None`` when a character cannot be produced in ``layout``.
+        """
+        import evdev
+        import uinput
+
+        events: dict[int, int] = {}
+        shift_code = int(evdev.ecodes.KEY_LEFTSHIFT)
+        events[shift_code] = int(uinput.KEY_A)
+        events[int(evdev.ecodes.KEY_BACKSPACE)] = int(uinput.KEY_A)
+
+        resolved: list[tuple[int, bool]] = []
+        for char in text:
+            key = self._char_to_key(char, layout)
+            if key is None:
+                # Do not log the character itself; it may be sensitive input.
+                logger.warning("Cannot type a character in layout %s via uinput", layout)
+                return None
+            name, shift = key
+            code = getattr(evdev.ecodes, name, None)
+            if code is None:
+                return None
+            events[int(code)] = int(uinput.KEY_A)
+            resolved.append((int(code), shift))
+        return resolved, events
+
     def _type_uinput(self, text: str, layout: str) -> bool:
         """Type ``text`` through a virtual kernel keyboard."""
         try:
@@ -295,36 +330,64 @@ class TextInjector:
             logger.error("uinput backend requested but evdev/uinput are missing")
             return False
 
-        events: dict[int, int] = {}
+        resolved_bundle = self._resolve_uinput_keys(text, layout)
+        if resolved_bundle is None:
+            return False
+        resolved, events = resolved_bundle
         shift_code = int(evdev.ecodes.KEY_LEFTSHIFT)
-        backspace_code = int(evdev.ecodes.KEY_BACKSPACE)
-        events[shift_code] = int(uinput.KEY_A)
-        events[backspace_code] = int(uinput.KEY_A)
-
-        resolved: list[tuple[int, bool]] = []
-        for char in text:
-            key = self._char_to_key(char, layout)
-            if key is None:
-                # Do not log the character itself; it may be sensitive input.
-                logger.warning("Cannot type a character in layout %s via uinput", layout)
-                return False
-            name, shift = key
-            code = getattr(evdev.ecodes, name, None)
-            if code is None:
-                return False
-            events[int(code)] = int(uinput.KEY_A)
-            resolved.append((int(code), shift))
+        ev_key = evdev.ecodes.EV_KEY
 
         try:
             with uinput.UInput(events=events) as device:
                 for code, shift in resolved:
                     if shift:
-                        device.write(evdev.ecodes.EV_KEY, shift_code, 1)
-                    device.write(evdev.ecodes.EV_KEY, code, 1)
-                    device.write(evdev.ecodes.EV_KEY, code, 0)
+                        device.write(ev_key, shift_code, 1)
+                    device.write(ev_key, code, 1)
+                    device.write(ev_key, code, 0)
                     if shift:
-                        device.write(evdev.ecodes.EV_KEY, shift_code, 0)
+                        device.write(ev_key, shift_code, 0)
                     device.syn()
+        except (OSError, PermissionError):
+            logger.error("Could not create uinput device", exc_info=True)
+            return False
+        return True
+
+    def _uinput_batch(self, backspace_count: int, text: str, layout: str) -> bool:
+        """Delete ``backspace_count`` chars and type ``text`` as one batch.
+
+        All key events are written to the virtual keyboard and flushed with a
+        single ``syn``. The kernel delivers the whole batch together, so a
+        crash cannot leave the text half-deleted.
+        """
+        try:
+            import evdev
+            import uinput
+        except ImportError:
+            logger.error("uinput backend requested but evdev/uinput are missing")
+            return False
+
+        resolved_bundle = self._resolve_uinput_keys(text, layout)
+        if resolved_bundle is None:
+            return False
+        resolved, events = resolved_bundle
+
+        shift_code = int(evdev.ecodes.KEY_LEFTSHIFT)
+        backspace_code = int(evdev.ecodes.KEY_BACKSPACE)
+        ev_key = evdev.ecodes.EV_KEY
+
+        try:
+            with uinput.UInput(events=events) as device:
+                for _ in range(backspace_count):
+                    device.write(ev_key, backspace_code, 1)
+                    device.write(ev_key, backspace_code, 0)
+                for code, shift in resolved:
+                    if shift:
+                        device.write(ev_key, shift_code, 1)
+                    device.write(ev_key, code, 1)
+                    device.write(ev_key, code, 0)
+                    if shift:
+                        device.write(ev_key, shift_code, 0)
+                device.syn()
         except (OSError, PermissionError):
             logger.error("Could not create uinput device", exc_info=True)
             return False

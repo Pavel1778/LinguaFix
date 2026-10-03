@@ -27,6 +27,7 @@ def test_build_parser_has_all_commands() -> None:
     for command in (
         "start",
         "stop",
+        "kill",
         "status",
         "config",
         "fix",
@@ -100,9 +101,54 @@ def test_stop_sends_signal(
 ) -> None:
     monkeypatch.setattr(cli, "_read_pid", lambda: 4242)
     killed: list[tuple[int, int]] = []
-    monkeypatch.setattr(cli.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    alive = {"v": True}
+
+    def fake_kill(pid: int, sig: int) -> None:
+        killed.append((pid, sig))
+        if sig == cli.signal.SIGTERM:
+            alive["v"] = False
+
+    monkeypatch.setattr(cli.os, "kill", fake_kill)
+    monkeypatch.setattr(cli, "_pid_alive", lambda pid: alive["v"])
     assert cli.main(["stop"]) == 0
     assert killed == [(4242, cli.signal.SIGTERM)]
+    assert "остановлен" in capsys.readouterr().out
+
+
+def test_stop_escalates_to_sigkill(
+    isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A daemon that ignores SIGTERM must be SIGKILLed after the grace period."""
+    monkeypatch.setattr(cli, "_read_pid", lambda: 4242)
+    killed: list[tuple[int, int]] = []
+    monkeypatch.setattr(cli.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    # The process stays alive forever, and the grace period is collapsed to keep
+    # the test fast: SIGTERM is sent, the wait expires, then SIGKILL follows.
+    monkeypatch.setattr(cli, "_pid_alive", lambda pid: True)
+    monkeypatch.setattr(cli, "STOP_GRACE", 0.0)
+    assert cli.main(["stop"]) == 0
+    assert killed == [(4242, cli.signal.SIGTERM), (4242, cli.signal.SIGKILL)]
+    assert "SIGKILL" in capsys.readouterr().out
+
+
+def test_kill_sends_sigkill(
+    isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "_read_pid", lambda: 4242)
+    killed: list[tuple[int, int]] = []
+    monkeypatch.setattr(cli.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    monkeypatch.setattr(cli, "_pid_alive", lambda pid: False)
+    assert cli.main(["kill"]) == 0
+    assert killed == [(4242, cli.signal.SIGKILL)]
+    assert "SIGKILL" in capsys.readouterr().out
+
+
+def test_kill_when_not_running(
+    isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "_read_pid", lambda: None)
+    assert cli.main(["kill"]) == 0
+    assert "уже остановлен" in capsys.readouterr().out
 
 
 def test_config_show(isolated_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
