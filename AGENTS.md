@@ -32,6 +32,10 @@ SMOKE_IMAGE=ubuntu:22.04 make smoke-test    # Python 3.10 path (tomli)
 
 ## Invariants that have bitten before
 
+- The `.deb` must be **zero-config**: device access is granted by a udev rule
+  with `TAG+="uaccess"`, never `GROUP="input"`/`usermod`. The user unit is
+  enabled with `systemctl --user enable --global` from `postinst`, not by the
+  user. `make zero-config` asserts all of this.
 - Keep the apt `Depends:` in `scripts/build_deb.sh` in sync with the runtime
   imports. `tomli` is required on Python < 3.11; `tomli_w` on all versions.
 - `data/*.service` and `data/*.desktop` contain a `@BIN@` placeholder. It is
@@ -41,6 +45,12 @@ SMOKE_IMAGE=ubuntu:22.04 make smoke-test    # Python 3.10 path (tomli)
   binary is missing. Guard calls with `OSError`.
 - `install.sh` runs under `set -u`; do not reference `USER` directly (it is unset
   in cron/su/containers) — use the `CURRENT_USER` fallback.
+- Inside `docker run ... bash -c '...'` single-quoted blocks, do not put an
+  apostrophe in a comment: it ends the block early. The smoke and zero-config
+  scripts both hit this.
+- Running the installed CLI as root creates root-owned `__pycache__` under
+  `/usr/lib/linguafix`, which dpkg does not track; `postrm` cleans it with
+  `py3clean` + `rm -rf`.
 
 ## Known limitation
 

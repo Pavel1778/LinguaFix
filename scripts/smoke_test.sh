@@ -78,6 +78,12 @@ grep -q "^ExecStart=/usr/bin/linguafix " /usr/lib/systemd/user/linguafix.service
 ! grep -q "@BIN@" /usr/share/applications/linguafix.desktop \
     || { echo "desktop file still contains @BIN@ placeholder"; exit 1; }
 
+echo "--- udev rule grants uaccess, not the input group ---"
+RULE=/usr/lib/udev/rules.d/99-linguafix.rules
+test -f "${RULE}" || { echo "udev rule not installed at ${RULE}"; exit 1; }
+grep -q "TAG+=\"uaccess\"" "${RULE}" || { echo "udev rule has no uaccess"; exit 1; }
+! grep -q "GROUP=\"input\"" "${RULE}" || { echo "udev rule still uses GROUP=input"; exit 1; }
+
 echo "--- install-autostart renders the packaged launcher ---"
 linguafix install-autostart >/dev/null
 grep -q "^Exec=/usr/bin/linguafix start" "${HOME}/.config/autostart/linguafix.desktop" \

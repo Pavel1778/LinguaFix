@@ -69,6 +69,37 @@ rewrites the text and switches the active layout.
 - The combination works identically on X11 and Wayland, which is why it was
   chosen over toolkit-specific hooks.
 
+## Device access: uaccess instead of the input group
+
+Reading `/dev/input/event*` and writing `/dev/uinput` both need elevated
+device permissions. There are two common ways to grant them, and LinguaFix
+deliberately uses the first.
+
+- **`TAG+="uaccess"` in a udev rule (chosen).** `systemd-logind` grants a POSIX
+  ACL to the user who is physically logged in at the seat. The ACL is applied
+  when that user logs in, is granted only to them, and is removed when the
+  session ends. It requires no `usermod` and no relogin after installing, which
+  is what makes the `.deb` zero-config.
+- **Membership of the `input` group (rejected).** This is permanent: every
+  member can read every keyboard, at every seat, whether or not they are the
+  active user. It also only takes effect after a full logout/login.
+
+The security difference matters: `uaccess` follows the session, so a background
+process belonging to a logged-out user does not keep keyboard access. The
+packaged rule is:
+
+```
+KERNEL=="event*", TAG+="uaccess"
+KERNEL=="uinput", TAG+="uaccess", OPTIONS+="static_node=uinput"
+```
+
+`OPTIONS+="static_node=uinput"` makes udev create `/dev/uinput` at boot once the
+module is loaded, so the node exists before the daemon starts.
+
+`linguafix doctor` accepts either mechanism so the developer path (which may
+still use the `input` group) is not reported as broken, but the packaged path
+never touches group membership.
+
 ## Why g3kb-switch
 
 On GNOME Wayland there is no portable CLI to change the layout. `g3kb-switch`

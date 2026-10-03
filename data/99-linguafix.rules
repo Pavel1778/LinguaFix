@@ -1,6 +1,17 @@
 # LinguaFix udev rules.
-# Grant the "input" group access to keyboard event devices and to the virtual
-# keyboard device used to rewrite text. Install to /etc/udev/rules.d/ and run
+#
+# Access is granted with TAG+="uaccess" rather than by adding the user to the
+# "input" group. uaccess gives a POSIX ACL to the user who is physically logged
+# in at the seat (the active session), dynamically and only for that user. It
+# needs no usermod and no relogin, and it is revoked when the session ends.
+#
+# Installed to /usr/lib/udev/rules.d/ by the package; run
 #   sudo udevadm control --reload-rules && sudo udevadm trigger
-KERNEL=="event*", GROUP="input", MODE="0660"
-KERNEL=="uinput", GROUP="input", MODE="0660"
+# after editing.
+
+# Read access to keyboard event devices for the active session user.
+KERNEL=="event*", TAG+="uaccess"
+
+# Write access to the virtual keyboard used to rewrite text. static_node creates
+# /dev/uinput on boot when the uinput module is already loaded.
+KERNEL=="uinput", TAG+="uaccess", OPTIONS+="static_node=uinput"

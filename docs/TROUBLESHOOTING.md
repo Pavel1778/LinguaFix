@@ -30,7 +30,7 @@ The exit code is non-zero when a check fails, so it is safe to use in scripts.
    may be skipped. Try raising it to `2.0` or `2.5`.
 4. Make sure the words you type are at least `min_word_length` characters long.
 
-## No permission on /dev/input
+## doctor complains about /dev/input or /dev/uinput permissions
 
 Symptom in the log:
 
@@ -38,21 +38,42 @@ Symptom in the log:
 Permission denied: '/dev/input/event3'
 ```
 
-Cause: your user is not in the `input` group, or you have not logged out since
-being added.
+The packaged install grants access with a udev rule that uses
+`TAG+="uaccess"` (an ACL for the active session user), so the fix is almost
+always to make udev re-apply the rule, not to change group membership.
 
-```bash
-groups | grep input        # is 'input' listed?
-sudo usermod -aG input "$USER"
-# then log out completely and back in
-```
+1. Check that the rule is installed and uses `uaccess`:
 
-The udev rule must also be installed:
+   ```bash
+   cat /usr/lib/udev/rules.d/99-linguafix.rules      # or /etc/udev/rules.d/
+   # expected: KERNEL=="event*", TAG+="uaccess"
+   #           KERNEL=="uinput", TAG+="uaccess", OPTIONS+="static_node=uinput"
+   ```
 
-```bash
-ls -l /etc/udev/rules.d/99-linguafix.rules
-sudo udevadm control --reload-rules && sudo udevadm trigger
-```
+2. Re-apply it and re-check the ACL:
+
+   ```bash
+   sudo udevadm control --reload-rules && sudo udevadm trigger
+   getfacl /dev/input/event3     # expect a user:<you>:rw- line
+   getfacl /dev/uinput
+   ```
+
+   If the ACL is missing, log out and back in: `uaccess` is granted when the
+   user logs in at the seat.
+
+3. Make sure `/dev/uinput` exists:
+
+   ```bash
+   sudo modprobe uinput && ls -l /dev/uinput
+   ```
+
+4. If the rule is not there at all, reinstall the package:
+   `sudo apt install --reinstall linguafix`.
+
+On the developer path (`install.sh`) the rule lives in
+`/etc/udev/rules.d/99-linguafix.rules` and the same steps apply. `linguafix
+doctor` accepts either mechanism — a `uaccess` rule or membership of the
+`input` group — and only fails when neither is present.
 
 ## It switches the layout but does not replace the text
 

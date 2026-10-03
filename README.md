@@ -80,13 +80,28 @@ Caramba Switcher for Windows.
 
 ## 🚀 Установка / Installation
 
-Одной командой:
+Есть два пути. Обычному пользователю нужен первый.
+
+### Для пользователей: пакет .deb (ничего настраивать не нужно)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Pavel1778/LinguaFix/main/install.sh | bash
+sudo apt install ./linguafix_0.1.0_all.deb
 ```
 
-Или из клонированного репозитория:
+Пакет **самодостаточен**: он ставит udev-правило с `TAG+="uaccess"`, включает
+systemd user-сервис и загружает модуль `uinput` во время установки. Не нужно
+`usermod`, не нужно добавлять себя в группу `input`, не нужно ничего включать
+вручную — сервис стартует при следующем входе в сессию.
+
+> ℹ️ Доступ к устройствам выдаётся активному пользователю сессии через ACL
+> (`uaccess`), а не постоянным членством в группе. Это безопаснее и не требует
+> перелогина после `usermod`.
+
+Готовый `.deb` берётся со страницы
+[Releases](https://github.com/Pavel1778/LinguaFix/releases) или собирается
+локально: `make build-deb`.
+
+### Для разработчиков: из исходников
 
 ```bash
 git clone https://github.com/Pavel1778/LinguaFix.git
@@ -94,8 +109,8 @@ cd LinguaFix
 bash install.sh          # добавьте --yes для неинтерактивного режима
 ```
 
-> ⚠️ После установки нужно **полностью выйти из системы и войти снова** —
-> добавление в группу `input` вступает в силу только после перелогина.
+`install.sh` ставит то же самое, но в venv внутри `~/.local/share/linguafix`.
+Доступ к устройствам по-прежнему выдаётся через udev-правило с `uaccess`.
 
 Подробности: [docs/INSTALL.md](docs/INSTALL.md).
 
@@ -151,7 +166,7 @@ kill -HUP "$(cat ~/.cache/linguafix/daemon.lock)"
 | Проблема | Решение |
 |---|---|
 | Не исправляет | Запустите `linguafix doctor` — он проверит права, устройства и backend'ы |
-| `Permission denied: /dev/input/...` | Добавьте себя в группу `input` и перелогиньтесь |
+| `Permission denied: /dev/input/...` | Перезагрузите udev-правило: `sudo udevadm control --reload-rules && sudo udevadm trigger`; проверьте `getfacl /dev/input/event3` |
 | Переключает, но не заменяет текст | Смените `backend` на `uinput` |
 | Не работает в терминале | Попробуйте `backend = "uinput"` |
 | Нет иконки в трее | Установите `python3-gi gir1.2-appindicator3-0.1` |
@@ -184,10 +199,11 @@ kill -HUP "$(cat ~/.cache/linguafix/daemon.lock)"
 `systemctl --user stop linguafix.service` или `linguafix stop`.
 
 **Нужны ли root-права?**
-Только при установке (udev-правило и группа `input`). Сам демон работает от
+Только при установке (udev-правило и systemd-сервис). Сам демон работает от
 пользователя.
 
 **Как удалить LinguaFix?**
+Для `.deb`: `sudo apt remove --purge linguafix`. Из исходников:
 `bash uninstall.sh` (добавьте `--purge`, чтобы удалить конфиг и логи).
 
 ## 🧑💻 Разработка / Development
@@ -208,7 +224,8 @@ make build-deb                # собрать .deb в dist/
   стоп-слова.
 - Точность на словах из 1–2 символов низкая — митигация: `min_word_length`.
 - В некоторых играх и Java-приложениях замена текста может не работать.
-- Требуется перелогин после добавления в группу `input`.
+- Доступ через `uaccess` применяется при входе в сессию: если пакет установлен
+  в уже активной сессии, права появятся после следующего входа/перезагрузки.
 - Переключение раскладки в GNOME Wayland требует `g3kb-switch`.
 
 ## 🤝 Contributing

@@ -234,6 +234,15 @@ def test_bundled_unit_and_desktop_are_templates() -> None:
     assert "@BIN@" in (base / "linguafix.desktop").read_text(encoding="utf-8")
 
 
+def test_udev_rule_uses_uaccess() -> None:
+    """The shipped udev rule must grant access via uaccess, not the input group."""
+    rule = Path(__file__).resolve().parent.parent / "data" / "99-linguafix.rules"
+    text = rule.read_text(encoding="utf-8")
+    active = [line for line in text.splitlines() if line.strip() and not line.startswith("#")]
+    assert any('TAG+="uaccess"' in line for line in active)
+    assert not any("GROUP=" in line for line in active)
+
+
 def test_repo_and_packaged_data_files_match() -> None:
     """``data/`` and ``src/linguafix/data/`` must not drift apart."""
     from importlib import resources

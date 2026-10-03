@@ -161,17 +161,13 @@ if [ -f "${REPO_DIR}/data/99-${APP_NAME}.rules" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 7. input group
+# 7. uinput module
 # ---------------------------------------------------------------------------
-if id -nG "${CURRENT_USER}" | grep -qw input; then
-    log "Пользователь ${CURRENT_USER} уже состоит в группе input."
-else
-    if confirm "Добавить ${CURRENT_USER} в группу input (нужен sudo)?"; then
-        sudo usermod -aG input "${CURRENT_USER}"
-        NEEDS_RELOGIN=1
-    else
-        warn "Без группы input демон не сможет читать /dev/input/event*."
-    fi
+# Access to /dev/input and /dev/uinput is granted by the udev rule above via
+# TAG+="uaccess" (the active session user), so no group membership is needed.
+# Only load the module so /dev/uinput exists.
+if have modprobe; then
+    sudo modprobe uinput 2>/dev/null || warn "Не удалось загрузить модуль uinput."
 fi
 
 # ---------------------------------------------------------------------------
@@ -236,9 +232,6 @@ fi
 # ---------------------------------------------------------------------------
 echo
 log "Готово!"
-if [ "${NEEDS_RELOGIN:-0}" -eq 1 ]; then
-    warn "ВАЖНО: вы добавлены в группу input — необходимо ПОЛНОСТЬЮ выйти и войти снова."
-fi
 cat <<EOF
 
 Проверка:

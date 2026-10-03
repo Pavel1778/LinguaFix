@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -54,16 +55,48 @@ def test_check_gnome_version_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
     assert doctor.check_gnome_version().status == doctor.WARN
 
 
-def test_check_input_group_member(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(doctor, "_input_group_membership", lambda: True)
-    assert doctor.check_input_group().status == doctor.OK
-
-
-def test_check_input_group_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_check_device_access_uaccess(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(doctor, "_uaccess_rule_present", lambda: True)
     monkeypatch.setattr(doctor, "_input_group_membership", lambda: False)
-    result = doctor.check_input_group()
+    result = doctor.check_device_access()
+    assert result.status == doctor.OK
+    assert "uaccess" in result.detail
+
+
+def test_check_device_access_input_group(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(doctor, "_uaccess_rule_present", lambda: False)
+    monkeypatch.setattr(doctor, "_input_group_membership", lambda: True)
+    assert doctor.check_device_access().status == doctor.OK
+
+
+def test_check_device_access_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(doctor, "_uaccess_rule_present", lambda: False)
+    monkeypatch.setattr(doctor, "_input_group_membership", lambda: False)
+    result = doctor.check_device_access()
     assert result.status == doctor.FAIL
     assert "usermod" in result.hint
+    assert ".deb" in result.hint
+
+
+def test_uaccess_rule_present_true(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    rule = tmp_path / "99-linguafix.rules"
+    rule.write_text('KERNEL=="event*", TAG+="uaccess"\n', encoding="utf-8")
+    monkeypatch.setattr(doctor, "_UDEV_RULE_DIRS", (tmp_path,))
+    assert doctor._uaccess_rule_present() is True
+
+
+def test_uaccess_rule_present_false_for_group_rule(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    rule = tmp_path / "99-linguafix.rules"
+    rule.write_text('KERNEL=="event*", GROUP="input", MODE="0660"\n', encoding="utf-8")
+    monkeypatch.setattr(doctor, "_UDEV_RULE_DIRS", (tmp_path,))
+    assert doctor._uaccess_rule_present() is False
+
+
+def test_uaccess_rule_present_no_files(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(doctor, "_UDEV_RULE_DIRS", (tmp_path,))
+    assert doctor._uaccess_rule_present() is False
 
 
 def test_check_event_devices_none_found(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -158,7 +191,7 @@ def test_run_doctor_returns_one_on_failure(
 
 
 def test_collect_checks_runs_all(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(doctor, "_input_group_membership", lambda: True)
+    monkeypatch.setattr(doctor, "_uaccess_rule_present", lambda: True)
     monkeypatch.setattr(doctor, "_readable_event_devices", lambda: (2, 2))
     monkeypatch.setattr(doctor.shutil, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(doctor, "_gnome_major_version", lambda: 43)

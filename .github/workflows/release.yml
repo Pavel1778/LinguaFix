@@ -33,6 +33,9 @@ jobs:
       - name: Smoke-test the .deb in a clean Debian container
         run: bash scripts/smoke_test.sh
 
+      - name: Prove the .deb installs with no manual step (zero-config)
+        run: bash scripts/deb_selfsufficiency_test.sh
+
       - name: Build source distribution
         run: python -m build --sdist
 

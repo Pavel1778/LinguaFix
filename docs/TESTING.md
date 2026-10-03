@@ -36,27 +36,37 @@ hand on a real desktop.
 
 ### Quick start (copy-paste)
 
-Run this block first. It installs LinguaFix, relogs the session state and prints
-a diagnosis. It is safe to paste as one piece.
+Run this block first. It installs LinguaFix, prints a diagnosis and starts
+watching the log. It is safe to paste as one piece. It exercises the
+**zero-config `.deb` path** — the one a regular user takes.
 
 ```bash
-# 1. Get the code and install (non-interactive).
-git clone https://github.com/Pavel1778/LinguaFix.git
-cd LinguaFix
-git checkout feat/linguafix-initial-implementation
-bash install.sh --yes
+# 1. Install the package. No usermod, no manual enable.
+sudo apt install ./linguafix_0.1.0_all.deb
 
-# 2. A relogin is required after being added to the input group.
-echo ">>> Log out completely and back in, then run the rest."
+# 2. Verify that nothing else is required.
+systemctl --user is-enabled linguafix.service   # -> enabled
+cat /usr/lib/udev/rules.d/99-linguafix.rules    # -> TAG+="uaccess", no GROUP="input"
 
-# 3. After the relogin — verify the environment.
-groups | grep input && echo "OK: in input group"
-ls -l /dev/input/event* | head
+# 3. If a session was already open during install, log out and back in once.
+#    uaccess is granted when the user logs in at the seat.
+
+# 4. After (re)login — verify the environment.
+getfacl /dev/input/event3 2>/dev/null | grep "user:$(id -un)" && echo "OK: ACL present"
 linguafix doctor
 linguafix status
 
-# 4. Watch the daemon while you test (Ctrl-C to stop).
+# 5. Watch the daemon while you test (Ctrl-C to stop).
 journalctl --user -u linguafix.service -f
+```
+
+For the **developer path** instead, replace step 1 with:
+
+```bash
+git clone https://github.com/Pavel1778/LinguaFix.git
+cd LinguaFix
+bash install.sh --yes
+sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 
 If `linguafix doctor` shows no ❌, continue with the scenarios below. If it
@@ -77,13 +87,25 @@ GDM).
 
 ## A. Installation
 
-1. Run `bash install.sh` interactively. Note every prompt and any failure.
-2. Confirm the apt packages: `dpkg -l | grep -E 'evdev|uinput|wtype|xdotool|appindicator'`.
-3. Confirm the udev rule: `ls -l /etc/udev/rules.d/99-linguafix.rules`.
-4. Log out completely and back in.
-5. `groups | grep input` — the `input` group must be listed.
+`.deb` path (primary):
+
+1. `sudo apt install ./linguafix_0.1.0_all.deb` — note every prompt and any failure.
+2. Confirm the udev rule: `cat /usr/lib/udev/rules.d/99-linguafix.rules` — uses
+   `TAG+="uaccess"`, no `GROUP="input"`.
+3. `systemctl --user is-enabled linguafix.service` — prints `enabled`, without
+   you running `systemctl --user enable` by hand.
+4. Log out completely and back in (only needed if a session was already open).
+5. `getfacl /dev/input/event3` — shows a `user:<you>:rw-` ACL entry.
 6. `linguafix status` — daemon running, backends reported.
 7. `ls -l /dev/input/event*` — readable by your user.
+
+Developer path:
+
+1. Run `bash install.sh` interactively. Note every prompt and any failure.
+2. Confirm the apt packages: `dpkg -l | grep -E 'evdev|uinput|wtype|xdotool|appindicator'`.
+3. Confirm the udev rule: `cat /etc/udev/rules.d/99-linguafix.rules` — `uaccess`.
+4. `sudo udevadm control --reload-rules && sudo udevadm trigger`.
+5. `linguafix doctor` — no ❌.
 
 ## B. Daemon startup
 

@@ -82,15 +82,20 @@ Test the package before publishing:
 
 ```bash
 make smoke-test                      # installs the .deb in a clean debian:12
+make zero-config                     # proves no manual step is needed
 SMOKE_IMAGE=ubuntu:22.04 make smoke-test   # Python 3.10 path
 ```
 
 `make smoke-test` installs the real package into a clean container and checks
-the entry point, the data files, the systemd unit path and `collect-logs`. It
-catches packaging bugs that the pytest suite cannot, because pytest replaces the
-operating-system boundary with fakes. When you add a runtime dependency, add it
-to the `Depends:` line in `scripts/build_deb.sh` too — the two dependency lists
-(apt and pip) must stay in sync.
+the entry point, the data files, the systemd unit path, the `uaccess` udev rule
+and `collect-logs`. `make zero-config` additionally asserts the packaging
+contract: the rule uses `TAG+="uaccess"` (never `GROUP="input"`), the unit is
+enabled globally without any manual step, no user is added to a group, and
+`apt remove --purge` leaves no file behind. Both catch packaging bugs that the
+pytest suite cannot, because pytest replaces the operating-system boundary with
+fakes. When you add a runtime dependency, add it to the `Depends:` line in
+`scripts/build_deb.sh` too — the two dependency lists (apt and pip) must stay in
+sync.
 
 Two files exist in both `data/` and `src/linguafix/data/`: `linguafix.service`,
 `linguafix.desktop` and `linguafix.svg`. Keep them identical — a test enforces

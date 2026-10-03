@@ -93,6 +93,36 @@ def _input_group_membership() -> bool:
     return "input" in names
 
 
+# Directories where a distribution installs udev rules, in lookup order.
+_UDEV_RULE_DIRS = (
+    Path("/usr/lib/udev/rules.d"),
+    Path("/etc/udev/rules.d"),
+    Path("/run/udev/rules.d"),
+)
+
+
+def _uaccess_rule_present() -> bool:
+    """Return ``True`` when an installed LinguaFix rule grants ``uaccess``.
+
+    The packaged udev rule gives device access to the active session user with
+    ``TAG+="uaccess"`` instead of adding the user to the ``input`` group, so a
+    correct install can have read access without any group membership.
+    """
+    for directory in _UDEV_RULE_DIRS:
+        try:
+            rules = list(directory.glob("*linguafix*.rules"))
+        except OSError:  # pragma: no cover - defensive
+            continue
+        for rule in rules:
+            try:
+                text = rule.read_text(encoding="utf-8", errors="replace")
+            except OSError:  # pragma: no cover - defensive
+                continue
+            if 'TAG+="uaccess"' in text or "TAG+='uaccess'" in text:
+                return True
+    return False
+
+
 def _readable_event_devices() -> tuple[int, int]:
     """Return ``(readable, total)`` counts for ``/dev/input/event*`` nodes."""
     total = 0
@@ -104,15 +134,33 @@ def _readable_event_devices() -> tuple[int, int]:
     return readable, total
 
 
-def check_input_group() -> CheckResult:
-    """Check membership of the ``input`` group."""
-    if _input_group_membership():
-        return CheckResult("Группа input", OK, "пользователь в группе input")
+def check_device_access() -> CheckResult:
+    """Check how access to the input devices is granted.
+
+    A correct install grants it either through the packaged udev rule
+    (``TAG+="uaccess"``, the .deb path) or, on the developer path, through
+    membership of the ``input`` group. Either is accepted.
+    """
+    uaccess = _uaccess_rule_present()
+    in_group = _input_group_membership()
+    if uaccess:
+        return CheckResult(
+            "Правило доступа",
+            OK,
+            "udev-правило с uaccess установлено",
+        )
+    if in_group:
+        return CheckResult(
+            "Правило доступа",
+            OK,
+            "пользователь в группе input (dev-путь)",
+        )
     return CheckResult(
-        "Группа input",
+        "Правило доступа",
         FAIL,
-        "пользователь не в группе input",
-        'sudo usermod -aG input "$USER", затем полностью выйдите и войдите',
+        "нет udev-правила с uaccess и нет группы input",
+        "установите пакет .deb (udev-правило ставится автоматически) "
+        'или на dev-пути: sudo usermod -aG input "$USER" и перелогин',
     )
 
 
@@ -131,7 +179,8 @@ def check_event_devices() -> CheckResult:
             "Устройства /dev/input/event*",
             FAIL,
             f"0 из {total} доступны для чтения",
-            "добавьте udev-правило и перелогиньтесь (см. docs/TROUBLESHOOTING.md)",
+            "перезагрузите udev-правило: sudo udevadm control --reload-rules && "
+            "sudo udevadm trigger; проверьте getfacl (см. docs/TROUBLESHOOTING.md)",
         )
     return CheckResult(
         "Устройства /dev/input/event*",
@@ -156,7 +205,8 @@ def check_uinput() -> CheckResult:
         "Устройство /dev/uinput",
         FAIL,
         "нет прав на запись",
-        "добавьте udev-правило и войдите в группу input (см. docs/INSTALL.md)",
+        "перезагрузите udev-правило: sudo udevadm control --reload-rules && "
+        "sudo udevadm trigger; проверьте getfacl (см. docs/TROUBLESHOOTING.md)",
     )
 
 
@@ -253,7 +303,7 @@ def collect_checks(config: Config | None = None) -> list[CheckResult]:
     """
     cfg = config or load_config()
     results = [
-        check_input_group(),
+        check_device_access(),
         check_event_devices(),
         check_uinput(),
         check_tools(),
