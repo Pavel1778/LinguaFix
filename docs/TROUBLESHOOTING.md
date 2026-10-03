@@ -75,6 +75,68 @@ On the developer path (`install.sh`) the rule lives in
 doctor` accepts either mechanism — a `uaccess` rule or membership of the
 `input` group — and only fails when neither is present.
 
+### После установки .deb doctor жалуется на права /dev/input или /dev/uinput
+
+Причина: правило с `TAG+="uaccess"` выдаёт ACL **в момент создания seat-сессии**
+(`systemd-logind`). Если пользователь поставил `.deb`, уже находясь в графической
+сессии, ACL для него ещё не создан — он появится при следующем входе. Это
+штатное поведение `systemd-logind`, а не баг пакета.
+
+Диагностика:
+
+```bash
+getfacl /dev/input/event3    # ожидается строка  user:$USER:rw-
+getfacl /dev/uinput          # ожидается строка  user:$USER:rw-
+ls -l /usr/lib/udev/rules.d/99-linguafix.rules
+grep uaccess /usr/lib/udev/rules.d/99-linguafix.rules
+```
+
+Если строки `user:$USER:rw-` нет — это и есть причина, применяем решение ниже.
+
+Решение (от простого к сложному):
+
+1. Выйти из GNOME и войти заново, затем проверить `linguafix doctor`.
+2. Если не помогло — перезагрузить правило udev и снова перелогиниться:
+
+   ```bash
+   sudo udevadm control --reload-rules && sudo udevadm trigger
+   ```
+
+3. Если ACL всё равно нет — убедиться, что пользователь в **активной** seat-сессии,
+   а не подключён по ssh:
+
+   ```bash
+   loginctl show-user "$USER" | grep State    # ожидается State=active
+   ```
+
+   При `State=online` (ssh, cron, TTY без входа в GNOME) ACL не выдаётся по
+   дизайну: доступ получает только пользователь, физически сидящий за машиной.
+
+### doctor запущен из TTY или ssh
+
+Поведение: `linguafix doctor` не падает, но строка «Тип сессии» становится
+предупреждением:
+
+```
+⚠️  Тип сессии                    unknown (XDG_SESSION_TYPE не задан)
+                                 ↳ запустите doctor из графической сессии GNOME;
+                                   из TTY/ssh переключение раскладки и замена текста недоступны
+```
+
+Проверки раскладки и ввода при этом показывают `backend=none session=unknown`,
+потому что без сессии нет ни `g3kb-switch`/`setxkbmap` в нужном окружении, ни
+доступа к устройствам. Это ожидаемо.
+
+Что делать: запускать `linguafix doctor` из терминала внутри GNOME (не по ssh и
+не из TTY), либо заранее задать тип сессии:
+
+```bash
+XDG_SESSION_TYPE=wayland linguafix doctor    # или x11
+```
+
+Для сбора диагностики с удалённой машины используйте `linguafix collect-logs` —
+он фиксирует окружение и не требует графической сессии.
+
 ## It switches the layout but does not replace the text
 
 The injector backend is probably not able to synthesise input. Check which

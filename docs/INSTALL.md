@@ -31,7 +31,9 @@ systemctl --user is-enabled linguafix.service   # -> enabled
 
 `uaccess` grants the ACL when the user logs in at the seat. If the package is
 installed while a session is already open, the ACL appears at the next login or
-after a reboot; that is expected and needs no manual command.
+after a reboot; that is expected and needs no manual command. If `doctor` still
+reports a permission problem after a relogin, see
+[TROUBLESHOOTING: после установки .deb doctor жалуется на права /dev/input или /dev/uinput](TROUBLESHOOTING.md#после-установки-deb-doctor-жалуется-на-права-devinput-или-devuinput).
 
 > Why `uaccess` and not the `input` group: the ACL is granted only to the user
 > physically logged in at the seat, is applied dynamically and is revoked when

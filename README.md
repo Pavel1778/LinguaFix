@@ -166,7 +166,8 @@ kill -HUP "$(cat ~/.cache/linguafix/daemon.lock)"
 | Проблема | Решение |
 |---|---|
 | Не исправляет | Запустите `linguafix doctor` — он проверит права, устройства и backend'ы |
-| `Permission denied: /dev/input/...` | Перезагрузите udev-правило: `sudo udevadm control --reload-rules && sudo udevadm trigger`; проверьте `getfacl /dev/input/event3` |
+| `Permission denied: /dev/input/...` | Перезагрузите udev-правило: `sudo udevadm control --reload-rules && sudo udevadm trigger`; проверьте `getfacl /dev/input/event3` — подробнее [TROUBLESHOOTING: ACL после .deb](docs/TROUBLESHOOTING.md#после-установки-deb-doctor-жалуется-на-права-devinput-или-devuinput) |
+| `doctor` из TTY или ssh | Это ожидаемо: тип сессии `unknown` — см. [TROUBLESHOOTING: doctor из TTY/ssh](docs/TROUBLESHOOTING.md#doctor-запущен-из-tty-или-ssh) |
 | Переключает, но не заменяет текст | Смените `backend` на `uinput` |
 | Не работает в терминале | Попробуйте `backend = "uinput"` |
 | Нет иконки в трее | Установите `python3-gi gir1.2-appindicator3-0.1` |

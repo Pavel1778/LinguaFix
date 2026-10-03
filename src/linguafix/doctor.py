@@ -160,7 +160,8 @@ def check_device_access() -> CheckResult:
         FAIL,
         "нет udev-правила с uaccess и нет группы input",
         "установите пакет .deb (udev-правило ставится автоматически) "
-        'или на dev-пути: sudo usermod -aG input "$USER" и перелогин',
+        "или на dev-пути скопируйте data/99-linguafix.rules в "
+        "/etc/udev/rules.d/ и перелогиньтесь; подробнее — docs/TROUBLESHOOTING.md",
     )
 
 
@@ -279,7 +280,16 @@ def check_backends(config: Config) -> list[CheckResult]:
         injector.describe(),
         "установите wtype (Wayland), xdotool (X11) или python3-uinput",
     )
-    session_result = CheckResult("Тип сессии", OK, session)
+    if session == "unknown":
+        session_result = CheckResult(
+            "Тип сессии",
+            WARN,
+            "unknown (XDG_SESSION_TYPE не задан)",
+            "запустите doctor из графической сессии GNOME; из TTY/ssh "
+            "переключение раскладки и замена текста недоступны",
+        )
+    else:
+        session_result = CheckResult("Тип сессии", OK, session)
     return [session_result, switcher_result, injector_result]
 
 

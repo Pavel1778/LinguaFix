@@ -74,7 +74,7 @@ def test_check_device_access_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(doctor, "_input_group_membership", lambda: False)
     result = doctor.check_device_access()
     assert result.status == doctor.FAIL
-    assert "usermod" in result.hint
+    assert "99-linguafix.rules" in result.hint
     assert ".deb" in result.hint
 
 
