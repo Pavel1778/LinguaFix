@@ -1,0 +1,16 @@
+[Unit]
+Description=LinguaFix — автоматический переключатель раскладки
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/share/linguafix/venv/bin/linguafix start --foreground
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

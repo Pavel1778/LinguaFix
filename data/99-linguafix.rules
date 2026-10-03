@@ -1,0 +1,6 @@
+# LinguaFix udev rules.
+# Grant the "input" group access to keyboard event devices and to the virtual
+# keyboard device used to rewrite text. Install to /etc/udev/rules.d/ and run
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+KERNEL=="event*", GROUP="input", MODE="0660"
+KERNEL=="uinput", GROUP="input", MODE="0660"

@@ -1,0 +1,59 @@
+# LinguaFix stop words.
+# Lines starting with '#' and blank lines are ignored.
+# If the buffer (case-insensitive) contains any of these tokens, automatic
+# correction is skipped. This is the main mitigation against mangling
+# passwords, logins and technical identifiers.
+password
+passwd
+passphrase
+pwd
+login
+signin
+username
+user
+token
+secret
+apikey
+api_key
+access_key
+private_key
+ssh
+sudo
+root
+admin
+credential
+credentials
+auth
+oauth
+bearer
+captcha
+otp
+2fa
+totp
+pin
+email
+e-mail
+ip
+url
+uri
+uuid
+guid
+hash
+salt
+nonce
+session
+cookie
+localhost
+http
+https
+ftp
+ssh
+git
+docker
+kubernetes
+npm
+pip
+yarn
+cargo
+gradle
+maven

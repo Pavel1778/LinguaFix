@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=LinguaFix
+GenericName=Auto Layout Switcher
+Comment=Автоматическое переключение раскладки клавиатуры
+Exec=%h/.local/share/linguafix/venv/bin/linguafix start --foreground
+Icon=linguafix
+Terminal=false
+Hidden=false
+X-GNOME-Autostart-enabled=true
+Categories=Utility;Accessibility;
