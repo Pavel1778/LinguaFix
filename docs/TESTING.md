@@ -1,11 +1,40 @@
-# Manual test plan
+# Testing
 
-The automated suite (`pytest`, 270+ tests) runs headless and replaces the
-operating-system boundary with fakes. It cannot verify permissions, D-Bus
-behaviour or how real applications react to synthetic input. This plan covers
-what must be checked by hand on a real desktop.
+Testing happens on three levels, from cheapest to most realistic. A layer does
+not replace the ones above it — a green pytest run does **not** mean the daemon
+works on a real desktop.
 
-## Environments
+| Level | What it runs | How to run | Proves |
+|---|---|---|---|
+| 1. Unit / integration | Real code, faked OS boundary | `make test` | Logic, parsing, config, conversion |
+| 2. Package smoke test | The built `.deb`, installed into a clean `debian:12` container | `make smoke-test` | The package installs, all runtime imports resolve, the CLI starts |
+| 3. Manual desktop test | A real GNOME session (Wayland and X11) | This document | Permissions, D-Bus, `uinput`, real applications |
+
+## Level 2: package smoke test
+
+`scripts/smoke_test.sh` builds nothing itself; it installs `dist/*.deb` into a
+throwaway `debian:12` container and checks that `linguafix version`, `--help`,
+`status` and `doctor` run, and that the daemon starts in `--dry-run`. It catches
+the class of bug that pytest cannot: a missing runtime dependency or a broken
+entry point in the installed package. It does **not** need a GUI, so it also
+runs in CI (see `release.yml`).
+
+```bash
+make build-deb
+make smoke-test
+```
+
+The container has no keyboard devices, so `doctor` is expected to report
+failures there; the smoke test only asserts that the commands execute.
+
+## Level 3: manual test plan
+
+The automated suite runs headless and replaces the operating-system boundary
+with fakes. It cannot verify permissions, D-Bus behaviour or how real
+applications react to synthetic input. This plan covers what must be checked by
+hand on a real desktop.
+
+### Environments
 
 Test on both, in a virtual machine:
 

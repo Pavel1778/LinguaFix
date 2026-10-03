@@ -30,6 +30,9 @@ jobs:
       - name: Build .deb
         run: bash scripts/build_deb.sh
 
+      - name: Smoke-test the .deb in a clean Debian container
+        run: bash scripts/smoke_test.sh
+
       - name: Build source distribution
         run: python -m build --sdist
 

@@ -1,4 +1,4 @@
-.PHONY: help install uninstall test lint format typecheck check build-deb clean dev
+.PHONY: help install uninstall test lint format typecheck check build-deb smoke-test clean dev
 
 PYTHON ?= python3
 VENV ?= .venv
@@ -40,6 +40,9 @@ check: lint typecheck test ## Run lint, typecheck and tests
 
 build-deb: ## Build a .deb package
 	bash scripts/build_deb.sh
+
+smoke-test: ## Install the built .deb in a clean Debian container and run the CLI
+	bash scripts/smoke_test.sh
 
 clean: ## Remove build artifacts and caches
 	rm -rf build dist *.egg-info .pytest_cache .mypy_cache .ruff_cache htmlcov .coverage

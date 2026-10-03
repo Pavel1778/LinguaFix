@@ -133,7 +133,10 @@ fi
 log "Создаю виртуальное окружение: ${VENV_DIR}"
 mkdir -p "$(dirname "${VENV_DIR}")"
 if [ ! -x "${VENV_DIR}/bin/python" ]; then
-    "${PYTHON}" -m venv "${VENV_DIR}"
+    # Reuse apt-installed python3-evdev/python3-uinput via the system site
+    # packages; otherwise pip rebuilds python-uinput from source, which fails
+    # on a clean Debian without build tools.
+    "${PYTHON}" -m venv --system-site-packages "${VENV_DIR}"
 fi
 "${VENV_DIR}/bin/pip" install --upgrade pip >/dev/null
 log "Устанавливаю пакет (editable) из ${REPO_DIR}"

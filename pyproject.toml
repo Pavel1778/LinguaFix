@@ -27,7 +27,7 @@ classifiers = [
 ]
 dependencies = [
     "evdev>=1.6.0; sys_platform == 'linux'",
-    "python-uinput>=1.0.1; sys_platform == 'linux'",
+    "python-uinput>=0.11; sys_platform == 'linux'",
     "tomli>=2.0.1; python_version < '3.11'",
     "tomli-w>=1.0.0",
 ]
