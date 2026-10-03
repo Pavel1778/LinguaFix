@@ -49,7 +49,8 @@ Caramba Switcher for Windows.
 - 🔔 Уведомления (`notify-send`) и иконка в трее (AppIndicator)
 - 🛡️ Стоп-слова для защиты паролей и логинов
 - ⚙️ Настраиваемые таймауты, языки и backend'ы
-- 🧩 CLI: `start`, `stop`, `status`, `config`, `fix`
+- 🧩 CLI: `start`, `stop`, `status`, `config`, `fix`, `doctor`
+- 🩺 `linguafix doctor` — самодиагностика окружения с таблицей ✅/❌ и подсказками
 - 🔁 Горячая перезагрузка конфига по `SIGHUP`
 - 🧪 Флаг `--dry-run` — анализ без изменения текста (отладка и тесты)
 - 🔒 Приватность: в лог пишутся только метаданные, набранный текст не сохраняется
@@ -100,6 +101,7 @@ bash install.sh          # добавьте --yes для неинтеракти�
 ## ⚡ Быстрый старт / Quick start
 
 ```bash
+linguafix doctor                       # самодиагностика окружения (таблица ✅/❌)
 linguafix status                       # проверить, что демон запущен
 linguafix fix --text ghbdtn            # предпросмотр исправления
 linguafix fix --text ghbdtn --apply    # применить исправление
@@ -146,7 +148,7 @@ kill -HUP "$(cat ~/.cache/linguafix/daemon.lock)"
 
 | Проблема | Решение |
 |---|---|
-| Не исправляет | Проверьте `linguafix status` и `~/.local/state/linguafix/linguafix.log` |
+| Не исправляет | Запустите `linguafix doctor` — он проверит права, устройства и backend'ы |
 | `Permission denied: /dev/input/...` | Добавьте себя в группу `input` и перелогиньтесь |
 | Переключает, но не заменяет текст | Смените `backend` на `uinput` |
 | Не работает в терминале | Попробуйте `backend = "uinput"` |

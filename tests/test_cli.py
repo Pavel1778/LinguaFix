@@ -30,6 +30,7 @@ def test_build_parser_has_all_commands() -> None:
         "status",
         "config",
         "fix",
+        "doctor",
         "install-autostart",
         "uninstall-autostart",
         "version",
@@ -40,6 +41,13 @@ def test_build_parser_has_all_commands() -> None:
 def test_version_command(capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main(["version"]) == 0
     assert "LinguaFix" in capsys.readouterr().out
+
+
+def test_doctor_command(
+    isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "run_doctor", lambda: 0)
+    assert cli.main(["doctor"]) == 0
 
 
 def test_status_when_not_running(

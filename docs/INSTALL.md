@@ -71,6 +71,17 @@ journalctl --user -u linguafix.service -n 50 --no-pager
 `linguafix status` should report that the daemon is running, the current layout,
 and the active injector backend.
 
+Run the built-in self-diagnosis to check permissions, devices, tools, the GNOME
+version and the resolved backends at once:
+
+```bash
+linguafix doctor
+```
+
+The output is a table with a marker per check (`✅` pass, `⚠️` warning, `❌`
+failure) and a hint for every check that did not pass. The command exits
+non-zero when a check fails, so `install.sh` runs it as a final self-test.
+
 ## Ubuntu notes
 
 Some package names differ between Debian and Ubuntu. `install.sh` installs the

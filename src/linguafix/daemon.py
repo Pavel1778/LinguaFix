@@ -407,6 +407,13 @@ class LinguaFixDaemon:
             return 1
 
         self._install_signal_handlers()
+        logger.info(
+            "LinguaFix starting: session=%s switcher=%s injector=%s%s",
+            getattr(self.switcher, "session_type", "") or "unknown",
+            getattr(self.switcher, "backend", "?"),
+            getattr(self.injector, "backend", "?"),
+            " dry-run=on" if self.dry_run else "",
+        )
         devices = self._devices if self._devices is not None else self.discover_devices()
         if not devices:
             logger.error("No keyboard devices found; check /dev/input permissions")

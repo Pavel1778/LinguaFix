@@ -1,5 +1,19 @@
 # Troubleshooting
 
+## Start here: `linguafix doctor`
+
+Before anything else, run the self-diagnosis. It checks the `input` group,
+read access to `/dev/input/event*`, `/dev/uinput`, the external tools
+(`g3kb-switch`, `wtype`, `xdotool`, `setxkbmap`), the GNOME version, the
+session type and the resolved switcher/injector backends, and prints a table
+with a hint for every failed check.
+
+```bash
+linguafix doctor
+```
+
+The exit code is non-zero when a check fails, so it is safe to use in scripts.
+
 ## The daemon does not fix anything
 
 1. Check that it is running:

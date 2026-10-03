@@ -210,7 +210,15 @@ if have notify-send; then
 fi
 
 # ---------------------------------------------------------------------------
-# 13. Final instructions
+# 13. Self-test
+# ---------------------------------------------------------------------------
+if [ -x "${BIN}" ]; then
+    log "Самодиагностика (linguafix doctor):"
+    "${BIN}" doctor || warn "Диагностика нашла проблемы — см. вывод выше."
+fi
+
+# ---------------------------------------------------------------------------
+# 14. Final instructions
 # ---------------------------------------------------------------------------
 echo
 log "Готово!"
@@ -220,6 +228,7 @@ fi
 cat <<EOF
 
 Проверка:
+  ${BIN} doctor
   ${BIN} status
   systemctl --user status ${APP_NAME}.service
   journalctl --user -u ${APP_NAME}.service -n 50 --no-pager

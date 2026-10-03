@@ -7,6 +7,7 @@ manages the configuration file and can trigger a manual correction.
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import signal
 import subprocess
@@ -18,8 +19,11 @@ from . import __version__
 from .config import Config, cache_dir, config_path, load_config, save_config
 from .converter import LayoutConverter
 from .detector import LanguageDetector
+from .doctor import run_doctor
 from .injector import TextInjector
 from .switcher import LayoutSwitcher
+
+logger = logging.getLogger(__name__)
 
 LOCK_FILE_NAME = "daemon.lock"
 START_TIMEOUT = 5.0
@@ -184,15 +188,20 @@ def cmd_fix(args: argparse.Namespace) -> int:
         return 0
 
     converted = converter.convert(text, current, target)
+    # Keep the dry-run contract identical to the daemon: report the intended
+    # action to the logger as well as to stdout, then do not touch anything.
+    logger.info("fix: %d chars, %s -> %s", len(text), current, target)
     print(f"{text} -> {converted} ({current} -> {target})")
-    if args.apply and not args.dry_run:
+    if args.dry_run:
+        logger.info("Dry run: skipping layout switch and text replacement")
+        print("Режим --dry-run: изменения не применены.")
+        return 0
+    if args.apply:
         switcher.switch_to(target)
         time.sleep(0.05)
         if not injector.replace_text(text, converted, target):
             print("Не удалось применить исправление.")
             return 1
-    elif args.dry_run:
-        print("Режим --dry-run: изменения не применены.")
     return 0
 
 
@@ -253,6 +262,11 @@ def cmd_version(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_doctor(_args: argparse.Namespace) -> int:
+    """Run environment self-diagnosis and print a status table."""
+    return run_doctor()
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level argument parser."""
     parser = argparse.ArgumentParser(
@@ -290,6 +304,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="только показать исправление, ничего не применять",
     )
     fix.set_defaults(func=cmd_fix)
+
+    doctor = subparsers.add_parser("doctor", help="самодиагностика окружения")
+    doctor.set_defaults(func=cmd_doctor)
 
     install = subparsers.add_parser("install-autostart", help="включить автозапуск")
     install.set_defaults(func=cmd_install_autostart)
