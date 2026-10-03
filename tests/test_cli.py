@@ -31,6 +31,7 @@ def test_build_parser_has_all_commands() -> None:
         "config",
         "fix",
         "doctor",
+        "collect-logs",
         "install-autostart",
         "uninstall-autostart",
         "version",
@@ -48,6 +49,26 @@ def test_doctor_command(
 ) -> None:
     monkeypatch.setattr(cli, "run_doctor", lambda: 0)
     assert cli.main(["doctor"]) == 0
+
+
+def test_collect_logs_command(
+    isolated_env: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["collect-logs", "--output", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "архив создан" in out
+    assert list(tmp_path.glob("linguafix-logs-*.tar.gz"))
+
+
+def test_collect_logs_command_failure(
+    isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(cli, "collect_logs", boom)
+    assert cli.main(["collect-logs"]) == 1
+    assert "Не удалось создать архив" in capsys.readouterr().out
 
 
 def test_status_when_not_running(

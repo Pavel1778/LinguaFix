@@ -48,9 +48,21 @@ length, layouts), never the typed text.
 
 ## Diagnostics
 
-Output of:
+Run the collector and **drag the resulting tarball into this issue**:
+
+```bash
+linguafix collect-logs
+# -> ~/linguafix-logs-YYYYMMDD-HHMMSS.tar.gz
+```
+
+It contains the `doctor` output, your configuration, the log tail, the user
+journal, environment details, device permissions and package versions. The
+daemon logs only metadata, so it never contains the text you typed.
+
+If you prefer to paste text instead, include the output of:
 
 ```
+linguafix doctor
 linguafix status
 groups | grep input
 ls -l /dev/input/event*

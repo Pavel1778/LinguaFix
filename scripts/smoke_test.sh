@@ -54,6 +54,10 @@ linguafix status >/dev/null
 echo "--- doctor (expected to report failures in a bare container) ---"
 linguafix doctor || true
 
+echo "--- collect-logs ---"
+linguafix collect-logs --output /tmp | grep -q "архив создан" || { echo "collect-logs failed"; exit 1; }
+ls /tmp/linguafix-logs-*.tar.gz >/dev/null || { echo "no tarball produced"; exit 1; }
+
 echo "--- daemon dry-run start (no input devices -> exit 2 is acceptable) ---"
 timeout 15 linguafix start --foreground --dry-run || true
 

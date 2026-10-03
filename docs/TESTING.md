@@ -115,5 +115,17 @@ Also test:
 ## Reporting
 
 File one issue per problem found, using the bug report template
-(`.github/ISSUE_TEMPLATE/bug_report.md`). Attach the environment block and the
-relevant log lines. Apply the `needs-testing` label while triaging.
+(`.github/ISSUE_TEMPLATE/bug_report.md`). Apply the `needs-testing` label while
+triaging.
+
+Attach a diagnostic bundle — one command collects everything a maintainer needs
+(the `doctor` output, configuration, log tail, user journal, environment,
+device permissions and package versions):
+
+```bash
+linguafix collect-logs
+# -> ~/linguafix-logs-YYYYMMDD-HHMMSS.tar.gz
+```
+
+The daemon logs only metadata, so the bundle never contains the text you typed.
+See `docs/TROUBLESHOOTING.md` for details.

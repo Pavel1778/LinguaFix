@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 from . import __version__
+from .collect_logs import collect_logs
 from .config import Config, cache_dir, config_path, load_config, save_config
 from .converter import LayoutConverter
 from .detector import LanguageDetector
@@ -262,6 +263,19 @@ def cmd_version(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_collect_logs(args: argparse.Namespace) -> int:
+    """Build a diagnostic tarball for a bug report."""
+    output_dir = Path(args.output).expanduser() if args.output else None
+    try:
+        archive = collect_logs(output_dir)
+    except OSError as exc:
+        print(f"Не удалось создать архив: {exc}")
+        return 1
+    print(f"Диагностический архив создан: {archive}")
+    print("Приложите его к issue на GitHub (текст, который вы набирали, в него не попадает).")
+    return 0
+
+
 def cmd_doctor(_args: argparse.Namespace) -> int:
     """Run environment self-diagnosis and print a status table."""
     return run_doctor()
@@ -307,6 +321,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor = subparsers.add_parser("doctor", help="самодиагностика окружения")
     doctor.set_defaults(func=cmd_doctor)
+
+    collect = subparsers.add_parser("collect-logs", help="собрать диагностический архив для issue")
+    collect.add_argument(
+        "--output",
+        metavar="DIR",
+        help="каталог для архива (по умолчанию — домашний каталог)",
+    )
+    collect.set_defaults(func=cmd_collect_logs)
 
     install = subparsers.add_parser("install-autostart", help="включить автозапуск")
     install.set_defaults(func=cmd_install_autostart)

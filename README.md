@@ -49,8 +49,9 @@ Caramba Switcher for Windows.
 - 🔔 Уведомления (`notify-send`) и иконка в трее (AppIndicator)
 - 🛡️ Стоп-слова для защиты паролей и логинов
 - ⚙️ Настраиваемые таймауты, языки и backend'ы
-- 🧩 CLI: `start`, `stop`, `status`, `config`, `fix`, `doctor`
+- 🧩 CLI: `start`, `stop`, `status`, `config`, `fix`, `doctor`, `collect-logs`
 - 🩺 `linguafix doctor` — самодиагностика окружения с таблицей ✅/❌ и подсказками
+- 📦 `linguafix collect-logs` — один tarball со всей диагностикой для баг-репорта
 - 🔁 Горячая перезагрузка конфига по `SIGHUP`
 - 🧪 Флаг `--dry-run` — анализ без изменения текста (отладка и тесты)
 - 🔒 Приватность: в лог пишутся только метаданные, набранный текст не сохраняется
@@ -108,6 +109,7 @@ linguafix fix --text ghbdtn --apply    # применить исправлени
 linguafix fix --text ghbdtn --apply --dry-run   # показать, но не применять
 linguafix start --foreground --dry-run # демон-наблюдатель: только логирует
 linguafix config show                  # показать конфигурацию
+linguafix collect-logs                 # собрать архив для баг-репорта
 systemctl --user status linguafix.service
 ```
 
@@ -153,6 +155,7 @@ kill -HUP "$(cat ~/.cache/linguafix/daemon.lock)"
 | Переключает, но не заменяет текст | Смените `backend` на `uinput` |
 | Не работает в терминале | Попробуйте `backend = "uinput"` |
 | Нет иконки в трее | Установите `python3-gi gir1.2-appindicator3-0.1` |
+| Сообщаете о баге | Приложите `linguafix collect-logs` — в архиве нет набранного текста |
 | Конфликт с IBus/Fcitx | Отключите их, если не используете |
 | Не переключает раскладку в Wayland | Установите `g3kb-switch` |
 

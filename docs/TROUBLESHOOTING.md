@@ -120,7 +120,106 @@ g3kb-switch -s 1   # switches to the second layout
 If `g3kb-switch` is missing, LinguaFix can still replace text but cannot change
 the active layout.
 
+## Backspace does not delete in the terminal (or deletes too much)
+
+Some terminals handle synthetic Backspace differently from real Backspace.
+Symptoms: the old text stays, or the correction eats characters it should not.
+
+- Force the kernel path, which behaves like a physical keyboard:
+  ```toml
+  backend = "uinput"
+  ```
+- If you use `xdotool`, `--clearmodifiers` is already passed; a stuck modifier
+  from the surrounding session can still interfere. Press and release both
+  Shift keys once, then retry.
+- In `vim`/`nano`, the correction happens in normal mode. LinguaFix only
+  rewrites what it believes is an input buffer; in a full-screen editor that
+  assumption may not hold. Use `min_word_length` to reduce false triggers, or
+  add the surrounding words to `stop_words`.
+
+## Permission denied on /dev/uinput
+
+```
+Could not create uinput device
+PermissionError: [Errno 13] Permission denied: '/dev/uinput'
+```
+
+The `uinput` backend needs write access to `/dev/uinput`. Check and fix:
+
+```bash
+ls -l /dev/uinput
+sudo modprobe uinput                      # load the module if missing
+ls -l /etc/udev/rules.d/99-linguafix.rules # udev rule installed?
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+The udev rule sets `GROUP="input", MODE="0660"`. Make sure you are in the
+`input` group and that you have logged out completely since being added. When
+`uinput` is unavailable, LinguaFix falls back to `wtype` or `xdotool`; set
+`backend = "auto"` to allow that.
+
+## uinput created the device but no text appears
+
+The kernel accepted the virtual keyboard but the compositor did not route its
+events to the focused window. This happens when the virtual device is created
+after the window grabbed the keyboard, and in some games that read the device
+directly. Switch the window focus away and back, or force `wtype`/`xdotool`:
+
+```toml
+backend = "wtype"
+```
+
+## IBus / Fcitx conflict in detail
+
+IBus and Fcitx sit between the kernel and the application, so a keystroke can be
+consumed twice: once by LinguaFix (reading `/dev/input`) and once by the input
+method. Symptoms: characters appear twice, the layout flips twice, or nothing is
+corrected.
+
+Diagnose:
+
+```bash
+echo "$GTK_IM_MODULE $QT_IM_MODULE $XMODIFIERS"
+pgrep -a ibus; pgrep -a fcitx
+```
+
+If you do not need the input method (for example, you only switch between `us`
+and `ru` with GNOME's own layout switcher), disable it:
+
+```bash
+ibus exit                 # IBus
+fcitx5-remote -e          # Fcitx5
+```
+
+For a permanent change, unset `GTK_IM_MODULE`/`QT_IM_MODULE` in your session
+environment. Do not run LinguaFix and an input method that performs the same
+correction at the same time.
+
+## Corrections trigger while typing a password
+
+On Wayland the daemon cannot see which window has focus, so it cannot tell a
+password field from a text field. Mitigations:
+
+- Keep the default `stop_words` (`password`, `login`, `token`, `secret`, ...).
+- Add the words that appear around your passwords to `stop_words`.
+- Raise `min_word_length` so short passwords are ignored.
+- Disable LinguaFix while entering credentials: `linguafix stop` and
+  `linguafix start` afterwards.
+
 ## Collecting diagnostics
+
+The fastest way is one command that gathers everything:
+
+```bash
+linguafix collect-logs
+```
+
+It writes `~/linguafix-logs-YYYYMMDD-HHMMSS.tar.gz` containing the `doctor`
+output, the configuration, the log tail, the user journal, environment details,
+device permissions and package versions. Attach it to the GitHub issue. The
+daemon logs only metadata, so the archive never contains the text you typed.
+
+Manual equivalent:
 
 ```bash
 linguafix status
