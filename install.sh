@@ -85,8 +85,17 @@ APT_PACKAGES="python3-venv python3-pip python3-evdev python3-uinput python3-gi g
 if have apt-get; then
     if confirm "Установить системные зависимости через apt (нужен sudo)?"; then
         sudo apt-get update
-        # shellcheck disable=SC2086
-        sudo apt-get install -y ${APT_PACKAGES} || warn "Некоторые пакеты не установились; продолжаю."
+        # Install packages individually: some (for example python3-uinput on
+        # Ubuntu) may not exist in every release, and one missing name must not
+        # abort the whole install. Missing optional packages fall back to the
+        # virtualenv-provided equivalents.
+        for pkg in ${APT_PACKAGES}; do
+            if apt-cache show "${pkg}" >/dev/null 2>&1; then
+                sudo apt-get install -y "${pkg}" || warn "Не удалось установить ${pkg}."
+            else
+                warn "Пакет ${pkg} недоступен в этом репозитории; пропускаю."
+            fi
+        done
     else
         log "Пропускаю установку системных пакетов."
     fi
@@ -95,12 +104,25 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 4. Optional g3kb-switch
+# 4. GNOME version check and optional g3kb-switch
 # ---------------------------------------------------------------------------
+GNOME_VERSION="$(gnome-shell --version 2>/dev/null | grep -oE '[0-9]+' | head -1 || true)"
+if [ -n "${GNOME_VERSION}" ]; then
+    if [ "${GNOME_VERSION}" -ge 42 ] && [ "${GNOME_VERSION}" -le 45 ]; then
+        log "Обнаружен GNOME ${GNOME_VERSION} (поддерживается: 42–45)."
+    else
+        warn "GNOME ${GNOME_VERSION} вне протестированного диапазона (42–45)."
+        warn "Переключение раскладки через g3kb-switch может не работать."
+    fi
+else
+    warn "Не удалось определить версию GNOME (gnome-shell не найден)."
+fi
+
 if have g3kb-switch; then
     log "g3kb-switch уже установлен."
 else
     warn "g3kb-switch не найден — переключение раскладки в GNOME Wayland работать не будет."
+    warn "g3kb-switch требует расширение GNOME Shell и поддерживает GNOME 42–45."
     warn "Установите его отдельно (см. https://github.com/dvorka/g3kb-switch) или через:"
     warn "  sudo apt install g3kb-switch    # если пакет доступен в вашем репозитории"
 fi

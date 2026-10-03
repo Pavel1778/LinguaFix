@@ -100,3 +100,71 @@ def test_tray_build_menu_uses_module() -> None:
 
 def test_tray_stop_without_start() -> None:
     TrayIcon().stop()  # must not raise
+
+
+def test_tray_status_callback_is_stored() -> None:
+    tray = TrayIcon(on_status=lambda: "LinguaFix: active")
+    assert tray.on_status is not None
+
+
+def test_tray_show_status_without_callback_is_noop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        "linguafix.tray.subprocess.run",
+        lambda *a, **k: calls.append(list(a[0])),
+    )
+    TrayIcon()._show_status()  # no callback -> nothing happens
+    assert calls == []
+
+
+def test_tray_show_status_notifies(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[list[str]] = []
+    monkeypatch.setattr(
+        "linguafix.tray.subprocess.run",
+        lambda *a, **k: calls.append(list(a[0])),
+    )
+    tray = TrayIcon(on_status=lambda: "LinguaFix: active, layout=us")
+    tray._show_status()
+    assert calls
+    assert "LinguaFix: active, layout=us" in calls[0]
+
+
+def test_tray_show_status_handles_callback_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def boom() -> str:
+        raise RuntimeError("nope")
+
+    monkeypatch.setattr("linguafix.tray.subprocess.run", lambda *a, **k: None)
+    TrayIcon(on_status=boom)._show_status()  # must not raise
+
+
+def test_tray_menu_contains_show_status() -> None:
+    created: list[str] = []
+
+    class FakeMenuItem:
+        def __init__(self, label: str = "") -> None:
+            created.append(label)
+
+        def connect(self, *_args: object) -> None:
+            return None
+
+        def set_sensitive(self, *_args: object) -> None:
+            return None
+
+    class FakeMenu:
+        def append(self, item: object) -> None:
+            return None
+
+        def show_all(self) -> None:
+            return None
+
+    class FakeGtk:
+        Menu = FakeMenu
+        MenuItem = FakeMenuItem
+
+    tray = TrayIcon(on_status=lambda: "ok")
+    tray._build_menu(FakeGtk)
+    assert "Показать статус" in created

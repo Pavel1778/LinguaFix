@@ -1,7 +1,22 @@
 # Installation
 
-LinguaFix targets Debian 12+ / Ubuntu 22.04+ with GNOME 42+ on either X11 or
+LinguaFix targets Debian 12+ / Ubuntu 22.04+ with GNOME 42–45 on either X11 or
 Wayland. Python 3.10 or newer is required.
+
+## GNOME version and g3kb-switch
+
+On GNOME Wayland the active layout is changed through `g3kb-switch`, which
+talks to a GNOME Shell extension and is tied to the shell's D-Bus API. That API
+has changed between GNOME releases, so the supported range is **GNOME 42–45**.
+`install.sh` prints a warning when it detects a GNOME version outside that
+range. If `g3kb-switch` is missing or incompatible, LinguaFix still replaces the
+text but cannot change the active layout.
+
+Check your version with:
+
+```bash
+gnome-shell --version
+```
 
 ## Quick install
 
@@ -55,6 +70,20 @@ journalctl --user -u linguafix.service -n 50 --no-pager
 
 `linguafix status` should report that the daemon is running, the current layout,
 and the active injector backend.
+
+## Ubuntu notes
+
+Some package names differ between Debian and Ubuntu. `install.sh` installs the
+APT packages one by one and skips any name that is not available in the current
+repository, so a missing package never aborts the install:
+
+- `python3-uinput` is present in Debian; on some Ubuntu releases it is not
+  packaged. In that case the `python-uinput` dependency is installed into the
+  bundled virtualenv instead (`pip install -e .` pulls it from PyPI), so the
+  `uinput` backend still works.
+- `wtype` and `g3kb-switch` may need a third-party repository on older Ubuntu
+  releases. Without `wtype`, LinguaFix falls back to `xdotool` (X11) or
+  `uinput`.
 
 ## Manual install
 

@@ -82,10 +82,12 @@ def cmd_start(args: argparse.Namespace) -> int:
 
         config = load_config()
         setup_logging(config.log_level, console=True)
-        daemon = LinguaFixDaemon(config)
+        daemon = LinguaFixDaemon(config, dry_run=args.dry_run)
         return daemon.run()
 
     command = [sys.executable, "-m", "linguafix", "start", "--foreground"]
+    if args.dry_run:
+        command.append("--dry-run")
     subprocess.Popen(
         command,
         stdout=subprocess.DEVNULL,
@@ -183,12 +185,14 @@ def cmd_fix(args: argparse.Namespace) -> int:
 
     converted = converter.convert(text, current, target)
     print(f"{text} -> {converted} ({current} -> {target})")
-    if args.apply:
+    if args.apply and not args.dry_run:
         switcher.switch_to(target)
         time.sleep(0.05)
         if not injector.replace_text(text, converted, target):
             print("Не удалось применить исправление.")
             return 1
+    elif args.dry_run:
+        print("Режим --dry-run: изменения не применены.")
     return 0
 
 
@@ -260,6 +264,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     start = subparsers.add_parser("start", help="запустить демон")
     start.add_argument("--foreground", action="store_true", help="не уходить в фон")
+    start.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="анализировать, но не менять раскладку и не заменять текст",
+    )
     start.set_defaults(func=cmd_start)
 
     stop = subparsers.add_parser("stop", help="остановить демон")
@@ -275,6 +284,11 @@ def build_parser() -> argparse.ArgumentParser:
     fix = subparsers.add_parser("fix", help="исправить текст вручную")
     fix.add_argument("--text", help="текст для исправления (иначе читается из stdin)")
     fix.add_argument("--apply", action="store_true", help="применить исправление на экране")
+    fix.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="только показать исправление, ничего не применять",
+    )
     fix.set_defaults(func=cmd_fix)
 
     install = subparsers.add_parser("install-autostart", help="включить автозапуск")

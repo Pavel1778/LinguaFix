@@ -51,6 +51,8 @@ Caramba Switcher for Windows.
 - ⚙️ Настраиваемые таймауты, языки и backend'ы
 - 🧩 CLI: `start`, `stop`, `status`, `config`, `fix`
 - 🔁 Горячая перезагрузка конфига по `SIGHUP`
+- 🧪 Флаг `--dry-run` — анализ без изменения текста (отладка и тесты)
+- 🔒 Приватность: в лог пишутся только метаданные, набранный текст не сохраняется
 
 ## 🎯 Сравнение с аналогами / Comparison
 
@@ -66,7 +68,8 @@ Caramba Switcher for Windows.
 ## 📋 Требования / Requirements
 
 - Debian 12+ или Ubuntu 22.04+
-- GNOME 42+
+- GNOME 42–45 (протестированный диапазон; `g3kb-switch` зависит от версии
+  GNOME Shell — вне этого диапазона переключение раскладки может не работать)
 - X11 или Wayland
 - Python 3.10+
 - Пакеты: `python3-evdev`, `python3-uinput`, `wtype` (Wayland) или `xdotool` (X11)
@@ -100,9 +103,15 @@ bash install.sh          # добавьте --yes для неинтеракти�
 linguafix status                       # проверить, что демон запущен
 linguafix fix --text ghbdtn            # предпросмотр исправления
 linguafix fix --text ghbdtn --apply    # применить исправление
+linguafix fix --text ghbdtn --apply --dry-run   # показать, но не применять
+linguafix start --foreground --dry-run # демон-наблюдатель: только логирует
 linguafix config show                  # показать конфигурацию
 systemctl --user status linguafix.service
 ```
+
+Флаг `--dry-run` удобен для отладки: демон полностью читает и анализирует
+ввод, пишет в лог, что *собирался* исправить, но не переключает раскладку и
+не трогает текст.
 
 ## ⚙️ Конфигурация / Configuration
 
@@ -186,6 +195,7 @@ make build-deb                # собрать .deb в dist/
 ```
 
 Архитектура и принятые решения: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Ручной план тестирования на реальной системе: [docs/TESTING.md](docs/TESTING.md).
 
 ## ⚠️ Известные ограничения / Known limitations
 

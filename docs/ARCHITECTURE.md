@@ -91,6 +91,16 @@ mitigated rather than solved:
 - **Some applications.** A few games and Java/Swing applications intercept input
   in ways that defeat synthetic keystrokes. This is a known limitation.
 
+## Logging and privacy
+
+LinguaFix reads everything you type, so it must never persist that text. The
+log records only metadata: the buffer length, the source and target layout, and
+the action taken. The typed string itself is never written to the log file,
+which is rotated at 5 MB with three backups
+(`~/.local/state/linguafix/linguafix.log`). The `--dry-run` flag analyses and
+logs the same metadata without switching the layout or touching the text, which
+makes it safe to run while investigating behaviour.
+
 ## Extension points
 
 - `LanguageDetector` — add a language by dropping `ngrams_<lang>.json` and a

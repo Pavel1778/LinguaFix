@@ -8,6 +8,7 @@ message and the daemon keeps running without an icon.
 from __future__ import annotations
 
 import logging
+import subprocess
 from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,8 @@ class TrayIcon:
 
     Args:
         on_fix: Callback invoked by the "Fix now" menu entry.
+        on_status: Callback that returns a status string for the "Show status"
+            menu entry.
         on_settings: Callback invoked by the "Settings" menu entry.
         on_quit: Callback invoked by the "Quit" menu entry.
     """
@@ -29,13 +32,34 @@ class TrayIcon:
         self,
         *,
         on_fix: Callable[[], None] | None = None,
+        on_status: Callable[[], str] | None = None,
         on_settings: Callable[[], None] | None = None,
         on_quit: Callable[[], None] | None = None,
     ) -> None:
         self.on_fix = on_fix
+        self.on_status = on_status
         self.on_settings = on_settings
         self.on_quit = on_quit
         self._indicator: object | None = None
+
+    def _show_status(self) -> None:
+        """Show the current status as a desktop notification."""
+        if self.on_status is None:
+            return
+        try:
+            text = self.on_status()
+        except Exception:
+            logger.debug("Status callback failed", exc_info=True)
+            return
+        try:
+            subprocess.run(
+                ["notify-send", "--app-name=LinguaFix", "LinguaFix", text],
+                check=False,
+                capture_output=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.SubprocessError):
+            logger.debug("notify-send failed", exc_info=True)
 
     @staticmethod
     def available() -> bool:
@@ -86,7 +110,7 @@ class TrayIcon:
         """Build the tray context menu."""
         menu = gtk_module.Menu()  # type: ignore[attr-defined]
         entries = [
-            ("Статус: активен", None),
+            ("Показать статус", self._show_status),
             ("Исправить сейчас", self.on_fix),
             ("Настройки", self.on_settings),
             ("Выход", self.on_quit),

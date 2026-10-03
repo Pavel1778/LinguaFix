@@ -247,6 +247,75 @@ def test_process_buffer_skips_short_text(daemon: LinguaFixDaemon) -> None:
     assert injector.replacements == []
 
 
+# --- dry run ----------------------------------------------------------------
+
+
+def test_dry_run_does_not_switch_or_replace() -> None:
+    daemon = LinguaFixDaemon(
+        Config(analysis_timeout=0.1),
+        switcher=FakeSwitcher("us"),
+        injector=FakeInjector(),
+        dry_run=True,
+    )
+    daemon.buffer = "ghbdtn"
+    daemon._process_buffer()
+    switcher = daemon.switcher
+    injector = daemon.injector
+    assert isinstance(switcher, FakeSwitcher)
+    assert isinstance(injector, FakeInjector)
+    assert switcher.switches == []
+    assert injector.replacements == []
+
+
+def test_status_text_reports_layout() -> None:
+    daemon = LinguaFixDaemon(Config(), switcher=FakeSwitcher("ru"), injector=FakeInjector())
+    daemon._running = True
+    assert "ru" in daemon.status_text()
+    assert "active" in daemon.status_text()
+
+
+def test_tray_fix_processes_pending_buffer() -> None:
+    daemon = LinguaFixDaemon(
+        Config(analysis_timeout=0.1),
+        switcher=FakeSwitcher("us"),
+        injector=FakeInjector(),
+    )
+    daemon.buffer = "ghbdtn"
+    daemon._tray_fix()
+    injector = daemon.injector
+    assert isinstance(injector, FakeInjector)
+    assert injector.replacements == [("ghbdtn", "привет", "ru")]
+
+
+def test_tray_fix_without_buffer_is_noop() -> None:
+    daemon = LinguaFixDaemon(Config(), switcher=FakeSwitcher(), injector=FakeInjector())
+    daemon._tray_fix()  # must not raise
+
+
+# --- privacy ----------------------------------------------------------------
+
+
+def test_typed_text_is_not_written_to_logs(
+    daemon: LinguaFixDaemon, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level("DEBUG")
+    daemon.buffer = "ghbdtn"
+    daemon._process_buffer()
+    # The correction must be logged as metadata, never as the typed text.
+    assert "ghbdtn" not in caplog.text
+    assert "привет" not in caplog.text
+    assert "length 6" in caplog.text
+
+
+def test_stop_word_text_is_not_written_to_logs(
+    daemon: LinguaFixDaemon, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level("DEBUG")
+    daemon.buffer = "password"
+    daemon._process_buffer()
+    assert "password" not in caplog.text
+
+
 # --- config reload ----------------------------------------------------------
 
 

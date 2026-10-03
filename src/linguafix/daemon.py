@@ -28,6 +28,7 @@ from .converter import LayoutConverter
 from .detector import LanguageDetector
 from .injector import TextInjector
 from .switcher import LayoutSwitcher
+from .tray import TrayIcon
 
 if TYPE_CHECKING:  # pragma: no cover - import used only for typing
     from evdev import InputDevice
@@ -131,8 +132,10 @@ class LinguaFixDaemon:
         switcher: LayoutSwitcher | None = None,
         injector: TextInjector | None = None,
         devices: list[InputDevice] | None = None,  # type: ignore[type-arg]
+        dry_run: bool = False,
     ) -> None:
         self.config = config
+        self.dry_run = dry_run
         self.converter = LayoutConverter()
         self.detector = detector or LanguageDetector(
             converter=self.converter,
@@ -160,6 +163,7 @@ class LinguaFixDaemon:
         self._running = False
         self._reload_requested = False
         self._lock_handle: object | None = None
+        self._tray: TrayIcon | None = None
 
     # ------------------------------------------------------------------
     # Device discovery
@@ -339,7 +343,7 @@ class LinguaFixDaemon:
             return
 
         if self.detector.is_stop_word(buffer):
-            logger.debug("Buffer %r is a stop word; skipping", buffer)
+            logger.debug("Buffer of length %d is a stop word; skipping", len(buffer))
             return
 
         current = self.switcher.get_current_layout()
@@ -351,7 +355,13 @@ class LinguaFixDaemon:
         if converted == buffer:
             return
 
-        logger.info("Fixing %r -> %r (%s -> %s)", buffer, converted, current, target)
+        # Log metadata only: never write the typed text itself to disk, so the
+        # log stays free of passwords and other sensitive input.
+        logger.info("Fixing buffer of length %d (%s -> %s)", len(buffer), current, target)
+        if self.dry_run:
+            logger.info("Dry run: skipping layout switch and text replacement")
+            return
+
         self.switcher.switch_to(target)
         time.sleep(0.05)
         if self.injector.replace_text(buffer, converted, target) and self.config.notify_on_fix:
@@ -412,11 +422,13 @@ class LinguaFixDaemon:
                 logger.debug("Cannot register %s: %s", device, exc)
 
         logger.info(
-            "LinguaFix started (%d device(s), %s, %s)",
+            "LinguaFix started (%d device(s), %s, %s%s)",
             len(devices),
             self.switcher.describe(),
             self.injector.describe(),
+            ", dry-run" if self.dry_run else "",
         )
+        self._start_tray()
         try:
             self._loop(selector)
         finally:
@@ -424,9 +436,42 @@ class LinguaFixDaemon:
             for device in devices:
                 with contextlib.suppress(OSError):
                     device.close()
+            self._stop_tray()
             self.release_lock()
         logger.info("LinguaFix stopped")
         return 0
+
+    def _start_tray(self) -> None:
+        """Start the optional tray icon when enabled in the configuration."""
+        if not self.config.tray_enabled:
+            return
+        tray = TrayIcon(
+            on_status=self.status_text,
+            on_fix=self._tray_fix,
+            on_quit=self.stop,
+        )
+        if tray.start():
+            self._tray = tray
+
+    def _stop_tray(self) -> None:
+        """Stop the tray icon if it is running."""
+        if self._tray is not None:
+            self._tray.stop()
+            self._tray = None
+
+    def _tray_fix(self) -> None:
+        """Tray callback: analyse the current buffer immediately."""
+        if self.buffer:
+            self._process_buffer()
+
+    def status_text(self) -> str:
+        """Return a one-line human-readable status string.
+
+        Used by the tray icon and by tests; it contains no typed text.
+        """
+        layout = self.switcher.get_current_layout()
+        state = "active" if self._running else "stopped"
+        return f"LinguaFix: {state}, layout={layout}"
 
     def _loop(self, selector: selectors.BaseSelector) -> None:
         """Run the event loop until ``self._running`` becomes false."""

@@ -305,7 +305,8 @@ class TextInjector:
         for char in text:
             key = self._char_to_key(char, layout)
             if key is None:
-                logger.warning("Cannot type %r in layout %s via uinput", char, layout)
+                # Do not log the character itself; it may be sensitive input.
+                logger.warning("Cannot type a character in layout %s via uinput", layout)
                 return False
             name, shift = key
             code = getattr(evdev.ecodes, name, None)

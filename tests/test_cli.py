@@ -135,6 +135,28 @@ def test_fix_empty_text(
     assert "Нет текста" in capsys.readouterr().out
 
 
+def test_fix_dry_run_does_not_apply(
+    isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli.LayoutSwitcher, "get_current_layout", lambda self, force=False: "us")
+    applied: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(
+        cli.TextInjector,
+        "replace_text",
+        lambda self, old, new, layout: applied.append((old, new, layout)) or True,
+    )
+    assert cli.main(["fix", "--text", "ghbdtn", "--apply", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "привет" in out
+    assert "dry-run" in out
+    assert applied == []
+
+
+def test_start_dry_run_flag_is_parsed() -> None:
+    args = cli.build_parser().parse_args(["start", "--foreground", "--dry-run"])
+    assert args.dry_run is True
+
+
 def test_install_autostart(
     isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
