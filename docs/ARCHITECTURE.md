@@ -227,10 +227,44 @@ reading process will meet in practice:
 - **Every event and every buffer is guarded.** An exception in the detector,
   converter, switcher or injector is logged (redacted) and the loop continues.
 
+## Languages, context and exceptions
+
+Recognition is language-first, not script-first. Every layout is mapped to a
+language (`us` → `en`, `ru` → `ru`, `uk` → `uk`, `fr` → `fr`, `de` → `de`) and a
+word is scored against the corpora whose *layout could have produced it*.
+
+- **Bundled languages.** `en`, `ru`, `uk`, `de` and `fr` all ship corpora under
+  `src/linguafix/data/`. Only `en` and `ru` are loaded by default: the Latin
+  layouts (`us`, `de`, `fr`) share physical positions, so loading every corpus
+  at once makes them compete and blurs borderline words. Enable the rest with
+  `languages = ["en", "ru", "uk", "fr"]` in the config. This is why
+  `LanguageDetector()` without arguments keeps behaving exactly as before.
+- **Context analysis** (`context_analysis`, `context_weight`). The previous word
+  is treated as weak evidence: when it has an unambiguous language, a candidate
+  in that language gains `context_weight`. It is additive only, so it can tip a
+  borderline word but can never talk the detector out of a clear correction.
+  Disable it with `context_analysis = false` or a weight of `0.0`.
+- **Per-app exceptions** (`exceptions_apps`). A focused application on this list
+  is never touched, in any mode. `exceptions_force_in_manual` lists the
+  applications that stay automatic while `mode = "manual"`. The focused
+  application is resolved best-effort; the daemon degrades to auto behaviour when
+  it cannot tell, and never reads window contents.
+- **Skip rules** (`ignore_all_caps`, `ignore_with_digits`, `ignore_emails_urls`,
+  `custom_skip_regex`). These short-circuit a buffer before detection. Digital
+  tokens, `ALL CAPS` and e-mail/URL/path-like tokens (an internal separator such
+  as `. @ / \ : _ -`) are left untouched.
+- **User dictionary** (`dictionary_size`, `dictionary_custom_path`). A
+  newline-separated list of words the user taught the daemon to leave alone. It
+  is a deliberate, explicit file (`~/.local/share/linguafix/dictionary.txt` by
+  default) — the daemon never writes typed text to it on its own. A taught word
+  is an absolute override: `target_layout` returns `None` for it in every layout.
+  `dictionary_size` caps the bundled vocabulary (larger = more recall, more RAM).
+
 ## Extension points
 
 - `LanguageDetector` — add a language by dropping `ngrams_<lang>.json` and a
-  word list into `src/linguafix/data/` and extending the layout map.
+  word list into `src/linguafix/data/` and extending the layout map. Then add the
+  language to `SUPPORTED_LANGUAGES` in `config.py`.
 - `LayoutConverter` — layouts live in `src/linguafix/data/layouts.json`; adding a
   pair is a data-only change.
 - `TextInjector` — new backends implement `replace_text` and register in the
@@ -245,8 +279,10 @@ reading process will meet in practice:
 |---|---|
 | `config.py` | `Config` dataclass, XDG paths, TOML load/save |
 | `logging_setup.py` | Rotating file logger under `~/.local/state/linguafix/` |
-| `converter.py` | Character maps between layouts (`us` ↔ `ru` ↔ `de`) |
-| `detector.py` | Language detection, stop words, `should_fix` heuristic |
+| `converter.py` | Character maps between layouts (`us`, `ru`, `uk`, `de`, `fr`) |
+| `detector.py` | Language detection, context, user dictionary, `target_layout` |
+| `dictionary.py` | Reading/writing the user dictionary file |
+| `app_focus.py` | Best-effort focused-application detection for exceptions |
 | `switcher.py` | `g3kb-switch` / `setxkbmap` layout control |
 | `injector.py` | Text replacement via `uinput` / `wtype` / `xdotool` |
 | `daemon.py` | `LinguaFixDaemon`: event loop, buffering, orchestration |

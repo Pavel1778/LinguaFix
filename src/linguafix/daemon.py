@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING, Final
 from .config import Config, cache_dir
 from .converter import LayoutConverter
 from .detector import LanguageDetector
+from .dictionary import load_user_dictionary
 from .injector import TextInjector
 from .switcher import LayoutSwitcher
 from .tray import TrayIcon
@@ -117,6 +118,31 @@ _INTERNAL_SEPARATOR_RE: Final[re.Pattern[str]] = re.compile(r"\w[.@/\\:_-]\w")
 _ENTER_KEYS: Final[frozenset[str]] = frozenset({"KEY_ENTER", "KEY_KPENTER"})
 _TAB_KEYS: Final[frozenset[str]] = frozenset({"KEY_TAB"})
 _SHIFT_KEYS: Final[frozenset[str]] = frozenset({"KEY_LEFTSHIFT", "KEY_RIGHTSHIFT", "KEY_CAPSLOCK"})
+
+# Physical modifier keys mapped to a canonical family. A hotkey like
+# ``CTRL+SHIFT+F12`` matches when exactly these families are held.
+_MODIFIER_FAMILIES: Final[dict[str, str]] = {
+    "KEY_LEFTCTRL": "ctrl",
+    "KEY_RIGHTCTRL": "ctrl",
+    "KEY_LEFTALT": "alt",
+    "KEY_RIGHTALT": "alt",
+    "KEY_LEFTSHIFT": "shift",
+    "KEY_RIGHTSHIFT": "shift",
+    "KEY_LEFTMETA": "super",
+    "KEY_RIGHTMETA": "super",
+}
+# Config-side modifier spellings accepted in a hotkey string.
+_MODIFIER_ALIASES: Final[dict[str, str]] = {
+    "CTRL": "ctrl",
+    "CONTROL": "ctrl",
+    "ALT": "alt",
+    "SHIFT": "shift",
+    "SUPER": "super",
+    "WIN": "super",
+    "META": "super",
+}
+# Cycle order used by the ``toggle_mode`` hotkey.
+_MODE_CYCLE: Final[tuple[str, ...]] = ("auto", "hybrid", "manual")
 # Keys that carry no printable character but that we must not treat as a
 # continuation of the current word either (arrow keys, Delete, Home, …). A key
 # in this set ends the word without flushing it.
@@ -135,6 +161,17 @@ _WORD_BREAKERS: Final[frozenset[str]] = frozenset(
         "KEY_ESC",
     }
 )
+
+
+def _compile_skip_regex(pattern: str) -> re.Pattern[str] | None:
+    """Compile the user's skip regex, ignoring an invalid one with a warning."""
+    if not pattern.strip():
+        return None
+    try:
+        return re.compile(pattern)
+    except re.error:
+        logger.warning("Invalid custom_skip_regex; ignoring it")
+        return None
 
 
 def _load_ecodes() -> tuple[dict[int, tuple[str, str]], dict[str, int]]:
@@ -182,6 +219,8 @@ class LinguaFixDaemon:
             converter=self.converter,
             stop_words=config.stop_words,
             min_word_length=config.min_word_length,
+            confidence_threshold=config.confidence_threshold,
+            languages=tuple(config.languages),
         )
         self.switcher = switcher or LayoutSwitcher(
             layouts=config.layouts,
@@ -194,10 +233,26 @@ class LinguaFixDaemon:
         )
         self._devices = devices
         self._code_to_pair, self._name_to_code = _load_ecodes()
-        hotkey = config.hotkey.upper()
-        if not hotkey.startswith("KEY_"):
-            hotkey = f"KEY_{hotkey}"
-        self._hotkey_code = self._name_to_code.get(hotkey)
+        self._hotkeys: dict[str, tuple[frozenset[str], int] | None] = {
+            "fix": self._parse_hotkey(config.hotkey_fix_last_word),
+            "undo": self._parse_hotkey(config.hotkey_undo_last_fix),
+            "toggle_mode": self._parse_hotkey(config.hotkey_toggle_mode),
+            "reload": self._parse_hotkey(config.hotkey_reload_config),
+        }
+        # Modifier families currently held down, used to match hotkeys.
+        self._held_modifiers: set[str] = set()
+        # Successful fixes eligible for undo: (monotonic time, original text,
+        # original layout, backspace count).
+        self._undo_history: list[tuple[float, str, str, int]] = []
+        # Task E: skip rules and the user dictionary.
+        self._skip_regex = _compile_skip_regex(config.custom_skip_regex)
+        self._excepted_apps = {app.lower() for app in config.exceptions_apps}
+        self._last_word: str = ""
+        self.detector.set_context_weight(config.context_weight if config.context_analysis else 0.0)
+        self.detector.set_dictionary_size(config.dictionary_size)
+        user_words = load_user_dictionary(config.dictionary_custom_path)
+        if user_words:
+            self.detector.set_user_words(user_words)
 
         # The characters currently on screen for the word being typed. Derived
         # from ``_scancodes`` and kept in step with it (one char per printable
@@ -211,6 +266,7 @@ class LinguaFixDaemon:
         self._running = False
         self._reload_requested = False
         self._shutdown_requested = False
+        self._undo_requested = False
         self._lock_handle: object | None = None
         self._tray: TrayIcon | None = None
         # Guards ``buffer``/``last_key_time``/``_shift`` against the tray thread,
@@ -300,6 +356,8 @@ class LinguaFixDaemon:
         signal.signal(signal.SIGTERM, self._handle_stop)
         signal.signal(signal.SIGINT, self._handle_stop)
         signal.signal(signal.SIGHUP, self._handle_reload)
+        if hasattr(signal, "SIGUSR1"):
+            signal.signal(signal.SIGUSR1, self._handle_undo)
 
     def _handle_stop(self, signum: int, _frame: object) -> None:
         # Only set flags here: the handler may run between any two bytecodes, so
@@ -311,6 +369,12 @@ class LinguaFixDaemon:
     def _handle_reload(self, _signum: int, _frame: object) -> None:
         logger.info("Received SIGHUP; scheduling config reload")
         self._reload_requested = True
+
+    def _handle_undo(self, _signum: int, _frame: object) -> None:
+        # Only set a flag: the undo touches the injector and must run on the
+        # event-loop thread, never inside the signal handler.
+        logger.info("Received SIGUSR1; scheduling undo")
+        self._undo_requested = True
 
     # ------------------------------------------------------------------
     # Event handling
@@ -348,12 +412,23 @@ class LinguaFixDaemon:
                     self._shift = value in (1, 2)
             return
 
+        # Track modifier state for hotkey matching (press and release).
+        family = _MODIFIER_FAMILIES.get(name)
+        if family is not None:
+            if value in (1, 2):
+                self._held_modifiers.add(family)
+            elif value == 0:
+                self._held_modifiers.discard(family)
+            return
+
         if value == 0:  # key release
             return
 
-        if self._hotkey_code is not None and code == self._hotkey_code:
-            self._process_buffer()
-            return
+        if self.config.hotkeys_enabled and value == 1:
+            action = self._match_hotkey(code)
+            if action is not None:
+                self._run_hotkey(action)
+                return
 
         if value == 2:  # auto-repeat: only backspace repeats meaningfully
             if name == "KEY_BACKSPACE":
@@ -424,6 +499,146 @@ class LinguaFixDaemon:
             return str(name[0])
         return str(name) if name is not None else ""
 
+    def _resolve_hotkey(self, value: str) -> int | None:
+        """Return the evdev code for the key part of ``value`` (or ``None``).
+
+        Hotkeys may use any evdev key (``F12``, ``PAUSE``, ``M``), not only the
+        printable US keys tracked for typing, so the full evdev table is
+        consulted as a fallback.
+        """
+        key = value.rsplit("+", 1)[-1] if value else ""
+        if not key:
+            return None
+        if not key.startswith("KEY_"):
+            key = f"KEY_{key}"
+        code = self._name_to_code.get(key)
+        if code is not None:
+            return code
+        try:
+            import evdev
+        except ImportError:  # pragma: no cover - evdev is a runtime dependency
+            return None
+        resolved = getattr(evdev.ecodes, key, None)
+        return int(resolved) if isinstance(resolved, int) else None
+
+    def _parse_hotkey(self, value: str) -> tuple[frozenset[str], int] | None:
+        """Split a hotkey string into ``(modifier_families, key_code)``."""
+        if not value:
+            return None
+        parts = [part for part in value.upper().split("+") if part]
+        if not parts:
+            return None
+        code = self._resolve_hotkey(parts[-1])
+        if code is None:
+            return None
+        families = {_MODIFIER_ALIASES[part] for part in parts[:-1] if part in _MODIFIER_ALIASES}
+        return frozenset(families), code
+
+    def _match_hotkey(self, code: int) -> str | None:
+        """Return the action whose hotkey matches, or ``None``."""
+        if not self.config.hotkeys_enabled:
+            return None
+        for action, parsed in self._hotkeys.items():
+            if parsed is None:
+                continue
+            families, key_code = parsed
+            if code == key_code and families == self._held_modifiers:
+                return action
+        return None
+
+    def _should_fix_buffer(self) -> bool:
+        """Return whether the current mode and per-app rules allow a fix."""
+        manual = self.config.mode == "manual"
+        if not manual and not self._excepted_apps:
+            return True
+
+        from .app_focus import get_active_app
+
+        try:
+            app = get_active_app()
+        except Exception:
+            logger.debug("Active-app probe failed", exc_info=True)
+            app = None
+        if app and app.lower() in self._excepted_apps:
+            # The user listed the application as "never touch": skip even in
+            # auto/hybrid mode.
+            logger.debug("App %s is on the exception list; skipping", app)
+            return False
+        if manual:
+            if not app:
+                return False
+            return app.lower() in {name.lower() for name in self.config.exceptions_force_in_manual}
+        return True
+
+    def _cycle_mode(self) -> None:
+        """Advance to the next working mode and persist it."""
+        try:
+            index = _MODE_CYCLE.index(self.config.mode)
+        except ValueError:
+            index = 0
+        self.config.mode = _MODE_CYCLE[(index + 1) % len(_MODE_CYCLE)]
+        logger.info("Mode toggled to %s", self.config.mode)
+        self._persist_config()
+
+    def _persist_config(self) -> None:
+        """Write the current configuration back to disk, best-effort."""
+        try:
+            from .config import save_config
+
+            save_config(self.config)
+        except Exception:
+            logger.debug("Could not persist configuration", exc_info=True)
+
+    def _run_hotkey(self, action: str) -> None:
+        """Execute the action bound to a hotkey."""
+        logger.info("Hotkey action: %s", action)
+        if action == "fix":
+            self._process_buffer(force=True)
+        elif action == "undo":
+            self._undo_last_fix()
+        elif action == "toggle_mode":
+            self._cycle_mode()
+        elif action == "reload":
+            self.reload_config()
+
+    def _record_undo(self, original: str, layout: str, backspace_count: int) -> None:
+        """Remember a successful fix so it can be undone shortly afterwards."""
+        now = time.monotonic()
+        self._undo_history.append((now, original, layout, backspace_count))
+        self._undo_history = self._undo_history[-self.config.undo_history_depth :]
+
+    def _undo_last_fix(self) -> None:
+        """Re-apply the text of the most recent fix within the undo window."""
+        if not self._undo_history:
+            logger.info("Undo requested but nothing to undo")
+            return
+        now = time.monotonic()
+        # Drop entries that have aged out of the undo window.
+        self._undo_history = [
+            entry
+            for entry in self._undo_history
+            if now - entry[0] <= self.config.undo_window_seconds
+        ]
+        if not self._undo_history:
+            logger.info("Undo requested but the window has expired")
+            return
+        _time, original, layout, backspace_count = self._undo_history.pop()
+        if self.dry_run:
+            logger.info("Dry run: skipping undo")
+            return
+        current = self.switcher.get_current_layout()
+        target = layout if layout else current
+        self.switcher.switch_to(target)
+        time.sleep(0.05)
+        # The fixed text has the same length as the original word; deleting that
+        # many characters and retyping the original restores the screen exactly.
+        if not self.injector.replace_text(backspace_count, original, target):
+            logger.warning("Undo failed to replace text")
+            return
+        logger.info("Undid the last fix")
+        if self.config.notify_on_fix:
+            self._notify()
+
     def _key_to_char(self, code: int) -> str | None:
         """Translate a keycode into the character for the active layout."""
         pair = self._code_to_pair.get(code)
@@ -450,17 +665,21 @@ class LinguaFixDaemon:
             self.buffer = ""
             self._scancodes = []
 
-    def _process_buffer(self) -> None:
+    def _process_buffer(self, *, force: bool = False) -> None:
         """Analyse the buffer, never letting an error escape.
 
         A failure in the detector, converter, switcher or injector must not kill
         the daemon: it is logged and the loop continues.
+
+        Args:
+            force: When ``True`` the working mode is ignored (the user asked for
+                the fix explicitly through a hotkey).
         """
         # Capture the text so a traceback can be scrubbed of it before logging.
         with self._lock:
             sensitive = self.buffer.strip()
         try:
-            self._process_buffer_inner()
+            self._process_buffer_inner(force=force)
         except Exception as exc:  # the daemon must survive any failure
             self._log_sanitized("Failed to process the buffer", exc, sensitive)
 
@@ -479,7 +698,7 @@ class LinguaFixDaemon:
                 formatted = formatted.replace(needle, "<redacted>")
         logger.error("%s\n%s", message, formatted.rstrip())
 
-    def _process_buffer_inner(self) -> None:
+    def _process_buffer_inner(self, *, force: bool = False) -> None:
         """Analyse the current word and apply a correction when appropriate."""
         # Snapshot and clear the buffer under the lock, then release it before
         # the (slow) switch/inject so typing during a fix is never lost. Holding
@@ -499,8 +718,24 @@ class LinguaFixDaemon:
             logger.debug("Buffer of length %d is a stop word; skipping", len(buffer))
             return
 
+        # In manual mode nothing is corrected unless the user forces it (hotkey)
+        # or the focused application is on the force list. Clearing the buffer
+        # above means the decision never leaves stale text behind.
+        if not force and not self._should_fix_buffer():
+            logger.debug("Mode %s: skipping automatic correction", self.config.mode)
+            return
+
+        if self.config.ignore_all_caps and buffer.isupper():
+            logger.debug("Buffer is all caps; skipping")
+            return
+
+        if self.config.ignore_with_digits and any(char.isdigit() for char in buffer):
+            logger.debug("Buffer contains digits; skipping")
+            return
+
+        neighbor = self._last_word or None
         current = self.switcher.get_current_layout()
-        target = self.detector.target_layout(buffer, current)
+        target = self.detector.target_layout(buffer, current, neighbor)
         if target is None:
             return
 
@@ -508,12 +743,18 @@ class LinguaFixDaemon:
         if converted == buffer:
             return
 
-        if _INTERNAL_SEPARATOR_RE.search(buffer):
+        if self.config.ignore_emails_urls and _INTERNAL_SEPARATOR_RE.search(buffer):
             # A URL, e-mail, path, file name or hyphenated identifier. Rewriting
             # it would corrupt a token that is intentionally not a word, even
             # when the detector finds the other layout more plausible.
             logger.debug("Buffer contains an internal separator; skipping")
             return
+
+        if self._skip_regex is not None and self._skip_regex.search(buffer):
+            logger.debug("Buffer matches custom_skip_regex; skipping")
+            return
+
+        self._last_word = buffer
 
         # Log metadata only: never write the typed text itself to disk, so the
         # log stays free of passwords and other sensitive input.
@@ -532,11 +773,12 @@ class LinguaFixDaemon:
 
         self.switcher.switch_to(target)
         time.sleep(0.05)
-        if (
-            self.injector.replace_text(backspace_count, converted, target)
-            and self.config.notify_on_fix
-        ):
-            self._notify()
+        if self.injector.replace_text(backspace_count, converted, target):
+            # The fixed text has the same length as the original, so recording
+            # the original lets a later undo restore the screen exactly.
+            self._record_undo(buffer, current, backspace_count)
+            if self.config.notify_on_fix:
+                self._notify()
 
     def _notify(self) -> None:
         """Show a desktop notification about a correction."""
@@ -565,7 +807,24 @@ class LinguaFixDaemon:
         self.config = new_config
         self.detector.set_stop_words(new_config.stop_words)
         self.detector.min_word_length = new_config.min_word_length
+        self.detector.set_confidence_threshold(new_config.confidence_threshold)
+        self.detector.set_languages(tuple(new_config.languages))
+        self.detector.set_context_weight(
+            new_config.context_weight if new_config.context_analysis else 0.0
+        )
+        self.detector.set_dictionary_size(new_config.dictionary_size)
+        # Always re-read the user dictionary: the reload hotkey is also how a
+        # user picks up words they just added to the file.
+        self.detector.set_user_words(load_user_dictionary(new_config.dictionary_custom_path))
+        self._skip_regex = _compile_skip_regex(new_config.custom_skip_regex)
+        self._excepted_apps = {app.lower() for app in new_config.exceptions_apps}
         self.switcher.layouts = list(new_config.layouts)
+        self._hotkeys = {
+            "fix": self._parse_hotkey(new_config.hotkey_fix_last_word),
+            "undo": self._parse_hotkey(new_config.hotkey_undo_last_fix),
+            "toggle_mode": self._parse_hotkey(new_config.hotkey_toggle_mode),
+            "reload": self._parse_hotkey(new_config.hotkey_reload_config),
+        }
         logger.info("Configuration reloaded")
 
     # ------------------------------------------------------------------
@@ -659,7 +918,7 @@ class LinguaFixDaemon:
         """
         layout = self.switcher.get_current_layout()
         state = "active" if self._running else "stopped"
-        return f"LinguaFix: {state}, layout={layout}"
+        return f"LinguaFix: {state}, layout={layout}, mode={self.config.mode}"
 
     def _loop(self, selector: selectors.BaseSelector) -> None:
         """Run the event loop until ``self._running`` becomes false."""
@@ -668,6 +927,10 @@ class LinguaFixDaemon:
             if self._reload_requested:
                 self._reload_requested = False
                 self.reload_config()
+
+            if self._undo_requested:
+                self._undo_requested = False
+                self._undo_last_fix()
 
             if registered == 0:
                 # Every keyboard disappeared (for example a USB keyboard was

@@ -54,6 +54,24 @@ SMOKE_IMAGE=ubuntu:22.04 make smoke-test    # Python 3.10 path (tomli)
   live in `Config`; Space/Enter are on by default. A token with an internal
   separator (`.` `@` `/` `\` `:` `_` `-`) is never rewritten (URLs, e-mails,
   paths, versions, hyphenated identifiers).
+- **Only `en` and `ru` are loaded by default.** The Latin layouts (`us`, `de`,
+  `fr`) share physical positions, so loading every shipped corpus at once makes
+  them compete and changes default detection. `DEFAULT_DETECTOR_LANGUAGES` in
+  `detector.py` must stay `("en", "ru")`; `uk`/`de`/`fr` are opt-in through
+  `Config.languages`. `test_languages.py` guards both the new corpora and the
+  unchanged default.
+- Adding a language is data-only: drop `ngrams_<lang>.json`, extend
+  `layouts.json`, and add the code to `SUPPORTED_LANGUAGES` in `config.py`. A
+  missing corpus is skipped, never treated as an empty model.
+- The user dictionary is an **absolute** override: `target_layout` returns
+  `None` for any taught word, in every layout. It is a vocabulary membership
+  test, not a score bonus — a bonus is drowned out by the n-gram penalties.
+  The file (`~/.local/share/linguafix/dictionary.txt` by default) is edited
+  explicitly (`linguafix dict add/remove`, or by hand); the daemon never writes
+  typed text to it. A config reload always re-reads it.
+- `context_analysis`/`context_weight` may only *add* to a candidate, never push
+  the current layout below zero, so a neighbour can tip a borderline word but
+  cannot create or suppress a correction on its own.
 - `subprocess.run(..., check=False)` still raises `FileNotFoundError` when the
   binary is missing. Guard calls with `OSError`.
 - `install.sh` runs under `set -u`; do not reference `USER` directly (it is unset

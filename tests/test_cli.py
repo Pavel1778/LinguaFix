@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import signal
 from pathlib import Path
 
 import pytest
@@ -29,6 +30,9 @@ def test_build_parser_has_all_commands() -> None:
         "stop",
         "kill",
         "status",
+        "mode",
+        "undo",
+        "dict",
         "config",
         "fix",
         "doctor",
@@ -370,6 +374,74 @@ def test_cmd_gui_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(gui, "main", lambda: 0)
     assert cli.cmd_gui(argparse.Namespace()) == 0
+
+
+def test_mode_show_and_set(isolated_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["mode"]) == 0
+    assert capsys.readouterr().out.strip() == "auto"
+
+    assert cli.main(["mode", "manual"]) == 0
+    assert "manual" in capsys.readouterr().out
+    assert cli.main(["mode"]) == 0
+    assert capsys.readouterr().out.strip() == "manual"
+
+
+def test_undo_requires_running_daemon(
+    isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(cli, "_read_pid", lambda: None)
+    assert cli.main(["undo"]) == 1
+    assert "не запущен" in capsys.readouterr().out
+
+
+def test_undo_signals_daemon(
+    isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    signals: list[tuple[int, int]] = []
+    monkeypatch.setattr(cli, "_read_pid", lambda: 4242)
+    monkeypatch.setattr(cli.os, "kill", lambda pid, sig: signals.append((pid, sig)))
+    assert cli.main(["undo"]) == 0
+    assert signals == [(4242, signal.SIGUSR1)]
+
+
+def test_dict_add_list_remove(
+    isolated_env: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("XDG_DATA_HOME", str(isolated_env / "data"))
+    assert cli.main(["dict", "list"]) == 0
+    assert "пуст" in capsys.readouterr().out
+
+    assert cli.main(["dict", "add", "котопёс"]) == 0
+    assert cli.main(["dict", "add", "гайдлайн"]) == 0
+    assert cli.main(["dict", "list"]) == 0
+    listed = capsys.readouterr().out
+    assert "котопёс" in listed and "гайдлайн" in listed
+
+    assert cli.main(["dict", "remove", "котопёс"]) == 0
+    assert cli.main(["dict", "list"]) == 0
+    assert "котопёс" not in capsys.readouterr().out
+
+
+def test_dict_remove_missing_word(
+    isolated_env: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("XDG_DATA_HOME", str(isolated_env / "data"))
+    assert cli.main(["dict", "remove", "нетакого"]) == 1
+    assert "не найдено" in capsys.readouterr().out
+
+
+def test_dict_add_without_word(
+    isolated_env: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("XDG_DATA_HOME", str(isolated_env / "data"))
+    assert cli.main(["dict", "add"]) == 2
+    assert "Укажите слово" in capsys.readouterr().out
 
 
 def test_install_autostart_uses_dedicated_autostart_file(

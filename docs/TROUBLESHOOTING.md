@@ -240,6 +240,62 @@ backspace_settle_ms = 60   # 30 by default; try 50-80 for slow Electron apps
 A very large value only adds latency; it cannot corrupt the text, because the
 backspace batch itself is flushed atomically.
 
+## A word I type on purpose keeps being "corrected"
+
+Jargon, names and abbreviations often look like a wrong-layout word. Instead of
+disabling the daemon, teach it the word:
+
+```bash
+linguafix dict add котопёс        # adds to ~/.local/share/linguafix/dictionary.txt
+```
+
+or edit `~/.local/share/linguafix/dictionary.txt`, one word per line. A taught
+word is never rewritten, in any layout. `linguafix dict list` shows the current
+words and `linguafix dict remove <word>` deletes one. Reload with a hotkey or
+restart so the daemon picks the file up.
+
+Alternatively:
+
+- `stop_words = ["котопёс"]` — a plain substring match, applied before detection.
+- `ignore_all_caps = true` — never touch `ALL CAPS` tokens.
+- `ignore_with_digits = true` — never touch a token containing a digit.
+- `custom_skip_regex = "^https?://"` — a regular expression that disables a
+  correction when it matches.
+
+## Correction does not trigger for a newer language (uk/de/fr)
+
+By default only `en` and `ru` are active. The Latin layouts (`us`, `de`, `fr`)
+share physical positions, so loading all corpora at once makes them compete.
+Enable the languages you actually type:
+
+```toml
+languages = ["en", "ru", "uk"]
+```
+
+A language is only a conversion target when its corpus is bundled
+(`ngrams_<lang>.json`) and its layout is in `layouts.json`; a missing corpus is
+skipped rather than treated as an empty model.
+
+## I type on purpose in two languages and the daemon fights me
+
+Turn on context analysis (on by default) and give it a known preceding word; or
+switch the daemon to `mode = "manual"` and drive it with the fix hotkey. See the
+modes and hotkeys section above.
+
+## The daemon corrects in a specific application I do not want touched
+
+Add the application to the exception list:
+
+```toml
+exceptions_apps = ["code", "gnome-terminal"]
+```
+
+Listed applications are skipped in every mode. To keep everything automatic
+except a few applications while in `mode = "manual"`, use
+`exceptions_force_in_manual` instead. The focused application is resolved
+best-effort; when it cannot be determined the daemon falls back to automatic
+behaviour.
+
 ## Backspace does not delete in the terminal (or deletes too much)
 
 Some terminals handle synthetic Backspace differently from real Backspace.

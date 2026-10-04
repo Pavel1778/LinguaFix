@@ -190,10 +190,86 @@ def cmd_status(_args: argparse.Namespace) -> int:
     injector = TextInjector(backend=config.backend)
     print(f"Раскладки: {', '.join(config.layouts)}")
     print(f"Текущая раскладка: {switcher.get_current_layout(force=True)}")
+    print(f"Режим: {config.mode}")
     print(f"Переключение: {switcher.describe()}")
     print(f"Ввод текста: {injector.describe()}")
     print(f"Конфигурация: {config_path()}")
     return 0
+
+
+def cmd_mode(args: argparse.Namespace) -> int:
+    """Show or change the working mode (auto/manual/hybrid)."""
+    config = load_config()
+    if args.mode is None:
+        print(config.mode)
+        return 0
+    config.mode = args.mode
+    try:
+        config.validate()
+    except ValueError as exc:
+        print(f"Недопустимый режим: {exc}")
+        return 2
+    save_config(config)
+    print(f"Режим: {config.mode}")
+    return 0
+
+
+def cmd_undo(_args: argparse.Namespace) -> int:
+    """Ask a running daemon to undo its most recent correction."""
+    pid = _read_pid()
+    if pid is None:
+        print(MSG_NOT_RUNNING)
+        return 1
+    try:
+        os.kill(pid, signal.SIGUSR1)
+    except OSError as exc:
+        print(f"Не удалось отменить исправление: {exc}")
+        return 1
+    print("Запрошена отмена последнего исправления.")
+    return 0
+
+
+def cmd_dict(args: argparse.Namespace) -> int:
+    """Manage the user dictionary (words that are never corrected)."""
+    from .dictionary import add_user_word, load_user_dictionary, save_user_dictionary
+
+    path = config_path_for_dict()
+    action = args.dict_action
+    if action == "list":
+        words = load_user_dictionary(str(path))
+        if not words:
+            print(f"Словарь пуст ({path}).")
+            return 0
+        print("\n".join(words))
+        return 0
+    if action == "add":
+        if not args.word:
+            print("Укажите слово: linguafix dict add <слово>")
+            return 2
+        words = add_user_word(args.word, str(path))
+        print(f"Добавлено. Всего слов: {len(words)}.")
+        return 0
+    if action == "remove":
+        if not args.word:
+            print("Укажите слово: linguafix dict remove <слово>")
+            return 2
+        words = load_user_dictionary(str(path))
+        remaining = [w for w in words if w.lower() != args.word.lower()]
+        if len(remaining) == len(words):
+            print(f"Слово {args.word!r} не найдено.")
+            return 1
+        save_user_dictionary(remaining, str(path))
+        print(f"Удалено. Всего слов: {len(remaining)}.")
+        return 0
+    print("Использование: linguafix dict list|add <слово>|remove <слово>")
+    return 2
+
+
+def config_path_for_dict() -> Path:
+    """Return the user-dictionary path from the current configuration."""
+    from .dictionary import user_dictionary_path
+
+    return user_dictionary_path(load_config().dictionary_custom_path)
 
 
 def cmd_config(args: argparse.Namespace) -> int:
@@ -393,6 +469,18 @@ def build_parser() -> argparse.ArgumentParser:
 
     status = subparsers.add_parser("status", help="показать статус")
     status.set_defaults(func=cmd_status)
+
+    mode = subparsers.add_parser("mode", help="показать или сменить режим (auto/manual/hybrid)")
+    mode.add_argument("mode", nargs="?", choices=["auto", "manual", "hybrid"], default=None)
+    mode.set_defaults(func=cmd_mode)
+
+    undo = subparsers.add_parser("undo", help="отменить последнее исправление")
+    undo.set_defaults(func=cmd_undo)
+
+    dict_parser = subparsers.add_parser("dict", help="словарь слов, которые не исправлять")
+    dict_parser.add_argument("dict_action", choices=["list", "add", "remove"])
+    dict_parser.add_argument("word", nargs="?", help="слово для add/remove")
+    dict_parser.set_defaults(func=cmd_dict)
 
     config = subparsers.add_parser("config", help="работа с конфигурацией")
     config.add_argument("config_action", choices=["show", "edit", "reset"])
