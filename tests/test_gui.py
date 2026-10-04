@@ -498,6 +498,22 @@ def test_advanced_page_handlers(gui_state: Any, monkeypatch: pytest.MonkeyPatch)
     assert gui_state.config.hotkey_reload_config == "CTRL+SHIFT+R"
 
 
+def test_advanced_page_typo_group_reflects_config(
+    gui_state: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gui_state, "save", lambda: None)
+    from linguafix.gui.advanced_page import AdvancedPage
+
+    gui_state.config.typo_correction = True
+    gui_state.config.typo_max_distance = 2
+    page = AdvancedPage(gui_state)
+
+    assert page._typo_switch.get_active() is True
+    # Toggling the row writes through to the config and saves.
+    page._typo_switch.set_active(False)
+    assert gui_state.config.typo_correction is False
+
+
 def test_advanced_page_regex_validation(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(gui_state, "save", lambda: None)
     from linguafix.gui.advanced_page import AdvancedPage

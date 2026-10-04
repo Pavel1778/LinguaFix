@@ -31,6 +31,7 @@ class AdvancedPage(BoundPreferencesPage):
         self._build_injection_group()
         self._build_exceptions_group()
         self._build_dictionary_group()
+        self._build_typo_group()
         self._build_hotkeys_group()
         self._build_notifications_group()
         self._build_logs_group()
@@ -183,6 +184,32 @@ class AdvancedPage(BoundPreferencesPage):
     def _on_dictionary_size(self, value: str) -> None:
         self._config.dictionary_size = int(value)
         self._save("Словарь сохранён")
+
+    # --- typo correction (T9) ---------------------------------------------
+    def _build_typo_group(self) -> None:
+        group = Adw.PreferencesGroup(
+            title="Исправление опечаток (T9)",
+            description="Меняет слово на ближайшее из словаря, только если "
+            "вариант ровно один. Выключено по умолчанию.",
+        )
+        self._typo_switch = self.add_switch(group, "Исправлять опечатки", "typo_correction")
+        self.add_spin(
+            group,
+            "Максимум опечаток в слове",
+            "typo_max_distance",
+            lower=1,
+            upper=2,
+            step=1,
+        )
+        self.add_spin(
+            group,
+            "Минимальная длина слова",
+            "typo_min_word_length",
+            lower=3,
+            upper=12,
+            step=1,
+        )
+        self.add(group)
 
     # --- hotkeys ----------------------------------------------------------
     def _build_hotkeys_group(self) -> None:
