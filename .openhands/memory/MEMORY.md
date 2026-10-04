@@ -28,4 +28,5 @@
 - Tray (AppIndicator3) absent in dev; not a blocker.
 
 ## Repo / process
-- PR #1 stays in draft; branch `feat/linguafix-initial-implementation`. Use `create_pr` tool only when asked.
+- **v0.1.0 released** (2026-10-04). PR #1 (draft) merged into `main` with `--no-ff` (merge commit `b3c903f`); tag `v0.1.0` pushed → `release.yml` built the `.deb`/sdist, ran smoke+zero-config, published the GitHub Release with `SHA256SUMS.txt`. `main` is the live branch; `feat/linguafix-initial-implementation` is kept. Issues #2/#3/#4 closed (not deleted); #5 ("ищу тестировщиков") kept OPEN, re-milestoned to **v0.2.0** along with #4 (gswitch backend). Milestone `v0.1.0` and `v0.2.0` exist. Use `create_pr` only when asked.
+- **`scripts/*_test.sh` quoting trap**: the whole inner container script is the argument to `bash -c` wrapped in **single quotes**. Any single quote inside (even in a grep pattern) closes it and silently corrupts the script — the `ACTION!="remove"` udev check became `grep -q ACTION!=remove` and always failed. Use double quotes for grep patterns inside those blocks. Both smoke and zero-config now pass on `debian:12`.
