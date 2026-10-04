@@ -332,6 +332,31 @@ If you want to see why a word was skipped, run the daemon in the foreground with
 `log_level = "DEBUG"` and watch for the `detect(...)` lines; they report the
 scores, the chosen layout and the reason for skipping.
 
+## A typo is not corrected (`langauge` stays `langauge`)
+
+Typo correction (T9) is **off by default** — a wrong correction is worse than
+none. Turn it on in the GUI (**Advanced** → **Typo correction (T9)**) or in the
+config:
+
+```toml
+typo_correction = true
+```
+
+Even when enabled, it deliberately stays quiet unless the fix is unambiguous:
+
+- the word must be at least `typo_min_word_length` characters (default 4);
+- it must be within `typo_max_distance` edits (default 1) of **exactly one**
+  vocabulary word — if two words are equally close, nothing changes;
+- a word you taught (`linguafix dict add ...`) or a token with a separator
+  (`id-with-dash`, `a.b`, `x@y`) is never touched;
+- a word whose layout is wrong is handled by the layout switcher first; T9 only
+  runs when the layout is already correct.
+
+If a specific typo is missed, either add the intended word to the dictionary
+(`linguafix dict add language`) or raise `typo_max_distance` to `2`. Raising it
+increases the chance of a wrong correction, so prefer the dictionary when you
+can.
+
 ## Correction does not trigger for a newer language (uk/de/fr)
 
 By default only `en` and `ru` are active. The Latin layouts (`us`, `de`, `fr`)

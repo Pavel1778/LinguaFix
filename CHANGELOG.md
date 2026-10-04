@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A word taught in the user dictionary is honoured as a *converted* form before
   the false-positive guards run, so a brand typed in the wrong layout
   (`муксуд` -> `vercel`) is always fixed.
+- Opt-in typo correction (T9). When the layout is already correct, a word within
+  one edit (Damerau-Levenshtein) of exactly one dictionary word is replaced
+  (`langauge` -> `language`, `teh` -> `the`). Ambiguous words, taught words and
+  tokens with a separator are left alone. Toggle it in the GUI (**Advanced** ->
+  **Typo correction (T9)**) or with `typo_correction = true`;
+  `typo_max_distance` (1 or 2) and `typo_min_word_length` tune it.
 
 ### Changed
 

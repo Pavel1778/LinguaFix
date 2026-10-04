@@ -284,6 +284,18 @@ word is scored against the corpora whose *layout could have produced it*.
   the correction fires, even though the brand is absent from the frequency
   corpora. Without this, an unknown brand makes the detector stay silent.
   `dictionary_size` caps the bundled vocabulary (larger = more recall, more RAM).
+- **Typo correction (T9)** (`typo_correction`, `typo_max_distance`,
+  `typo_min_word_length`). A second, independent correction path, off by
+  default. It runs only when `target_layout` returned `None` — that is, when the
+  layout is already right — so it can never fight the layout switcher. It uses
+  the same vocabulary the detector scores against (`LanguageDetector.vocabulary`)
+  and accepts a replacement only when the word is absent from the vocabulary and
+  within `typo_max_distance` edits of **exactly one** word (optimal string
+  alignment / Damerau-Levenshtein, so a transposition counts as one edit). Two
+  equally close candidates mean no change. Taught words and tokens with an
+  internal separator are never corrected. `TypoCorrector` instances are built
+  lazily per language and dropped on `reload_config`, because the vocabulary can
+  change with `dictionary_size` and `languages`.
 
 ## Modes and hotkeys
 
