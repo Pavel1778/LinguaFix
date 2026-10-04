@@ -124,6 +124,7 @@ linguafix fix --text ghbdtn            # предпросмотр исправл
 linguafix fix --text ghbdtn --apply    # применить исправление
 linguafix fix --text ghbdtn --apply --dry-run   # показать, но не применять
 linguafix start --foreground --dry-run # демон-наблюдатель: только логирует
+linguafix dict add vercel              # научить слово, которое нельзя исправлять
 linguafix config show                  # показать конфигурацию
 linguafix collect-logs                 # собрать архив для баг-репорта
 systemctl --user status linguafix.service
@@ -132,6 +133,12 @@ systemctl --user status linguafix.service
 Флаг `--dry-run` удобен для отладки: демон полностью читает и анализирует
 ввод, пишет в лог, что *собирался* исправить, но не переключает раскладку и
 не трогает текст.
+
+Ручное исправление последнего слова по умолчанию — **двойной Shift**
+(дважды нажать Shift в течение 300 мс). Двойной Shift работает на любой
+клавиатуре, в отличие от прежнего `PAUSE` (клавиши Pause на многих ноутбуках
+нет). В GUI то же самое можно задать кнопкой «Изменить»: дважды нажмите
+Shift, Ctrl или Alt.
 
 ## ⚙️ Конфигурация / Configuration
 
@@ -146,8 +153,14 @@ backend = "auto"           # auto | uinput | wtype | xdotool
 switch_method = "auto"     # auto | g3kb-switch | setxkbmap
 notify_on_fix = false      # уведомление при исправлении
 tray_enabled = true        # иконка в трее
-hotkey = "PAUSE"           # ручной триггер исправления
+hotkey = "SHIFT+SHIFT"     # ручной триггер исправления (двойной Shift)
 log_level = "INFO"         # DEBUG | INFO | WARNING | ERROR
+
+# Хоткеи. Двойной тап модификатора задаётся как SHIFT+SHIFT / CTRL+CTRL / ALT+ALT.
+hotkey_fix_last_word = "SHIFT+SHIFT"
+hotkey_undo_last_fix = "CTRL+Z"
+hotkey_reload_config = "CTRL+SHIFT+R"
+hotkey_double_tap_ms = 300  # окно двойного тапа, мс (100–1000)
 
 # Триггеры по границе слова: слово исправляется мгновенно, без паузы.
 on_space = true            # пробел — основной триггер
@@ -170,6 +183,25 @@ stop_words = [
 разделителя (например, длинного URL). Слова, которые являются частью URL,
 e-mail, пути или версии (`github.com`, `test@example.com`, `3.14`), не
 исправляются.
+
+### Бренд, имя или техножаргон не исправляется
+
+Частотные словари не знают брендов (`vercel`, `муксуд`), имён и жаргона, поэтому
+детектор молчит: он не уверен, что `муксуд` — это английское `vercel`. Научите
+слово — и конвертация станет для детектора «известной хорошей»:
+
+```bash
+linguafix dict add vercel     # теперь муксуд → vercel срабатывает
+linguafix dict list           # показать слова
+linguafix dict remove vercel  # удалить слово
+```
+
+В GUI есть вкладка **«Словарь»**: добавление и удаление слов, поиск, импорт и
+экспорт файла, кнопка «Применить к демону» (перечитывает словарь без
+перезапуска). Файл — `~/.local/share/linguafix/dictionary.txt`, по одному слову
+на строку. Научаемое слово никогда не переписывается, а его конвертация в
+другую раскладку считается верной. Демон сам никогда не пишет набранный текст в
+этот файл.
 
 После правки конфига перезапустите сервис или отправьте `SIGHUP`:
 

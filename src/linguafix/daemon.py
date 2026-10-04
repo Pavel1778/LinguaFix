@@ -117,7 +117,9 @@ _INTERNAL_SEPARATOR_RE: Final[re.Pattern[str]] = re.compile(r"\w[.@/\\:_-]\w")
 # Keys that terminate the current buffer and are driven by config flags.
 _ENTER_KEYS: Final[frozenset[str]] = frozenset({"KEY_ENTER", "KEY_KPENTER"})
 _TAB_KEYS: Final[frozenset[str]] = frozenset({"KEY_TAB"})
-_SHIFT_KEYS: Final[frozenset[str]] = frozenset({"KEY_LEFTSHIFT", "KEY_RIGHTSHIFT", "KEY_CAPSLOCK"})
+# Caps Lock is tracked as a shift-like key (it produces capitals) but is not a
+# double-tap modifier: it latches, so there is no press/release "tap".
+_SHIFT_KEYS: Final[frozenset[str]] = frozenset({"KEY_LEFTSHIFT", "KEY_RIGHTSHIFT"})
 
 # Physical modifier keys mapped to a canonical family. A hotkey like
 # ``CTRL+SHIFT+F12`` matches when exactly these families are held.
@@ -143,6 +145,10 @@ _MODIFIER_ALIASES: Final[dict[str, str]] = {
 }
 # Cycle order used by the ``toggle_mode`` hotkey.
 _MODE_CYCLE: Final[tuple[str, ...]] = ("auto", "hybrid", "manual")
+# Modifier families that may be used as a double-tap hotkey. ``SHIFT+SHIFT``
+# means "tap the shift family twice within ``hotkey_double_tap_ms``"; it works
+# on every keyboard, unlike the old ``PAUSE`` default.
+_DOUBLE_TAP_MODIFIERS: Final[frozenset[str]] = frozenset({"shift", "ctrl", "alt"})
 # Keys that carry no printable character but that we must not treat as a
 # continuation of the current word either (arrow keys, Delete, Home, …). A key
 # in this set ends the word without flushing it.
@@ -241,6 +247,12 @@ class LinguaFixDaemon:
         }
         # Modifier families currently held down, used to match hotkeys.
         self._held_modifiers: set[str] = set()
+        # Double-tap hotkeys (``SHIFT+SHIFT`` -> ``fix``): modifier family to
+        # action. They are matched separately because a modifier key never
+        # reaches the single-key matcher above.
+        self._double_tap_hotkeys: dict[str, str] = self._build_double_tap_hotkeys(config)
+        # Time of the last tap of each modifier family, for double-tap detection.
+        self._last_modifier_tap: dict[str, float] = {}
         # Successful fixes eligible for undo: (monotonic time, original text,
         # original layout, backspace count).
         self._undo_history: list[tuple[float, str, str, int]] = []
@@ -407,19 +419,23 @@ class LinguaFixDaemon:
         name = self._code_to_name(code)
 
         if name in _SHIFT_KEYS:
-            if name != "KEY_CAPSLOCK":
-                with self._lock:
-                    self._shift = value in (1, 2)
+            # Shift both produces capitals and may be the fix hotkey (a double
+            # tap of the same modifier), so it is handled by the modifier path.
+            self._handle_modifier(name, value)
+            with self._lock:
+                self._shift = value in (1, 2)
             return
 
-        # Track modifier state for hotkey matching (press and release).
-        family = _MODIFIER_FAMILIES.get(name)
-        if family is not None:
-            if value in (1, 2):
-                self._held_modifiers.add(family)
-            elif value == 0:
-                self._held_modifiers.discard(family)
+        # Track modifier state for hotkey matching (press and release), and
+        # detect a double tap of the same modifier (the fix hotkey default).
+        if name in _MODIFIER_FAMILIES:
+            self._handle_modifier(name, value)
             return
+
+        if value != 0:
+            # A real key was pressed between two modifier taps, so the modifier
+            # was part of a chord or a capital letter, not a double-tap hotkey.
+            self._last_modifier_tap.clear()
 
         if value == 0:  # key release
             return
@@ -522,17 +538,82 @@ class LinguaFixDaemon:
         return int(resolved) if isinstance(resolved, int) else None
 
     def _parse_hotkey(self, value: str) -> tuple[frozenset[str], int] | None:
-        """Split a hotkey string into ``(modifier_families, key_code)``."""
+        """Split a hotkey string into ``(modifier_families, key_code)``.
+
+        A pure modifier double tap (``SHIFT+SHIFT``) has no key code and is
+        handled by :meth:`_build_double_tap_hotkeys` instead, so it returns
+        ``None`` here.
+        """
         if not value:
             return None
         parts = [part for part in value.upper().split("+") if part]
         if not parts:
+            return None
+        if self._double_tap_family(value) is not None:
             return None
         code = self._resolve_hotkey(parts[-1])
         if code is None:
             return None
         families = {_MODIFIER_ALIASES[part] for part in parts[:-1] if part in _MODIFIER_ALIASES}
         return frozenset(families), code
+
+    @staticmethod
+    def _double_tap_family(value: str) -> str | None:
+        """Return the modifier family for a double-tap hotkey, or ``None``.
+
+        ``"SHIFT+SHIFT"`` (and ``"CTRL+CTRL"`` / ``"ALT+ALT"``) is a double tap
+        of the same modifier. Mixed forms such as ``"SHIFT+CTRL"`` are not
+        double taps and are left to the single-key matcher.
+        """
+        parts = [part for part in value.upper().split("+") if part]
+        if len(parts) != 2 or parts[0] != parts[1]:
+            return None
+        family = _MODIFIER_ALIASES.get(parts[0])
+        if family in _DOUBLE_TAP_MODIFIERS:
+            return family
+        return None
+
+    def _build_double_tap_hotkeys(self, config: Config) -> dict[str, str]:
+        """Map each configured double-tap modifier family to its action."""
+        bindings: dict[str, str] = {}
+        for action, value in (
+            ("fix", config.hotkey_fix_last_word),
+            ("undo", config.hotkey_undo_last_fix),
+            ("toggle_mode", config.hotkey_toggle_mode),
+            ("reload", config.hotkey_reload_config),
+        ):
+            family = self._double_tap_family(value)
+            if family is not None:
+                bindings[family] = action
+        return bindings
+
+    def _handle_modifier(self, name: str, value: int) -> None:
+        """Track modifier state and fire a double-tap hotkey when matched."""
+        family = _MODIFIER_FAMILIES.get(name)
+        if family is None:
+            return
+        if value in (1, 2):
+            self._held_modifiers.add(family)
+        elif value == 0:
+            self._held_modifiers.discard(family)
+
+        if value != 1:
+            return
+        if not self.config.hotkeys_enabled:
+            return
+        action = self._double_tap_hotkeys.get(family)
+        if action is None:
+            return
+        now = time.monotonic()
+        window = self.config.hotkey_double_tap_ms / 1000.0
+        last = self._last_modifier_tap.get(family)
+        if last is not None and now - last <= window:
+            # Consume the tap so a third press does not fire again immediately.
+            self._last_modifier_tap.pop(family, None)
+            logger.debug("Double tap of %s matched hotkey %s", family, action)
+            self._run_hotkey(action)
+        else:
+            self._last_modifier_tap[family] = now
 
     def _match_hotkey(self, code: int) -> str | None:
         """Return the action whose hotkey matches, or ``None``."""
@@ -825,6 +906,8 @@ class LinguaFixDaemon:
             "toggle_mode": self._parse_hotkey(new_config.hotkey_toggle_mode),
             "reload": self._parse_hotkey(new_config.hotkey_reload_config),
         }
+        self._double_tap_hotkeys = self._build_double_tap_hotkeys(new_config)
+        self._last_modifier_tap.clear()
         logger.info("Configuration reloaded")
 
     # ------------------------------------------------------------------

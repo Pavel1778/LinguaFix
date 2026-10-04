@@ -254,11 +254,33 @@ word is scored against the corpora whose *layout could have produced it*.
   tokens, `ALL CAPS` and e-mail/URL/path-like tokens (an internal separator such
   as `. @ / \ : _ -`) are left untouched.
 - **User dictionary** (`dictionary_size`, `dictionary_custom_path`). A
-  newline-separated list of words the user taught the daemon to leave alone. It
-  is a deliberate, explicit file (`~/.local/share/linguafix/dictionary.txt` by
-  default) — the daemon never writes typed text to it on its own. A taught word
-  is an absolute override: `target_layout` returns `None` for it in every layout.
+  newline-separated list of words the user taught the daemon. It is a deliberate,
+  explicit file (`~/.local/share/linguafix/dictionary.txt` by default) — the
+  daemon never writes typed text to it on its own. The list is consulted in two
+  directions. A taught word is an absolute override: when the buffer *equals* a
+  taught word, `target_layout` returns `None` for it in every layout. The
+  converted form is also checked: if the wrong-layout rendering of the buffer is
+  a taught word (``муксуд`` → ``vercel``), that rendering is accepted as valid and
+  the correction fires, even though the brand is absent from the frequency
+  corpora. Without this, an unknown brand makes the detector stay silent.
   `dictionary_size` caps the bundled vocabulary (larger = more recall, more RAM).
+
+## Modes and hotkeys
+
+`mode` selects how much the daemon acts on its own: `auto` corrects every word,
+`manual` only on the fix hotkey, and `hybrid` corrects automatically but keeps a
+short undo history.
+
+Hotkeys are matched in `daemon._parse_hotkey`. A chord such as `CTRL+Z` requires
+the modifier to be held; a **double tap** such as `SHIFT+SHIFT`, `CTRL+CTRL` or
+`ALT+ALT` fires when the same modifier is pressed twice within
+`hotkey_double_tap_ms` (default 300 ms) with nothing else in between. The default
+fix hotkey is `SHIFT+SHIFT` because a laptop has no Pause key. Double taps are
+tracked separately from chords (`_double_tap_hotkeys`): the first tap arms the
+family, a matching second tap within the window fires the action and clears the
+state, and any other key cancels the arm. A single Shift press never triggers a
+fix, so normal capitalisation is unaffected. Hotkeys are re-parsed on
+`reload_config`, so editing `config.toml` and sending `SIGHUP` rebinds them live.
 
 ## Extension points
 

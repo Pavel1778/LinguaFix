@@ -378,15 +378,20 @@ class LanguageDetector:
         """
         stripped = buffer.strip()
         if not stripped or self.is_stop_word(stripped):
+            logger.debug("detect(len=%d): empty or stop word; skipping", len(stripped))
             return None
 
         # A word the user explicitly taught is correct, in any layout: never
         # rewrite it. This is an absolute override, stronger than stop words.
         if stripped.lower() in self._user_words:
+            logger.debug(
+                "detect(len=%d): typed word is in the user dictionary; skipping", len(stripped)
+            )
             return None
 
         words = [w for w in WORD_RE.findall(stripped) if len(w) >= self.min_word_length]
         if not words:
+            logger.debug("detect(len=%d): no word long enough; skipping", len(stripped))
             return None
 
         # A buffer that mixes scripts is always wrong: part of it was typed on
@@ -399,6 +404,7 @@ class LanguageDetector:
             target_language = "ru" if family == "cyrillic" else "en"
             candidate = self._language_layout(target_language)
             if candidate is not None and candidate != current_layout:
+                logger.debug("detect(len=%d): mixed script; target %s", len(stripped), candidate)
                 return candidate
 
         current_language = self._layout_language(current_layout)
@@ -411,6 +417,19 @@ class LanguageDetector:
         for layout in self.converter.available_layouts:
             if layout == current_layout:
                 continue
+            converted = self.converter.convert(stripped, current_layout, layout)
+            # A conversion the user taught is a *known good* result, not a guess:
+            # the user dictionary validates the converted form (``муксуд`` ->
+            # ``vercel``), so the candidate wins outright. Checked before the
+            # corpus guard so a taught word still works when the target language
+            # has no bundled corpus loaded.
+            if converted.strip().lower() in self._user_words:
+                logger.debug(
+                    "detect(len=%d): conversion matches the user dictionary; target %s",
+                    len(stripped),
+                    layout,
+                )
+                return layout
             language = self._layout_language(layout)
             if language is None or language not in self._vocabularies:
                 # Without a corpus the candidate scores 0.0 for everything and
@@ -420,7 +439,6 @@ class LanguageDetector:
             # ``uk``, or ``de`` -> ``en``) is allowed: the physical positions are
             # identical for Latin layouts, so a German word typed on US can be
             # recognised as English. The language model still has to win.
-            converted = self.converter.convert(stripped, current_layout, layout)
             score = self._plausibility(converted, language)
             if (
                 neighbor_language is not None
@@ -437,6 +455,12 @@ class LanguageDetector:
                 best_language = language
 
         if best_layout is None:
+            logger.debug(
+                "detect(len=%d): current=%s score=%.3f; no better candidate",
+                len(stripped),
+                current_layout,
+                current_score,
+            )
             return None
         improvement = best_score - current_score
         # ``confidence_threshold`` raises the bar above the absolute minimum so
@@ -445,6 +469,13 @@ class LanguageDetector:
         # that is not in either vocabulary, and a ratio would reject exactly the
         # wrong-layout words the detector exists to catch.
         if improvement < MIN_IMPROVEMENT + self.confidence_threshold:
+            logger.debug(
+                "detect(len=%d): best=%s score=%.3f improvement=%.3f below threshold; skipping",
+                len(stripped),
+                best_layout,
+                best_score,
+                improvement,
+            )
             return None
         # Guard against a same-alphabet target that merely re-labels the text
         # without changing it (``de`` -> ``en`` leaves letters untouched).
@@ -452,7 +483,17 @@ class LanguageDetector:
             best_language == current_language
             and self.converter.convert(stripped, current_layout, best_layout) == stripped
         ):
+            logger.debug("detect(len=%d): same-alphabet no-op; skipping", len(stripped))
             return None
+        logger.debug(
+            "detect(len=%d): current=%s score=%.3f best=%s score=%.3f; target %s",
+            len(stripped),
+            current_layout,
+            current_score,
+            best_layout,
+            best_score,
+            best_layout,
+        )
         return best_layout
 
     def should_fix(self, buffer: str, current_layout: str | None = None) -> bool:

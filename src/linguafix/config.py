@@ -44,6 +44,15 @@ DEFAULT_UNDO_WINDOW_SECONDS: Final[int] = 10
 DEFAULT_UNDO_HISTORY_DEPTH: Final[int] = 3
 DEFAULT_DICTIONARY_SIZE: Final[int] = 5000
 DEFAULT_LOG_ROTATION_MB: Final[int] = 5
+# The manual-fix hotkey default. A double tap of the same modifier works on
+# every keyboard, unlike the previous ``PAUSE`` default (many laptops have no
+# Pause key). ``SHIFT+SHIFT`` is the double-tap of the shift family.
+DEFAULT_FIX_HOTKEY: Final[str] = "SHIFT+SHIFT"
+# The pre-1.0 manual-fix default. Kept so an unmodified old config migrates to
+# the double-tap default instead of staying on a key many laptops lack.
+LEGACY_FIX_HOTKEY: Final[str] = "PAUSE"
+# Maximum gap between the two taps of a double-tap hotkey.
+DEFAULT_DOUBLE_TAP_MS: Final[int] = 300
 VALID_BACKENDS: Final[tuple[str, ...]] = ("auto", "uinput", "wtype", "xdotool")
 VALID_SWITCH_METHODS: Final[tuple[str, ...]] = ("auto", "g3kb-switch", "setxkbmap")
 VALID_LOG_LEVELS: Final[tuple[str, ...]] = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
@@ -214,7 +223,7 @@ class Config:
     notify_on_error: bool = False
     sound_on_fix: bool = False
     tray_enabled: bool = True
-    hotkey: str = "PAUSE"
+    hotkey: str = DEFAULT_FIX_HOTKEY
     log_level: str = "INFO"
     log_rotation_mb: int = DEFAULT_LOG_ROTATION_MB
     on_space: bool = True
@@ -227,11 +236,12 @@ class Config:
     # --- Task D: modes and hotkeys -----------------------------------------
     mode: str = "auto"
     hotkeys_enabled: bool = True
-    hotkey_fix_last_word: str = "PAUSE"
+    hotkey_fix_last_word: str = DEFAULT_FIX_HOTKEY
     hotkey_undo_last_fix: str = "CTRL+Z"
     hotkey_toggle_mode: str = ""
     hotkey_reload_config: str = "CTRL+SHIFT+R"
     hotkey_swallow: bool = True
+    hotkey_double_tap_ms: int = DEFAULT_DOUBLE_TAP_MS
     undo_window_seconds: int = DEFAULT_UNDO_WINDOW_SECONDS
     undo_history_depth: int = DEFAULT_UNDO_HISTORY_DEPTH
 
@@ -313,20 +323,34 @@ class Config:
 
         self.hotkeys_enabled = bool(self.hotkeys_enabled)
         self.hotkey_swallow = bool(self.hotkey_swallow)
-        # ``hotkey`` is the legacy name for the manual-fix hotkey; keep the two
-        # in sync so old config files and the new GUI agree. The legacy value
-        # only wins when it was changed from the default and the new field was
-        # not, so an explicit ``hotkey_fix_last_word`` always takes precedence.
+        # ``hotkey`` is the legacy name for the manual-fix hotkey; keep the two in
+        # sync so old config files and the new GUI agree. A config written before
+        # the double-tap default carries ``hotkey = "PAUSE"`` *and*
+        # ``hotkey_fix_last_word = "PAUSE"``; that pair means "old default", so it
+        # migrates to ``SHIFT+SHIFT``. Any other legacy value only wins when the
+        # new field was left at its default, so an explicit
+        # ``hotkey_fix_last_word`` always takes precedence.
         legacy = normalise_hotkey(self.hotkey)
         self.hotkey = legacy
+        old_default_pair = (
+            legacy == LEGACY_FIX_HOTKEY and self.hotkey_fix_last_word == LEGACY_FIX_HOTKEY
+        )
         if not self.hotkey_fix_last_word or (
-            self.hotkey_fix_last_word == "PAUSE" and legacy not in ("", "PAUSE")
+            self.hotkey_fix_last_word == DEFAULT_FIX_HOTKEY
+            and legacy not in ("", DEFAULT_FIX_HOTKEY)
         ):
             self.hotkey_fix_last_word = legacy
+        if old_default_pair:
+            self.hotkey_fix_last_word = DEFAULT_FIX_HOTKEY
+            self.hotkey = DEFAULT_FIX_HOTKEY
         self.hotkey_fix_last_word = normalise_hotkey(self.hotkey_fix_last_word)
         self.hotkey_undo_last_fix = normalise_hotkey(self.hotkey_undo_last_fix)
         self.hotkey_toggle_mode = normalise_hotkey(self.hotkey_toggle_mode)
         self.hotkey_reload_config = normalise_hotkey(self.hotkey_reload_config)
+
+        self.hotkey_double_tap_ms = int(self.hotkey_double_tap_ms)
+        if not 100 <= self.hotkey_double_tap_ms <= 1000:
+            raise ValueError("hotkey_double_tap_ms must be between 100 and 1000")
 
         self.undo_window_seconds = int(self.undo_window_seconds)
         if not 3 <= self.undo_window_seconds <= 60:

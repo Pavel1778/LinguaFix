@@ -63,12 +63,23 @@ SMOKE_IMAGE=ubuntu:22.04 make smoke-test    # Python 3.10 path (tomli)
 - Adding a language is data-only: drop `ngrams_<lang>.json`, extend
   `layouts.json`, and add the code to `SUPPORTED_LANGUAGES` in `config.py`. A
   missing corpus is skipped, never treated as an empty model.
-- The user dictionary is an **absolute** override: `target_layout` returns
-  `None` for any taught word, in every layout. It is a vocabulary membership
-  test, not a score bonus — a bonus is drowned out by the n-gram penalties.
+- The user dictionary is consulted in **two directions**. It is an **absolute**
+  override: `target_layout` returns `None` for any taught word, in every layout.
+  It also validates the *converted* form: if the wrong-layout rendering of the
+  buffer is a taught word (``муксуд`` → ``vercel``), the correction fires even
+  though the brand is absent from the frequency corpora. This is why an unknown
+  brand is silent until `linguafix dict add` teaches it. It is a vocabulary
+  membership test, not a score bonus — a bonus is drowned out by the n-gram
+  penalties.
   The file (`~/.local/share/linguafix/dictionary.txt` by default) is edited
-  explicitly (`linguafix dict add/remove`, or by hand); the daemon never writes
-  typed text to it. A config reload always re-reads it.
+  explicitly (`linguafix dict add/remove`, the GUI Dictionary tab, or by hand);
+  the daemon never writes typed text to it. A config reload always re-reads it.
+- The default fix hotkey is **`SHIFT+SHIFT`** (double tap of a modifier within
+  `hotkey_double_tap_ms`, default 300 ms), not `PAUSE`. `daemon._parse_hotkey`
+  handles chords; `_build_double_tap_hotkeys`/`_handle_modifier` handle double
+  taps. A single modifier tap never fixes, and any other key cancels an armed
+  tap, so capitalisation is unaffected. `DEFAULT_FIX_HOTKEY` in `config.py` is
+  the single source of the default.
 - `context_analysis`/`context_weight` may only *add* to a candidate, never push
   the current layout below zero, so a neighbour can tip a borderline word but
   cannot create or suppress a correction on its own.

@@ -59,6 +59,7 @@ _ALLOWED_CONFIG_KEYS = {
     "hotkey_toggle_mode",
     "hotkey_reload_config",
     "hotkey_swallow",
+    "hotkey_double_tap_ms",
     "undo_window_seconds",
     "undo_history_depth",
     "confidence_threshold",

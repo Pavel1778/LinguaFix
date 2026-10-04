@@ -251,8 +251,10 @@ linguafix dict add котопёс        # adds to ~/.local/share/linguafix/dict
 
 or edit `~/.local/share/linguafix/dictionary.txt`, one word per line. A taught
 word is never rewritten, in any layout. `linguafix dict list` shows the current
-words and `linguafix dict remove <word>` deletes one. Reload with a hotkey or
-restart so the daemon picks the file up.
+words and `linguafix dict remove <word>` deletes one. The GUI has a **Dictionary**
+tab with add/remove, search and file import/export; its "Apply to daemon" button
+re-reads the dictionary without a restart. Reload with a hotkey or restart so the
+daemon picks the file up.
 
 Alternatively:
 
@@ -261,6 +263,32 @@ Alternatively:
 - `ignore_with_digits = true` — never touch a token containing a digit.
 - `custom_skip_regex = "^https?://"` — a regular expression that disables a
   correction when it matches.
+
+## A brand or name is not corrected (`муксуд` stays `муксуд`)
+
+Symptom: you typed a brand, name or technical term on the wrong layout (for
+example `муксуд` intending `vercel`) and LinguaFix did nothing, even though it
+corrects ordinary words.
+
+Cause: the bundled frequency corpora contain common words only. A brand such as
+`vercel` is not one of them, so the detector cannot see that `муксуд` is the
+wrong-layout rendering of a real word and stays silent — that silence is the
+desired behaviour for unknown tokens (it protects names and jargon from false
+corrections).
+
+Fix: teach the word. A taught word makes the conversion a *known-good* result:
+
+```bash
+linguafix dict add vercel     # then typing муксуд  ->  vercel 
+```
+
+A taught word is also never rewritten itself, so adding the brand does not make
+LinguaFix "correct" it away. The GUI **Dictionary** tab does the same without a
+terminal, and its "Apply to daemon" button reloads the daemon in place.
+
+If you want to see why a word was skipped, run the daemon in the foreground with
+`log_level = "DEBUG"` and watch for the `detect(...)` lines; they report the
+scores, the chosen layout and the reason for skipping.
 
 ## Correction does not trigger for a newer language (uk/de/fr)
 

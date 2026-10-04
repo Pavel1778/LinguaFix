@@ -54,7 +54,8 @@ class SettingsPage(BoundPreferencesPage):
         self.add_switch(group, "Хоткеи включены", "hotkeys_enabled")
         self._hotkey_fix = HotkeyRow(
             "Исправить последнее слово",
-            "Принудительное исправление в любом режиме",
+            "Двойной Shift по умолчанию. Нажмите «Изменить» и дважды нажмите "
+            "нужный модификатор (Shift/Ctrl/Alt) или задайте комбинацию.",
             self._config.hotkey_fix_last_word,
             on_change=self._make_hotkey_handler("hotkey_fix_last_word"),
         )

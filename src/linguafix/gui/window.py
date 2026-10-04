@@ -10,6 +10,7 @@ from gi.repository import Adw, Gio, Gtk  # noqa: E402
 
 from .about_page import build_about_window  # noqa: E402
 from .advanced_page import AdvancedPage  # noqa: E402
+from .dictionary_page import DictionaryPage  # noqa: E402
 from .home_page import HomePage  # noqa: E402
 from .settings_page import SettingsPage  # noqa: E402
 from .state import GuiState  # noqa: E402
@@ -42,10 +43,12 @@ class LinguaFixWindow(Adw.ApplicationWindow):
 
         self._home = HomePage(state, self._toasts)
         self._settings = SettingsPage(state, on_saved=self._on_saved)
+        self._dictionary = DictionaryPage(state, on_saved=self._on_saved)
         self._advanced = AdvancedPage(state, on_saved=self._on_saved)
 
         self._stack.add_titled(self._home, "home", "Главная")
         self._stack.add_titled(self._settings, "settings", "Настройки")
+        self._stack.add_titled(self._dictionary, "dictionary", "Словарь")
         # The advanced page is added to the switcher only when revealed, so the
         # basic settings stay uncluttered by default.
         self._advanced_visible = False
@@ -112,3 +115,8 @@ class LinguaFixWindow(Adw.ApplicationWindow):
     def settings_page(self) -> SettingsPage:
         """Expose the settings page for tests."""
         return self._settings
+
+    @property
+    def dictionary_page(self) -> DictionaryPage:
+        """Expose the dictionary page for tests."""
+        return self._dictionary

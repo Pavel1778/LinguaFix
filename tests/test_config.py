@@ -19,7 +19,7 @@ def test_defaults() -> None:
     assert config.switch_method == "auto"
     assert config.notify_on_fix is False
     assert config.tray_enabled is True
-    assert config.hotkey == "PAUSE"
+    assert config.hotkey == "SHIFT+SHIFT"
     assert config.log_level == "INFO"
     assert config.on_space is True
     assert config.on_enter is True
@@ -111,10 +111,11 @@ def test_new_field_defaults() -> None:
     assert config.mode == "auto"
     assert config.languages == ["en", "ru"]
     assert config.hotkeys_enabled is True
-    assert config.hotkey_fix_last_word == "PAUSE"
+    assert config.hotkey_fix_last_word == "SHIFT+SHIFT"
     assert config.hotkey_undo_last_fix == "CTRL+Z"
     assert config.hotkey_reload_config == "CTRL+SHIFT+R"
     assert config.hotkey_toggle_mode == ""
+    assert config.hotkey_double_tap_ms == 300
     assert config.undo_window_seconds == 10
     assert config.undo_history_depth == 3
     assert config.confidence_threshold == 0.6
@@ -164,6 +165,26 @@ def test_hotkey_normalisation() -> None:
 def test_legacy_hotkey_syncs_to_fix_hotkey() -> None:
     config = Config(hotkey="F13")
     assert config.hotkey_fix_last_word == "F13"
+
+
+def test_old_pause_default_migrates_to_double_shift() -> None:
+    # A config written before the double-tap default: both fields carry PAUSE.
+    config = Config(hotkey="PAUSE", hotkey_fix_last_word="PAUSE")
+    assert config.hotkey_fix_last_word == "SHIFT+SHIFT"
+    assert config.hotkey == "SHIFT+SHIFT"
+
+
+def test_deliberate_pause_on_new_field_is_preserved() -> None:
+    # The user explicitly chose PAUSE only on the new field; leave it alone.
+    config = Config(hotkey="PAUSE", hotkey_fix_last_word="F13")
+    assert config.hotkey_fix_last_word == "F13"
+
+
+def test_explicit_legacy_pause_without_new_field_keeps_pause() -> None:
+    # Legacy-only value is treated as a deliberate choice (there is no second
+    # PAUSE to prove it is the old default), so it is not migrated.
+    config = Config(hotkey="PAUSE")
+    assert config.hotkey_fix_last_word == "PAUSE"
 
 
 def test_section_tables_are_flattened() -> None:

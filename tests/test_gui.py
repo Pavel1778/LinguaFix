@@ -62,10 +62,10 @@ def test_window_creates_with_expected_pages(gui_state: Any) -> None:
 
     app = Adw.Application(application_id="io.github.pavel1778.LinguaFixTest")
     window = LinguaFixWindow(gui_state, app)
-    assert len(window.stack.get_pages()) == 2
+    assert len(window.stack.get_pages()) == 3
     assert window.home.toggle.state == "off"
     window._on_show_advanced(None, None)
-    assert len(window.stack.get_pages()) == 3
+    assert len(window.stack.get_pages()) == 4
 
 
 def test_big_toggle_start_and_stop(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -232,6 +232,94 @@ def test_app_exceptions_list_add_remove(gui_state: Any) -> None:
 
     widget._on_remove(None, "code")
     assert widget.apps == ["gnome-terminal"]
+
+
+def test_dictionary_list_add_remove_search(gui_state: Any) -> None:
+    from linguafix.gui.widgets.dictionary_list import DictionaryList
+
+    changes: list[list[str]] = []
+    widget = DictionaryList("Словарь", words=["vercel"], on_change=changes.append)
+    assert widget.words == ["vercel"]
+
+    class _Entry:
+        def __init__(self, text: str) -> None:
+            self._text = text
+
+        def get_text(self) -> str:
+            return self._text
+
+        def set_text(self, text: str) -> None:
+            self._text = text
+
+    widget._on_add(None, _Entry("муксуд"))
+    assert widget.words == ["vercel", "муксуд"]
+    assert changes[-1] == ["vercel", "муксуд"]
+
+    # Duplicates (case-insensitive) are ignored.
+    widget._on_add(None, _Entry("Vercel"))
+    assert widget.words == ["vercel", "муксуд"]
+
+    widget._on_remove(None, "vercel")
+    assert widget.words == ["муксуд"]
+
+
+def test_dictionary_list_import_export(tmp_path: Path, gui_state: Any) -> None:
+    from linguafix.gui.widgets.dictionary_list import DictionaryList
+
+    widget = DictionaryList("Словарь", words=["vercel"])
+    source = tmp_path / "in.txt"
+    source.write_text("# comment\nghbdtn\n\nvercel\n", encoding="utf-8")
+    assert widget.import_words(str(source)) == 1
+    assert widget.words == ["vercel", "ghbdtn"]
+
+    target = tmp_path / "out.txt"
+    assert widget.export_words(str(target)) is True
+    assert target.read_text(encoding="utf-8") == "vercel\nghbdtn\n"
+
+
+def test_dictionary_page_persists_words(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import gi
+
+    gi.require_version("Adw", "1")
+
+    from linguafix.config import Config
+    from linguafix.gui import dictionary_page as dictionary_page_module
+    from linguafix.gui.dictionary_page import DictionaryPage
+    from linguafix.gui.state import GuiState
+
+    config = Config(dictionary_custom_path=str(tmp_path / "dictionary.txt"))
+    state = GuiState(config=config)
+    saved: list[str] = []
+    page = DictionaryPage(state, on_saved=saved.append)
+
+    assert page.dictionary.add_word("vercel") is True
+    assert (tmp_path / "dictionary.txt").read_text(encoding="utf-8") == "vercel\n"
+
+    # The apply button asks the daemon to reload its configuration.
+    monkeypatch.setattr(dictionary_page_module.systemd_bridge, "reload_service", lambda: True)
+    page._on_apply(None)
+    assert saved == ["Словарь применён"]
+
+
+def test_hotkey_row_records_double_tap_modifier(gui_state: Any) -> None:
+    import gi
+
+    gi.require_version("Gdk", "4.0")
+    from gi.repository import Gdk
+
+    from linguafix.gui.widgets.hotkey_row import HotkeyRow
+
+    changes: list[str] = []
+    row = HotkeyRow("Исправить", value="", on_change=changes.append)
+    row._start_recording(None)
+    # First Shift press waits for a second tap.
+    assert row._on_key_pressed(None, Gdk.KEY_Shift_L, 0, 0) is True
+    assert row.value == ""
+    assert changes == []
+    # Second Shift within the window records SHIFT+SHIFT.
+    assert row._on_key_pressed(None, Gdk.KEY_Shift_L, 0, 0) is True
+    assert row.value == "SHIFT+SHIFT"
+    assert changes == ["SHIFT+SHIFT"]
 
 
 def test_status_summary_uses_metadata_only(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -419,7 +507,7 @@ def test_window_menu_actions(gui_state: Any) -> None:
     window._on_saved("ok")
     window._on_show_advanced(None, None)
     window._on_show_advanced(None, None)
-    assert len(window.stack.get_pages()) == 3
+    assert len(window.stack.get_pages()) == 4
 
 
 def test_about_window_builds() -> None:
