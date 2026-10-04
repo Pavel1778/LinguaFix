@@ -117,6 +117,10 @@ pythonpath = ["src"]
 [tool.coverage.run]
 branch = true
 source = ["linguafix"]
+# The GTK4/libadwaita GUI is an optional extra (PyGObject). CI installs no GTK,
+# so its tests skip and its modules would count as 0%, hiding the real coverage
+# of the core package. It is exercised locally under xvfb instead.
+omit = ["src/linguafix/gui/*"]
 
 [tool.coverage.report]
 show_missing = true
