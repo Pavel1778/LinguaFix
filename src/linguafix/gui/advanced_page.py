@@ -64,6 +64,12 @@ class AdvancedPage(BoundPreferencesPage):
         self.add_switch(group, "Не трогать СЛОВА_КАПСОМ", "ignore_all_caps")
         self.add_switch(group, "Не трогать слова с цифрами", "ignore_with_digits")
         self.add_switch(group, "Не трогать email и URL", "ignore_emails_urls")
+        self.add_switch(
+            group,
+            "Не трогать поля пароля",
+            "password_guard",
+            subtitle="Через AT-SPI (доступность); при недоступности — обычное поведение",
+        )
         self._regex_entry = self.add_entry(
             group,
             "Свой regex-пропуск",

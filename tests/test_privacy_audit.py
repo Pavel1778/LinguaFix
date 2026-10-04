@@ -72,6 +72,7 @@ _ALLOWED_CONFIG_KEYS = {
     "plausibility_check",
     "structural_boundaries",
     "identifier_guard",
+    "password_guard",
     "plausibility_floor",
     "max_consecutive_consonants",
     "min_vowel_ratio",

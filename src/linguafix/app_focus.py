@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import subprocess
 from collections.abc import Callable
-from typing import Final
+from typing import Any, Final
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +116,97 @@ def _xprop() -> str | None:
 
 
 _PROBES: Final[tuple[Callable[[], str | None], ...]] = (_gnome_introspect, _atspi, _xprop)
+
+
+def _atspi_active_app(desktop: Any, atspi: Any) -> Any:
+    """Return the active top-level AT-SPI application, or ``None``."""
+    for i in range(desktop.get_child_count()):
+        app = desktop.get_child_at_index(i)
+        if app is None:
+            continue
+        try:
+            if app.get_state_set().contains(atspi.StateType.ACTIVE):
+                return app
+        except Exception:
+            continue
+    return None
+
+
+def _atspi_focused_descendant(node: Any, atspi: Any, depth: int = 0) -> Any:
+    """Depth-first search for the focused accessible element under ``node``."""
+    if depth > 30:  # guard against pathological trees
+        return None
+    try:
+        if node.get_state_set().contains(atspi.StateType.FOCUSED):
+            return node
+    except Exception:
+        return None
+    try:
+        count = node.get_child_count()
+    except Exception:
+        return None
+    for i in range(count):
+        try:
+            child = node.get_child_at_index(i)
+        except Exception:
+            continue
+        if child is None:
+            continue
+        found = _atspi_focused_descendant(child, atspi, depth + 1)
+        if found is not None:
+            return found
+    return None
+
+
+def _atspi_focused_role() -> str | None:
+    """Ask AT-SPI for the role of the focused element."""
+    try:
+        import gi
+
+        gi.require_version("Atspi", "2.0")
+        from gi.repository import Atspi
+
+        desktop = Atspi.get_desktop(0)
+        app = _atspi_active_app(desktop, Atspi)
+        if app is None:
+            return None
+        node = _atspi_focused_descendant(app, Atspi)
+        if node is None:
+            return None
+        if node.get_role() == Atspi.Role.PASSWORD_TEXT:
+            return "password"
+        return "text"
+    except Exception:
+        logger.debug("AT-SPI role probe failed", exc_info=True)
+        return None
+
+
+_ROLE_PROBES: Final[tuple[Callable[[], str | None], ...]] = (_atspi_focused_role,)
+
+
+def get_focused_role() -> str | None:
+    """Return the focused element's role: ``"password"``, ``"text"`` or ``None``.
+
+    ``"password"`` means a password entry is focused and the daemon must never
+    rewrite what is being typed there. ``"text"`` means an ordinary editable
+    field. ``None`` means the role could not be determined (AT-SPI absent or no
+    focused element); callers then fall back to their normal behaviour rather
+    than silently disabling correction.
+    """
+    for probe in _ROLE_PROBES:
+        try:
+            role = probe()
+        except Exception:
+            logger.debug("Role probe %s raised", probe.__name__, exc_info=True)
+            continue
+        if role is not None:
+            return role
+    return None
+
+
+def is_password_field() -> bool:
+    """Return ``True`` only when AT-SPI positively reports a password field."""
+    return get_focused_role() == "password"
 
 
 def get_active_app() -> str | None:

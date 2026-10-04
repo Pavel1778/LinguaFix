@@ -284,6 +284,7 @@ class Config:
     plausibility_check: bool = True
     structural_boundaries: bool = True
     identifier_guard: bool = True
+    password_guard: bool = True
     plausibility_floor: float = DEFAULT_PLAUSIBILITY_FLOOR
     max_consecutive_consonants: int = DEFAULT_MAX_CONSECUTIVE_CONSONANTS
     min_vowel_ratio: float = DEFAULT_MIN_VOWEL_RATIO
@@ -417,6 +418,7 @@ class Config:
         self.plausibility_check = bool(self.plausibility_check)
         self.structural_boundaries = bool(self.structural_boundaries)
         self.identifier_guard = bool(self.identifier_guard)
+        self.password_guard = bool(self.password_guard)
         self.plausibility_floor = float(self.plausibility_floor)
         self.max_consecutive_consonants = int(self.max_consecutive_consonants)
         if self.max_consecutive_consonants < 2:

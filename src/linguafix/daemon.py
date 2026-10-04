@@ -33,8 +33,10 @@ import subprocess
 import threading
 import time
 import traceback
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Final
 
+from .app_focus import get_focused_role
 from .config import Config, cache_dir
 from .converter import LayoutConverter
 from .detector import LanguageDetector
@@ -307,6 +309,9 @@ class LinguaFixDaemon:
         # the event loop. ``_lock`` serialises buffer processing so the same text
         # is never corrected twice.
         self._lock = threading.RLock()
+        # Focused-role probe (AT-SPI). Injectable so tests can simulate a
+        # password field without an accessibility bus.
+        self._focused_role_probe: Callable[[], str | None] = get_focused_role
 
     # ------------------------------------------------------------------
     # Device discovery
@@ -934,6 +939,20 @@ class LinguaFixDaemon:
         if self.detector.is_stop_word(buffer):
             logger.debug("Buffer of length %d is a stop word; skipping", len(buffer))
             return
+
+        # Never rewrite what is typed into a password field. AT-SPI reports the
+        # focused element's role; a positive "password" verdict skips the fix.
+        # An unavailable/undetermined role returns None and correction proceeds
+        # as before, so a missing accessibility bus does not disable the daemon.
+        if self.config.password_guard:
+            try:
+                role = self._focused_role_probe()
+            except Exception:
+                logger.debug("Focused-role probe failed", exc_info=True)
+                role = None
+            if role == "password":
+                logger.debug("Focused element is a password field; skipping")
+                return
 
         # In manual mode nothing is corrected unless the user forces it (hotkey)
         # or the focused application is on the force list. Clearing the buffer
