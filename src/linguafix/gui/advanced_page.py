@@ -32,6 +32,7 @@ class AdvancedPage(BoundPreferencesPage):
         self._build_exceptions_group()
         self._build_dictionary_group()
         self._build_typo_group()
+        self._build_expander_group()
         self._build_hotkeys_group()
         self._build_notifications_group()
         self._build_logs_group()
@@ -215,6 +216,17 @@ class AdvancedPage(BoundPreferencesPage):
             upper=12,
             step=1,
         )
+        self.add(group)
+
+    # --- text expansion (snippets) ----------------------------------------
+    def _build_expander_group(self) -> None:
+        group = Adw.PreferencesGroup(
+            title="Текстовые сокращения",
+            description="Короткий триггер превращается в длинный текст, "
+            "например !!email → адрес. Выключено по умолчанию.",
+        )
+        self.add_switch(group, "Включить сокращения", "text_expander_enabled")
+        self.add_entry(group, "Файл сокращений", "text_expander_snippets_path")
         self.add(group)
 
     # --- hotkeys ----------------------------------------------------------

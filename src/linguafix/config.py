@@ -134,6 +134,7 @@ _SECTION_PREFIXES: Final[dict[str, str]] = {
     "dictionaries": "dictionary_",
     "typo": "typo_",
     "t9": "typo_",
+    "expander": "text_expander_",
     "apps": "exceptions_",
 }
 
@@ -175,6 +176,11 @@ def config_dir() -> Path:
 def config_path() -> Path:
     """Return the full path to ``config.toml``."""
     return config_dir() / "config.toml"
+
+
+def snippets_path() -> Path:
+    """Return the default path to ``snippets.toml``."""
+    return config_dir() / "snippets.toml"
 
 
 def state_dir() -> Path:
@@ -298,6 +304,10 @@ class Config:
     typo_correction: bool = False
     typo_max_distance: int = DEFAULT_TYPO_MAX_DISTANCE
     typo_min_word_length: int = DEFAULT_TYPO_MIN_WORD_LENGTH
+
+    # --- Stage 7: text expansion (snippets) --------------------------------
+    text_expander_enabled: bool = False
+    text_expander_snippets_path: str = ""
 
     def __post_init__(self) -> None:
         self.validate()
@@ -453,6 +463,10 @@ class Config:
         self.typo_min_word_length = int(self.typo_min_word_length)
         if self.typo_min_word_length < 3:
             raise ValueError("typo_min_word_length must be >= 3")
+
+        # --- Stage 7: text expansion ---------------------------------------
+        self.text_expander_enabled = bool(self.text_expander_enabled)
+        self.text_expander_snippets_path = str(self.text_expander_snippets_path)
 
         self.stop_words = [str(word).lower() for word in self.stop_words]
 

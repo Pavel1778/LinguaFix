@@ -37,12 +37,13 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Final
 
 from .app_focus import get_focused_role
-from .config import Config, cache_dir
+from .config import Config, cache_dir, snippets_path
 from .converter import LayoutConverter
 from .detector import LanguageDetector
 from .dictionary import load_user_dictionary
 from .injector import TextInjector
 from .switcher import LayoutSwitcher
+from .text_expander import TextExpander
 from .tray import TrayIcon
 from .typo import TypoCorrector
 
@@ -283,6 +284,9 @@ class LinguaFixDaemon:
         # T9: one corrector per language, built lazily from the detector's
         # vocabulary the first time a typo is checked.
         self._typo_correctors: dict[str, TypoCorrector] = {}
+        # Text expansion (snippets). Loaded once here and re-loaded on reload.
+        self._expander = TextExpander()
+        self._load_snippets(config)
 
         # The characters currently on screen for the word being typed. Derived
         # from ``_scancodes`` and kept in step with it (one char per printable
@@ -748,6 +752,31 @@ class LinguaFixDaemon:
         elif action == "reload":
             self.reload_config()
 
+    def _load_snippets(self, config: Config) -> None:
+        """(Re)load the snippet file named by ``config``, best-effort."""
+        if not config.text_expander_enabled:
+            return
+        path = config.text_expander_snippets_path or str(snippets_path())
+        self._expander.load(path)
+
+    def _expand_snippet(self, buffer: str, current: str, backspace_count: int) -> bool:
+        """Replace ``buffer`` with its snippet expansion. Return ``True`` on success."""
+        match = self._expander.check(buffer)
+        if match is None:
+            return False
+        trigger, expansion = match
+        logger.info("Expanding snippet of length %d", len(trigger))
+        if self.dry_run:
+            logger.info("Dry run: skipping snippet expansion")
+            return True
+        if self._shutdown_requested:
+            return False
+        if self.injector.replace_text(backspace_count, expansion, current):
+            self._record_undo(buffer, current, backspace_count)
+            if self.config.notify_on_fix:
+                self._notify()
+        return True
+
     def _typo_correction(self, buffer: str, current: str) -> str | None:
         """Return a single-word typo correction for ``buffer``, or ``None``.
 
@@ -954,6 +983,14 @@ class LinguaFixDaemon:
                 logger.debug("Focused element is a password field; skipping")
                 return
 
+        # Text expansion runs before any layout analysis: a snippet trigger is
+        # honoured verbatim and never converted to another layout. It is also
+        # independent of the auto/manual mode.
+        if self.config.text_expander_enabled and self._expand_snippet(
+            buffer, self.switcher.get_current_layout(), backspace_count
+        ):
+            return
+
         # In manual mode nothing is corrected unless the user forces it (hotkey)
         # or the focused application is on the force list. Clearing the buffer
         # above means the decision never leaves stale text behind.
@@ -1084,6 +1121,7 @@ class LinguaFixDaemon:
         self.detector.set_user_words(load_user_dictionary(new_config.dictionary_custom_path))
         # The vocabularies may have changed, so any cached corrector is stale.
         self._typo_correctors.clear()
+        self._load_snippets(new_config)
         self._skip_regex = _compile_skip_regex(new_config.custom_skip_regex)
         self._excepted_apps = {app.lower() for app in new_config.exceptions_apps}
         self.switcher.layouts = list(new_config.layouts)

@@ -84,6 +84,8 @@ _ALLOWED_CONFIG_KEYS = {
     "typo_correction",
     "typo_max_distance",
     "typo_min_word_length",
+    "text_expander_enabled",
+    "text_expander_snippets_path",
 }
 
 
