@@ -306,7 +306,7 @@ def _render_template(text: str) -> str:
 
 def cmd_install_autostart(_args: argparse.Namespace) -> int:
     """Install the XDG autostart entry and enable the systemd user unit."""
-    source = _bundled_data_file("linguafix.desktop")
+    source = _bundled_data_file("linguafix-autostart.desktop")
     if source is None:
         print("Не найден файл linguafix.desktop.")
         return 1
@@ -334,6 +334,13 @@ def cmd_uninstall_autostart(_args: argparse.Namespace) -> int:
     _run_quiet(["systemctl", "--user", "disable", "--now", "linguafix.service"])
     print(MSG_AUTOSTART_REMOVED)
     return 0
+
+
+def cmd_gui(_args: argparse.Namespace) -> int:
+    """Open the GTK4 graphical interface."""
+    from .gui import main as gui_main
+
+    return gui_main()
 
 
 def cmd_version(_args: argparse.Namespace) -> int:
@@ -420,6 +427,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     version = subparsers.add_parser("version", help="показать версию")
     version.set_defaults(func=cmd_version)
+
+    gui = subparsers.add_parser("gui", help="открыть графический интерфейс (GTK4)")
+    gui.set_defaults(func=cmd_gui)
 
     return parser
 

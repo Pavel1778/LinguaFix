@@ -33,6 +33,7 @@ dependencies = [
 
 [project.optional-dependencies]
 tray = ["PyGObject>=3.42"]
+gui = ["PyGObject>=3.42"]
 dev = [
     "black>=24.0",
     "isort>=5.13",
@@ -59,7 +60,7 @@ include-package-data = true
 where = ["src"]
 
 [tool.setuptools.package-data]
-linguafix = ["data/*.json", "data/*.txt", "data/*.svg"]
+linguafix = ["data/*.json", "data/*.txt", "data/*.svg", "data/*.desktop"]
 
 [tool.black]
 line-length = 100
@@ -93,6 +94,12 @@ exclude = ["build", "dist"]
 [[tool.mypy.overrides]]
 module = ["uinput.*", "gi.*", "tomli.*"]
 ignore_missing_imports = true
+
+# PyGObject ships no type stubs, so every GTK class is ``Any`` and mypy flags
+# subclassing it. The GUI is typed normally everywhere else.
+[[tool.mypy.overrides]]
+module = ["linguafix.gui.*"]
+disable_error_code = ["misc"]
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]

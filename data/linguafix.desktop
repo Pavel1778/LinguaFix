@@ -5,9 +5,9 @@ GenericName=Auto Layout Switcher
 Comment=Автоматическое переключение раскладки клавиатуры
 # @BIN@ is substituted at install time: install.sh uses the venv launcher,
 # the .deb uses /usr/bin/linguafix.
-Exec=@BIN@ start --foreground
+Exec=@BIN@ gui
 Icon=linguafix
 Terminal=false
-Hidden=false
-X-GNOME-Autostart-enabled=true
 Categories=Utility;Accessibility;
+Keywords=keyboard;layout;switcher;
+StartupNotify=true

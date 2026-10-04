@@ -9,6 +9,7 @@ SHARE_DIR="${HOME}/.local/share/${APP_NAME}"
 VENV_DIR="${SHARE_DIR}/venv"
 UNIT_DIR="${HOME}/.config/systemd/user"
 AUTOSTART_DIR="${HOME}/.config/autostart"
+APPS_DIR="${HOME}/.local/share/applications"
 ICON_DIR="${HOME}/.local/share/icons/hicolor/scalable/apps"
 CONFIG_DIR="${HOME}/.config/${APP_NAME}"
 STATE_DIR="${HOME}/.local/state/${APP_NAME}"
@@ -53,6 +54,7 @@ fi
 
 rm -f "${UNIT_DIR}/${APP_NAME}.service"
 rm -f "${AUTOSTART_DIR}/${APP_NAME}.desktop"
+rm -f "${APPS_DIR}/${APP_NAME}.desktop"
 rm -f "${ICON_DIR}/${APP_NAME}.svg"
 
 if [ -f "${UDEV_RULE}" ] && confirm "Удалить udev-правило ${UDEV_RULE} (нужен sudo)?"; then

@@ -363,3 +363,28 @@ def test_start_when_already_running(
     args = argparse.Namespace(foreground=False)
     assert cli.cmd_start(args) == 0
     assert "запущен" in capsys.readouterr().out
+
+
+def test_cmd_gui_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
+    import linguafix.gui as gui
+
+    monkeypatch.setattr(gui, "main", lambda: 0)
+    assert cli.cmd_gui(argparse.Namespace()) == 0
+
+
+def test_install_autostart_uses_dedicated_autostart_file(
+    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The menu entry and the autostart entry are distinct desktop files."""
+    requested: list[str] = []
+
+    def fake(name: str) -> Path | None:
+        requested.append(name)
+        desktop = isolated_env / "src" / name
+        desktop.parent.mkdir(parents=True, exist_ok=True)
+        desktop.write_text("Exec=@BIN@ start\n", encoding="utf-8")
+        return desktop
+
+    monkeypatch.setattr(cli, "_bundled_data_file", fake)
+    assert cli.main(["install-autostart"]) == 0
+    assert "linguafix-autostart.desktop" in requested

@@ -183,11 +183,25 @@ if [ -f "${REPO_DIR}/data/${APP_NAME}.service" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 9. XDG autostart
+# 9. Application menu entry
+# ---------------------------------------------------------------------------
+APPS_DIR="${HOME}/.local/share/applications"
+mkdir -p "${APPS_DIR}"
+if [ -f "${REPO_DIR}/data/${APP_NAME}.desktop" ]; then
+    # data/linguafix.desktop launches the GUI; data/linguafix-autostart.desktop
+    # launches the daemon. Both carry the @BIN@ placeholder.
+    sed "s|@BIN@|${BIN}|g" "${REPO_DIR}/data/${APP_NAME}.desktop" \
+        > "${APPS_DIR}/${APP_NAME}.desktop"
+    chmod 0644 "${APPS_DIR}/${APP_NAME}.desktop"
+    log "Установлен пункт меню: ${APPS_DIR}/${APP_NAME}.desktop"
+fi
+
+# ---------------------------------------------------------------------------
+# 10. XDG autostart
 # ---------------------------------------------------------------------------
 mkdir -p "${AUTOSTART_DIR}"
-if [ -f "${REPO_DIR}/data/${APP_NAME}.desktop" ]; then
-    sed "s|@BIN@|${BIN}|g" "${REPO_DIR}/data/${APP_NAME}.desktop" \
+if [ -f "${REPO_DIR}/data/${APP_NAME}-autostart.desktop" ]; then
+    sed "s|@BIN@|${BIN}|g" "${REPO_DIR}/data/${APP_NAME}-autostart.desktop" \
         > "${AUTOSTART_DIR}/${APP_NAME}.desktop"
     chmod 0644 "${AUTOSTART_DIR}/${APP_NAME}.desktop"
     log "Установлен автозапуск: ${AUTOSTART_DIR}/${APP_NAME}.desktop"
