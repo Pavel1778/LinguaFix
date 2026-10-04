@@ -69,7 +69,7 @@ RULES=/usr/lib/udev/rules.d/71-linguafix.rules
 test -f "${RULES}" || { echo "FAIL - udev rule not installed at ${RULES}"; exit 1; }
 grep -q "TAG+=\"uaccess\"" "${RULES}" || { echo "FAIL - rule has no uaccess"; exit 1; }
 ! grep -q "GROUP=\"input\"" "${RULES}" || { echo "FAIL - rule still uses GROUP=input"; exit 1; }
-grep -E '^[^#]*KERNEL==' "${RULES}" | grep -q 'ACTION!="remove"' \
+grep -E "^[^#]*KERNEL==" "${RULES}" | grep -q "ACTION!=\"remove\"" \
     || { echo "FAIL - rule is missing ACTION!=\"remove\""; exit 1; }
 echo "ok   - uaccess rule present, no GROUP=input, ACTION!=remove"
 

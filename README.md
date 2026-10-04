@@ -299,6 +299,9 @@ make build-deb                # собрать .deb в dist/
 
 MIT — см. [LICENSE](LICENSE).
 
+История изменений — в [CHANGELOG.md](CHANGELOG.md). Баги и предложения —
+в [Issues](https://github.com/Pavel1778/LinguaFix/issues).
+
 ## 🙏 Благодарности / Acknowledgements
 
 - [gswitch](https://github.com/skroll/gswitch) — исполнитель исправлений.

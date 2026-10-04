@@ -13,6 +13,9 @@ from pathlib import Path
 from .config import state_dir
 
 LOG_FILE_NAME = "linguafix.log"
+# The GUI runs as its own process; it logs to a separate file so it does not
+# interleave with (or rotate away) the daemon's log.
+GUI_LOG_FILE_NAME = "gui.log"
 MAX_BYTES = 5 * 1024 * 1024
 BACKUP_COUNT = 3
 LOG_FORMAT = "%(asctime)s %(levelname)-8s %(name)s: %(message)s"
@@ -24,6 +27,7 @@ def setup_logging(
     *,
     log_dir: Path | None = None,
     console: bool = False,
+    file_name: str = LOG_FILE_NAME,
 ) -> Path:
     """Configure the root logger and return the log file path.
 
@@ -31,13 +35,14 @@ def setup_logging(
         level: Logging level name (for example ``"INFO"``).
         log_dir: Override the directory used for the log file.
         console: When true, also log to stderr (used for ``--foreground``).
+        file_name: Name of the log file inside ``log_dir``.
 
     Returns:
         The path of the log file that was configured.
     """
     directory = log_dir or state_dir()
     directory.mkdir(parents=True, exist_ok=True)
-    log_file = directory / LOG_FILE_NAME
+    log_file = directory / file_name
 
     root = logging.getLogger()
     root.setLevel(getattr(logging, level.upper(), logging.INFO))

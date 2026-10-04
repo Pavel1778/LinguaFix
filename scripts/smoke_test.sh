@@ -84,7 +84,10 @@ test -f "${RULE}" || { echo "udev rule not installed at ${RULE}"; exit 1; }
 grep -q "TAG+=\"uaccess\"" "${RULE}" || { echo "udev rule has no uaccess"; exit 1; }
 ! grep -q "GROUP=\"input\"" "${RULE}" || { echo "udev rule still uses GROUP=input"; exit 1; }
 # ACTION!="remove" must be present on every active rule (systemd 257+ uaccess).
-grep -E '^[^#]*KERNEL==' "${RULE}" | grep -q 'ACTION!="remove"' \
+# NOTE: this whole block is the argument to bash -c, quoted with single quotes,
+# so every grep pattern must use double quotes here; a single quote would close
+# the outer string and corrupt the script.
+grep -E "^[^#]*KERNEL==" "${RULE}" | grep -q "ACTION!=\"remove\"" \
     || { echo "udev rule is missing ACTION!=\"remove\""; exit 1; }
 
 echo "--- install-autostart renders the packaged launcher ---"
