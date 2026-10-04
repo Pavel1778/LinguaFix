@@ -72,6 +72,26 @@ SMOKE_IMAGE=ubuntu:22.04 make smoke-test    # Python 3.10 path (tomli)
 - When the last keyboard disappears the loop re-runs discovery in place (never
   caches a device path); `Restart=always` is the backstop.
 
+## Platform facts (Debian 12 / 13) — do not relearn the hard way
+
+- **Never import the `uinput` package.** On Debian 13 `python-uinput` 1.0.1
+  exposes `KEY_*` as `(event_type, code)` tuples and its API is
+  `Device`/`emit`; Debian 12's 0.11.2 is the same shape. `int(uinput.KEY_A)`
+  raises `TypeError` and `uinput.UInput` does not exist. The virtual keyboard is
+  built with `evdev.UInput` and key codes come from `evdev.ecodes` (plain ints).
+  `tests/test_injector_uinput_compat.py` guards this contract.
+- **`g3kb-switch -s` takes the layout name**, e.g. `g3kb-switch -s ru` (it also
+  accepts the numeric group index). `-p` prints the current layout. A non-zero
+  exit is the only reliable failure signal; stderr may be non-empty on success.
+- **The udev rule must be named below `73` and carry `ACTION!="remove"`.** On
+  systemd 257+ (Debian 13) `73-seat-late.rules` turns `uaccess` into the ACL. It
+  runs in filename order and only processes rules that guard the `remove` event,
+  so a `99-*` rule without the guard is silently skipped and `/dev/input` stays
+  unreadable. The shipped rule is `data/71-linguafix.rules`.
+- `python3-evdev` ships in Debian and Ubuntu and is the only native runtime
+  dependency; `install.sh` reuses it via `--system-site-packages` so no compiler
+  is needed. `python-uinput` is **not** a dependency.
+
 ## Known limitation
 
 The daemon works on a real GNOME desktop only; the CI and smoke tests do not
