@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 900 600" role="img" aria-label="LinguaFix dictionary page screenshot placeholder">
+  <rect width="900" height="600" rx="18" fill="#1b1b2b"/>
+  <rect x="0" y="0" width="900" height="64" rx="18" fill="#2f2f47"/>
+  <rect x="0" y="46" width="900" height="18" fill="#2f2f47"/>
+  <text x="32" y="42" font-family="sans-serif" font-size="22" font-weight="bold" fill="#e6e6f0">Словарь / Dictionary</text>
+  <rect x="40" y="100" width="820" height="64" rx="10" fill="#26263a"/>
+  <text x="64" y="139" font-family="sans-serif" font-size="18" fill="#6c7086">Добавить слово (бренд, имя, техножаргон)</text>
+  <g font-family="monospace" font-size="20" fill="#cdd6f4">
+    <rect x="40" y="184" width="820" height="54" rx="10" fill="#26263a"/>
+    <text x="64" y="218">vercel</text>
+    <text x="812" y="218" text-anchor="end" fill="#f38ba8">✕</text>
+    <rect x="40" y="250" width="820" height="54" rx="10" fill="#26263a"/>
+    <text x="64" y="284">kubernetes</text>
+    <text x="812" y="284" text-anchor="end" fill="#f38ba8">✕</text>
+    <rect x="40" y="316" width="820" height="54" rx="10" fill="#26263a"/>
+    <text x="64" y="350">gnome-shell</text>
+    <text x="812" y="350" text-anchor="end" fill="#f38ba8">✕</text>
+    <rect x="40" y="382" width="820" height="54" rx="10" fill="#26263a"/>
+    <text x="64" y="416">Pavel1778</text>
+    <text x="812" y="416" text-anchor="end" fill="#f38ba8">✕</text>
+  </g>
+  <text x="450" y="500" text-anchor="middle" font-family="sans-serif" font-size="15" fill="#6c7086">Плейсхолдер — замените реальным скриншотом</text>
+</svg>

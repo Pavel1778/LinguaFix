@@ -40,6 +40,16 @@ Caramba Switcher for Windows.
 
 ![demo placeholder](docs/demo-placeholder.svg)
 
+## 📸 Скриншоты / Screenshots
+
+| Главное окно / Main window | Настройки / Advanced | Словарь / Dictionary |
+|---|---|---|
+| ![main window](docs/screenshots/main-window.svg) | ![advanced settings](docs/screenshots/advanced-settings.svg) | ![dictionary](docs/screenshots/dictionary.svg) |
+
+> Скриншоты — плейсхолдеры. Замените файлы в `docs/screenshots/` реальными
+> снимками (формат `.png`, тот же размер кадра), не меняя имена — README
+> подхватит их автоматически.
+
 ## ✨ Возможности / Features
 
 - 🔄 Автоматическое определение неверной раскладки
@@ -184,6 +194,12 @@ stop_words = [
 typo_correction = false    # true — включить
 typo_max_distance = 1      # 1 или 2 опечатки в слове
 typo_min_word_length = 4   # не трогать короткие слова
+
+# Раскладка по приложениям: при фокусе приложения включать его раскладку.
+app_layout_switch = false
+[app_layouts]
+# kitty = "ru"
+# code = "us"
 ```
 
 Слова исправляются **сразу** при нажатии пробела или Enter — ждать паузы не
@@ -239,6 +255,48 @@ systemctl --user restart linguafix.service
 # или
 kill -HUP "$(cat ~/.cache/linguafix/daemon.lock)"
 ```
+
+### Раскладка по приложениям
+
+Приложения, в которых вы почти всегда печатаете на одном языке, можно
+закрепить за раскладкой. При переходе фокуса на такое приложение LinguaFix
+включит его раскладку (не чаще, чем раз в ~0.35 с, и не повторно, пока фокус
+остаётся в нём — чтобы не спорить с ручным переключением).
+
+```toml
+app_layout_switch = true
+[app_layouts]
+kitty = "ru"
+code = "us"
+```
+
+В GUI — вкладка **«Дополнительно»** → **«Раскладка по приложениям»**, с кнопкой
+«Определить» текущее приложение.
+
+### Сниппеты (текстовые сокращения)
+
+В `~/.config/linguafix/snippets.toml` можно задать сокращения; они
+разворачиваются **до** анализа раскладки:
+
+```toml
+[snippets]
+"адр" = "ул. Ленина, д. 1"
+"дт" = "{date}"
+```
+
+Включается через `text_expander_enabled = true` (GUI: **«Дополнительно»** →
+**«Сниппеты»**). Поддерживаются подстановки `{date}` и `{time}`.
+
+### Исправление уже выделенного текста
+
+Выделите текст и нажмите `CTRL+SHIFT+L` — LinguaFix скопирует его, сменит
+раскладку и вставит обратно. Хоткей настраивается в GUI; функция включается
+через `selection_fix_enabled`.
+
+### Защита полей паролей
+
+Если AT-SPI сообщает, что фокус в поле пароля, исправление пропускается, даже
+если слова нет в `stop_words`. Отключается через `password_guard = false`.
 
 ## 🩺 Troubleshooting
 

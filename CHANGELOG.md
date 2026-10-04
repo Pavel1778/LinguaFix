@@ -25,6 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tokens with a separator are left alone. Toggle it in the GUI (**Advanced** ->
   **Typo correction (T9)**) or with `typo_correction = true`;
   `typo_max_distance` (1 or 2) and `typo_min_word_length` tune it.
+- Password-field guard (AT-SPI): a fix is skipped while the focused element is a
+  password entry, even if the stop-word list does not cover it.
+- Text expansion (snippets). A `[snippets]` table in `snippets.toml` maps a
+  trigger to text (with `{date}` / `{time}` placeholders); the daemon expands it
+  before layout analysis. Toggle with `text_expander_enabled`.
+- Selection fix. `CTRL+SHIFT+L` converts the layout of already-selected text
+  (copy, convert, paste, restore) and can be rebound in the GUI.
+- Per-app default layout. `app_layouts` maps an application name to a layout
+  that is switched to when that application gains focus (`app_layout_switch`).
 
 ### Changed
 
