@@ -99,7 +99,7 @@ def test_type_uinput_works_regardless_of_uinput_key_shape(
     injector = TextInjector(converter=LayoutConverter(), backend="uinput")
 
     assert injector._type_uinput("Qq ", "us") is True
-    assert injector.replace_text("gh", "привет", "ru") is True
+    assert injector.replace_text(2, "привет", "ru") is True
 
     device = _RecordingUInput.instances[-1]
     # Every emitted code is a plain int, never a tuple.

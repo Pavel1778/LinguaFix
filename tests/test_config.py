@@ -12,7 +12,7 @@ from linguafix.config import Config, load_config, save_config
 
 def test_defaults() -> None:
     config = Config()
-    assert config.analysis_timeout == 1.5
+    assert config.analysis_timeout == 0.8
     assert config.min_word_length == 3
     assert config.layouts == ["us", "ru"]
     assert config.backend == "auto"
@@ -21,6 +21,12 @@ def test_defaults() -> None:
     assert config.tray_enabled is True
     assert config.hotkey == "PAUSE"
     assert config.log_level == "INFO"
+    assert config.on_space is True
+    assert config.on_enter is True
+    assert config.on_tab is False
+    assert config.on_punctuation is False
+    assert config.punctuation_chars == ".!?,;:"
+    assert config.backspace_settle_ms == 30
     assert isinstance(config.stop_words, list)
     assert "password" in config.stop_words
 
@@ -28,9 +34,11 @@ def test_defaults() -> None:
 def test_load_creates_default_file(tmp_config_path: Path) -> None:
     config = load_config(tmp_config_path)
     assert tmp_config_path.exists()
-    assert config.analysis_timeout == 1.5
+    assert config.analysis_timeout == 0.8
     text = tmp_config_path.read_text(encoding="utf-8")
     assert "analysis_timeout" in text
+    assert "on_space" in text
+    assert "backspace_settle_ms" in text
 
 
 def test_save_and_load_round_trip(tmp_config_path: Path) -> None:
@@ -54,7 +62,7 @@ def test_corrupted_toml_falls_back_to_defaults(tmp_config_path: Path) -> None:
     tmp_config_path.parent.mkdir(parents=True, exist_ok=True)
     tmp_config_path.write_text("this is = not [ valid toml", encoding="utf-8")
     config = load_config(tmp_config_path)
-    assert config.analysis_timeout == 1.5
+    assert config.analysis_timeout == 0.8
     backups = list(tmp_config_path.parent.glob("config.toml.corrupt-*"))
     assert len(backups) == 1
 
@@ -90,11 +98,28 @@ def test_validation_normalises_values() -> None:
         {"backend": "bogus"},
         {"switch_method": "bogus"},
         {"log_level": "bogus"},
+        {"backspace_settle_ms": -1},
     ],
 )
 def test_validation_rejects_bad_values(kwargs: dict[str, object]) -> None:
     with pytest.raises(ValueError):
         Config(**kwargs)
+
+
+def test_trigger_and_timing_fields_round_trip(tmp_config_path: Path) -> None:
+    config = Config()
+    config.on_tab = True
+    config.on_punctuation = True
+    config.punctuation_chars = ".,"
+    config.backspace_settle_ms = 60
+    save_config(config, tmp_config_path)
+
+    loaded = load_config(tmp_config_path)
+    assert loaded.on_space is True
+    assert loaded.on_tab is True
+    assert loaded.on_punctuation is True
+    assert loaded.punctuation_chars == ".,"
+    assert loaded.backspace_settle_ms == 60
 
 
 def test_to_dict_contains_all_fields() -> None:
@@ -124,4 +149,4 @@ def test_from_dict_ignores_unknown_keys() -> None:
 
 def test_from_dict_bad_types_fall_back() -> None:
     config = Config.from_dict({"analysis_timeout": "not-a-number"})
-    assert config.analysis_timeout == 1.5
+    assert config.analysis_timeout == 0.8

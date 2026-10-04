@@ -41,6 +41,19 @@ SMOKE_IMAGE=ubuntu:22.04 make smoke-test    # Python 3.10 path (tomli)
 - `data/*.service` and `data/*.desktop` contain a `@BIN@` placeholder. It is
   rendered by `install.sh` (venv launcher), `build_deb.sh` (`/usr/bin/linguafix`)
   and the CLI (`shutil.which("linguafix")`). Never ship an unrendered file.
+- The daemon tracks the current word as **scancodes** (`_scancodes`), not only
+  as characters. `TextInjector.replace_text` takes a *count*, not the old text;
+  the daemon passes `len(self._scancodes)`. Do not reintroduce a string-based
+  backspace count: it desynchronises from the screen and leaves the first
+  character behind (the `рhello` bug).
+- `replace_text` on `uinput` flushes the backspaces with one `syn`, sleeps
+  `backspace_settle_ms`, then flushes the replacement with a second `syn`.
+  Chromium/Electron apply Backspace asynchronously, so a single batch races the
+  deletion. Keep the two flushes; a test asserts the order and the pause.
+- Word-boundary triggers (`on_space`, `on_enter`, `on_tab`, `on_punctuation`)
+  live in `Config`; Space/Enter are on by default. A token with an internal
+  separator (`.` `@` `/` `\` `:` `_` `-`) is never rewritten (URLs, e-mails,
+  paths, versions, hyphenated identifiers).
 - `subprocess.run(..., check=False)` still raises `FileNotFoundError` when the
   binary is missing. Guard calls with `OSError`.
 - `install.sh` runs under `set -u`; do not reference `USER` directly (it is unset

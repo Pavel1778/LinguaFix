@@ -1,13 +1,22 @@
 """The LinguaFix background daemon.
 
-The daemon listens to raw keyboard events from ``/dev/input/event*`` devices,
-accumulates the characters that are typed into a buffer and, once the user
-pauses, decides whether the buffer was typed in the wrong layout. When that is
-the case it rewrites the text and switches the layout.
+The daemon listens to raw keyboard events from ``/dev/input/event*`` devices and
+tracks the word currently being typed as a sequence of *physical keys*
+(evdev scancodes), together with the characters those keys produced. When the
+user presses a word boundary — Space or Enter by default — the word is analysed
+immediately; when it was typed in the wrong layout it is rewritten and the
+layout is switched.
+
+Tracking physical keys instead of a free-form string is what makes the
+replacement reliable: the number of Backspaces always equals the number of keys
+the user actually pressed, so the deletion cannot drift from what is on screen
+even when the user types very fast. A character buffer can desynchronise from
+the screen (a key the daemon did not process in time) and leave a stray first
+character behind, the ``рhello`` symptom.
 
 The main loop uses :mod:`selectors` rather than a blocking ``read_loop`` so it
-can observe the idle timeout, handle signals and serve several keyboards at
-once without spawning a thread per device.
+can observe the idle fallback timeout, handle signals and serve several
+keyboards at once without spawning a thread per device.
 """
 
 from __future__ import annotations
@@ -17,6 +26,7 @@ import errno
 import fcntl
 import logging
 import os
+import re
 import selectors
 import signal
 import subprocess
@@ -95,9 +105,36 @@ _US_KEY_NAMES: Final[dict[str, tuple[str, str]]] = {
     "KEY_SPACE": (" ", " "),
 }
 
-# Keys that terminate the current buffer.
-_BOUNDARY_KEYS: Final[frozenset[str]] = frozenset({"KEY_ENTER", "KEY_KPENTER", "KEY_TAB"})
+# A word character followed by a separator and another word character marks the
+# buffer as part of a larger token (URL, e-mail, path, file name, version or
+# hyphenated identifier) that must never be rewritten, however implausible the
+# detector finds it. The separators are the ones that join sub-tokens in
+# practice; a trailing punctuation mark is not included, so a word the user
+# ended with "." can still be corrected.
+_INTERNAL_SEPARATOR_RE: Final[re.Pattern[str]] = re.compile(r"\w[.@/\\:_-]\w")
+
+# Keys that terminate the current buffer and are driven by config flags.
+_ENTER_KEYS: Final[frozenset[str]] = frozenset({"KEY_ENTER", "KEY_KPENTER"})
+_TAB_KEYS: Final[frozenset[str]] = frozenset({"KEY_TAB"})
 _SHIFT_KEYS: Final[frozenset[str]] = frozenset({"KEY_LEFTSHIFT", "KEY_RIGHTSHIFT", "KEY_CAPSLOCK"})
+# Keys that carry no printable character but that we must not treat as a
+# continuation of the current word either (arrow keys, Delete, Home, …). A key
+# in this set ends the word without flushing it.
+_WORD_BREAKERS: Final[frozenset[str]] = frozenset(
+    {
+        "KEY_UP",
+        "KEY_DOWN",
+        "KEY_LEFT",
+        "KEY_RIGHT",
+        "KEY_HOME",
+        "KEY_END",
+        "KEY_PAGEUP",
+        "KEY_PAGEDOWN",
+        "KEY_DELETE",
+        "KEY_INSERT",
+        "KEY_ESC",
+    }
+)
 
 
 def _load_ecodes() -> tuple[dict[int, tuple[str, str]], dict[str, int]]:
@@ -153,6 +190,7 @@ class LinguaFixDaemon:
         self.injector = injector or TextInjector(
             converter=self.converter,
             backend=config.backend,
+            settle_ms=config.backspace_settle_ms,
         )
         self._devices = devices
         self._code_to_pair, self._name_to_code = _load_ecodes()
@@ -161,7 +199,13 @@ class LinguaFixDaemon:
             hotkey = f"KEY_{hotkey}"
         self._hotkey_code = self._name_to_code.get(hotkey)
 
+        # The characters currently on screen for the word being typed. Derived
+        # from ``_scancodes`` and kept in step with it (one char per printable
+        # key). Kept as the detector's input; the scancode list is the source of
+        # truth for how many Backspaces a fix must send.
         self.buffer: str = ""
+        # The physical keys (evdev codes) that produced ``buffer``.
+        self._scancodes: list[int] = []
         self.last_key_time: float = 0.0
         self._shift = False
         self._running = False
@@ -320,17 +364,48 @@ class LinguaFixDaemon:
             self._handle_backspace()
             return
 
-        if name in _BOUNDARY_KEYS:
-            self._process_buffer()
+        if name in _WORD_BREAKERS:
+            # A navigation key ends the current word without a correction: the
+            # caret is about to move, so a rewrite would target the wrong text.
+            self._reset_buffer()
+            return
+
+        if name == "KEY_SPACE":
+            if self.config.on_space:
+                self._process_buffer()
+            else:
+                self._reset_buffer()
+            return
+
+        if name in _ENTER_KEYS:
+            if self.config.on_enter:
+                self._process_buffer()
+            else:
+                self._reset_buffer()
+            return
+
+        if name in _TAB_KEYS:
+            if self.config.on_tab:
+                self._process_buffer()
+            else:
+                self._reset_buffer()
             return
 
         char = self._key_to_char(code)
         if char is None:
             return
+
+        if self.config.on_punctuation and char in self.config.punctuation_chars:
+            # A punctuation boundary ends the word. The character itself is not
+            # buffered: it is not part of the word and must not be deleted.
+            self._process_buffer()
+            return
+
         with self._lock:
             self.buffer += char
+            self._scancodes.append(code)
             self.last_key_time = time.time()
-            overflow = len(self.buffer) > self.config.max_buffer_size
+            overflow = len(self._scancodes) > self.config.max_buffer_size
         # A held key (auto-repeat) or a paste-like burst can grow the buffer
         # without bound; analyse and clear it instead of waiting for the idle
         # timeout so memory stays bounded.
@@ -362,10 +437,18 @@ class LinguaFixDaemon:
         return canonical
 
     def _handle_backspace(self) -> None:
-        """Remove the last character from the buffer."""
+        """Remove the last character (and its physical key) from the buffer."""
         with self._lock:
             if self.buffer:
                 self.buffer = self.buffer[:-1]
+            if self._scancodes:
+                self._scancodes.pop()
+
+    def _reset_buffer(self) -> None:
+        """Drop the current word without analysing it."""
+        with self._lock:
+            self.buffer = ""
+            self._scancodes = []
 
     def _process_buffer(self) -> None:
         """Analyse the buffer, never letting an error escape.
@@ -397,13 +480,18 @@ class LinguaFixDaemon:
         logger.error("%s\n%s", message, formatted.rstrip())
 
     def _process_buffer_inner(self) -> None:
-        """Analyse the buffer and apply a correction when appropriate."""
+        """Analyse the current word and apply a correction when appropriate."""
         # Snapshot and clear the buffer under the lock, then release it before
         # the (slow) switch/inject so typing during a fix is never lost. Holding
         # the lock for the whole fix would stall the event loop and drop keys.
         with self._lock:
             buffer = self.buffer.strip()
+            # The number of Backspaces equals the number of physical keys, not
+            # the number of characters in ``buffer``: that is what keeps the
+            # deletion in lock-step with the screen even under fast typing.
+            backspace_count = len(self._scancodes)
             self.buffer = ""
+            self._scancodes = []
         if not buffer or len(buffer) < self.config.min_word_length:
             return
 
@@ -418,6 +506,13 @@ class LinguaFixDaemon:
 
         converted = self.converter.convert(buffer, current, target)
         if converted == buffer:
+            return
+
+        if _INTERNAL_SEPARATOR_RE.search(buffer):
+            # A URL, e-mail, path, file name or hyphenated identifier. Rewriting
+            # it would corrupt a token that is intentionally not a word, even
+            # when the detector finds the other layout more plausible.
+            logger.debug("Buffer contains an internal separator; skipping")
             return
 
         # Log metadata only: never write the typed text itself to disk, so the
@@ -437,7 +532,10 @@ class LinguaFixDaemon:
 
         self.switcher.switch_to(target)
         time.sleep(0.05)
-        if self.injector.replace_text(buffer, converted, target) and self.config.notify_on_fix:
+        if (
+            self.injector.replace_text(backspace_count, converted, target)
+            and self.config.notify_on_fix
+        ):
             self._notify()
 
     def _notify(self) -> None:
@@ -610,12 +708,21 @@ class LinguaFixDaemon:
                     with contextlib.suppress(OSError):
                         device.close()
 
-            if (
-                self.buffer
-                and self.last_key_time
-                and time.time() - self.last_key_time > self.config.analysis_timeout
-            ):
-                self._process_buffer()
+            self._flush_if_idle()
+
+    def _flush_if_idle(self) -> None:
+        """Flush the buffer when it has been idle past the fallback timeout.
+
+        Word-boundary keys already flush the buffer the moment the user ends a
+        word, so this only catches words typed without a separator (a long URL
+        or a compound word) and is intentionally short.
+        """
+        if (
+            self.buffer
+            and self.last_key_time
+            and time.time() - self.last_key_time > self.config.analysis_timeout
+        ):
+            self._process_buffer()
 
     def stop(self) -> None:
         """Request a graceful shutdown (useful for in-process tests)."""

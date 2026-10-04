@@ -151,6 +151,7 @@ class TextInjector:
         converter: LayoutConverter | None = None,
         backend: str = "auto",
         session_type: str | None = None,
+        settle_ms: int = 0,
     ) -> None:
         import os
 
@@ -158,6 +159,7 @@ class TextInjector:
         self.session_type = (session_type or os.environ.get("XDG_SESSION_TYPE", "")).lower()
         self._requested_backend = backend
         self._backend = self._resolve_backend(backend)
+        self._settle_ms = max(0, int(settle_ms))
 
     def _uinput_available(self) -> bool:
         """Return ``True`` when a writable ``/dev/uinput`` exists."""
@@ -187,11 +189,17 @@ class TextInjector:
         """Return the name of the active backend."""
         return self._backend
 
-    def replace_text(self, old: str, new: str, layout: str) -> bool:
-        """Delete ``old`` and type ``new``.
+    def replace_text(self, backspace_count: int, new: str, layout: str) -> bool:
+        """Delete ``backspace_count`` characters and type ``new``.
+
+        The caller passes a *count* rather than the old text: the daemon tracks
+        the physical keys that produced the on-screen characters, so the number
+        of Backspaces always matches exactly what is displayed, no matter how
+        fast the user types. Passing the old string would make the deletion
+        depend on the character buffer staying in sync with the screen.
 
         Args:
-            old: The text currently on screen that must be removed.
+            backspace_count: How many Backspace presses to emit.
             new: The corrected text to type.
             layout: The layout that will be active while typing ``new``.
 
@@ -207,9 +215,9 @@ class TextInjector:
         # crash window in which the daemon had deleted the old text but not yet
         # typed the replacement, which would leave the user with truncated text.
         if self._backend == BACKEND_UINPUT:
-            return self._uinput_batch(len(old), new, layout)
+            return self._uinput_batch(backspace_count, new, layout)
 
-        if not self._send_backspaces(len(old)):
+        if not self._send_backspaces(backspace_count):
             logger.warning("Failed to send backspaces; aborting replacement")
             return False
 
@@ -382,11 +390,16 @@ class TextInjector:
         return True
 
     def _uinput_batch(self, backspace_count: int, text: str, layout: str) -> bool:
-        """Delete ``backspace_count`` chars and type ``text`` as one batch.
+        """Delete ``backspace_count`` chars and type ``text``.
 
-        All key events are written to the virtual keyboard and flushed with a
-        single ``syn``. The kernel delivers the whole batch together, so a
-        crash cannot leave the text half-deleted.
+        The backspaces are written and flushed with a single ``syn`` so a crash
+        before that point leaves the text untouched instead of half-deleted.
+        The replacement characters are then emitted and flushed separately,
+        after an optional settle pause (``backspace_settle_ms``). Chromium and
+        Electron applications process Backspace asynchronously; typing into the
+        same ``syn`` can therefore race the deletion and leave the first
+        character behind (the ``рhello`` symptom). A short pause between the two
+        flushes gives the compositor time to apply the deletion.
         """
         try:
             import evdev
@@ -409,6 +422,19 @@ class TextInjector:
                 for _ in range(backspace_count):
                     device.write(ev_key, backspace_code, 1)
                     device.write(ev_key, backspace_code, 0)
+                device.syn()
+            finally:
+                self._close_uinput(device)
+        except (OSError, PermissionError, ValueError):
+            logger.error("Could not create uinput device", exc_info=True)
+            return False
+
+        if self._settle_ms > 0:
+            time.sleep(self._settle_ms / 1000.0)
+
+        try:
+            device = self._open_uinput(evdev, codes)
+            try:
                 for code, shift in resolved:
                     if shift:
                         device.write(ev_key, shift_code, 1)

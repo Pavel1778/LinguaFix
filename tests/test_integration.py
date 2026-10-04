@@ -91,11 +91,11 @@ class FakeInjector:
     """Records text replacements instead of touching the kernel."""
 
     def __init__(self) -> None:
-        self.replacements: list[tuple[str, str, str]] = []
+        self.replacements: list[tuple[int, str, str]] = []
         self.backend = "fake"
 
-    def replace_text(self, old: str, new: str, layout: str) -> bool:
-        self.replacements.append((old, new, layout))
+    def replace_text(self, backspace_count: int, new: str, layout: str) -> bool:
+        self.replacements.append((backspace_count, new, layout))
         return True
 
     def describe(self) -> str:
@@ -178,7 +178,7 @@ def test_enter_flushes_buffer(daemon: LinguaFixDaemon) -> None:
     assert daemon.buffer == ""
     injector = daemon.injector
     assert isinstance(injector, FakeInjector)
-    assert injector.replacements == [("ghbdtn", "привет", "ru")]
+    assert injector.replacements == [(6, "привет", "ru")]
 
 
 def test_shift_produces_uppercase(daemon: LinguaFixDaemon) -> None:
@@ -207,14 +207,16 @@ def test_mixed_script_buffer_is_fixed(daemon: LinguaFixDaemon) -> None:
 
 
 def test_process_buffer_switches_and_replaces(daemon: LinguaFixDaemon) -> None:
-    daemon.buffer = "ghbdtn"
+    for event in type_text("ghbdtn"):
+        daemon._handle_event(event)
     daemon._process_buffer()
     switcher = daemon.switcher
     injector = daemon.injector
     assert isinstance(switcher, FakeSwitcher)
     assert isinstance(injector, FakeInjector)
     assert switcher.switches == ["ru"]
-    assert injector.replacements == [("ghbdtn", "привет", "ru")]
+    # Six physical keys were pressed, so six Backspaces are sent.
+    assert injector.replacements == [(6, "привет", "ru")]
 
 
 def test_process_buffer_noop_for_correct_layout(daemon: LinguaFixDaemon) -> None:
@@ -280,11 +282,12 @@ def test_tray_fix_processes_pending_buffer() -> None:
         switcher=FakeSwitcher("us"),
         injector=FakeInjector(),
     )
-    daemon.buffer = "ghbdtn"
+    for event in type_text("ghbdtn"):
+        daemon._handle_event(event)
     daemon._tray_fix()
     injector = daemon.injector
     assert isinstance(injector, FakeInjector)
-    assert injector.replacements == [("ghbdtn", "привет", "ru")]
+    assert injector.replacements == [(6, "привет", "ru")]
 
 
 def test_tray_fix_without_buffer_is_noop() -> None:
@@ -383,7 +386,7 @@ def test_run_processes_events_and_stops(monkeypatch: pytest.MonkeyPatch) -> None
 
     assert not thread.is_alive()
     assert switcher.switches == ["ru"]
-    assert injector.replacements == [("ghbdtn", "привет", "ru")]
+    assert injector.replacements == [(6, "привет", "ru")]
 
 
 def test_run_without_devices_returns_error(

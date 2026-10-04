@@ -183,14 +183,14 @@ def test_fix_apply(
 ) -> None:
     monkeypatch.setattr(cli.LayoutSwitcher, "get_current_layout", lambda self, force=False: "us")
     monkeypatch.setattr(cli.LayoutSwitcher, "switch_to", lambda self, layout: True)
-    applied: list[tuple[str, str, str]] = []
+    applied: list[tuple[int, str, str]] = []
     monkeypatch.setattr(
         cli.TextInjector,
         "replace_text",
-        lambda self, old, new, layout: applied.append((old, new, layout)) or True,
+        lambda self, count, new, layout: applied.append((count, new, layout)) or True,
     )
     assert cli.main(["fix", "--text", "ghbdtn", "--apply"]) == 0
-    assert applied == [("ghbdtn", "привет", "ru")]
+    assert applied == [(6, "привет", "ru")]
 
 
 def test_fix_apply_failure(
@@ -214,11 +214,11 @@ def test_fix_dry_run_does_not_apply(
     isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(cli.LayoutSwitcher, "get_current_layout", lambda self, force=False: "us")
-    applied: list[tuple[str, str, str]] = []
+    applied: list[tuple[int, str, str]] = []
     monkeypatch.setattr(
         cli.TextInjector,
         "replace_text",
-        lambda self, old, new, layout: applied.append((old, new, layout)) or True,
+        lambda self, count, new, layout: applied.append((count, new, layout)) or True,
     )
     assert cli.main(["fix", "--text", "ghbdtn", "--apply", "--dry-run"]) == 0
     out = capsys.readouterr().out

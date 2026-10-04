@@ -24,11 +24,21 @@ The exit code is non-zero when a check fails, so it is safe to use in scripts.
    ```bash
    tail -n 100 ~/.local/state/linguafix/linguafix.log
    ```
-3. Confirm the analysis timeout is short enough for your typing speed. If you
-   pause longer than `analysis_timeout` between words the buffer flushes early,
-   but if you type and keep typing quickly across a word boundary the correction
-   may be skipped. Try raising it to `2.0` or `2.5`.
+3. Confirm the word-boundary triggers are enabled. Space and Enter flush the
+   word and correct it immediately; Tab and punctuation are opt-in:
+   ```toml
+   on_space = true
+   on_enter = true
+   on_tab = false
+   on_punctuation = false
+   ```
+   If you type a word without ever pressing a boundary, the idle fallback
+   `analysis_timeout` (default `0.8` s) flushes it. Raise it only if you type
+   long unseparated words and want to give them more time.
 4. Make sure the words you type are at least `min_word_length` characters long.
+5. Note that LinguaFix deliberately does not rewrite URLs, e-mail addresses,
+   file paths, version numbers or hyphenated identifiers (a token with `.`, `@`,
+   `/`, `\`, `:`, `_` or `-` inside it). `github.com` and `3.14` are left alone.
 
 ## doctor complains about /dev/input or /dev/uinput permissions
 
@@ -202,6 +212,33 @@ g3kb-switch -s 1   # switches to the second layout
 
 If `g3kb-switch` is missing, LinguaFix can still replace text but cannot change
 the active layout.
+
+## A stray first letter remains after a correction (`рhello`)
+
+Symptom: you typed `hello` while the Russian layout was active, so the keys
+produced `руддщ`. After the correction the screen shows `рhello` — the first
+character survived and the rest were replaced.
+
+Cause: the deletion and the new text raced. The compositor (Chromium and
+Electron applications in particular) processes Backspace asynchronously, so the
+replacement was typed before the leading Backspace had been applied.
+
+LinguaFix avoids this in two ways, both on by default:
+
+- The daemon counts *physical keys*, not characters, so the number of
+  Backspaces always equals the number of keys pressed.
+- The `uinput` backend flushes the backspaces, waits `backspace_settle_ms`, then
+  types the replacement.
+
+If you still see a stray character, the application needs a longer pause. Raise
+the settle window:
+
+```toml
+backspace_settle_ms = 60   # 30 by default; try 50-80 for slow Electron apps
+```
+
+A very large value only adds latency; it cannot corrupt the text, because the
+backspace batch itself is flushed atomically.
 
 ## Backspace does not delete in the terminal (or deletes too much)
 

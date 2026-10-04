@@ -29,9 +29,14 @@ import tomli_w
 logger = logging.getLogger(__name__)
 
 APP_NAME: Final[str] = "linguafix"
-DEFAULT_ANALYSIS_TIMEOUT: Final[float] = 1.5
+# Fallback idle timeout for words typed without a separator (a long URL or a
+# compound word). Word-boundary keys flush the buffer immediately, so this is
+# only the backstop and can be short.
+DEFAULT_ANALYSIS_TIMEOUT: Final[float] = 0.8
 DEFAULT_MIN_WORD_LENGTH: Final[int] = 3
 DEFAULT_MAX_BUFFER_SIZE: Final[int] = 200
+DEFAULT_BACKSPACE_SETTLE_MS: Final[int] = 30
+DEFAULT_PUNCTUATION_CHARS: Final[str] = ".!?,;:"
 VALID_BACKENDS: Final[tuple[str, ...]] = ("auto", "uinput", "wtype", "xdotool")
 VALID_SWITCH_METHODS: Final[tuple[str, ...]] = ("auto", "g3kb-switch", "setxkbmap")
 VALID_LOG_LEVELS: Final[tuple[str, ...]] = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
@@ -89,7 +94,8 @@ class Config:
     """Runtime configuration of the LinguaFix daemon.
 
     Attributes:
-        analysis_timeout: Seconds of inactivity before the buffer is analysed.
+        analysis_timeout: Fallback seconds of inactivity before a buffer without
+            a word boundary is analysed. Space/Enter/Tab flush it immediately.
         min_word_length: Words shorter than this are never auto-corrected.
         max_buffer_size: Upper bound on the keystroke buffer; when exceeded the
             buffer is analysed and cleared early so memory stays bounded.
@@ -101,6 +107,16 @@ class Config:
         tray_enabled: Whether to try to show an AppIndicator tray icon.
         hotkey: evdev key name used for manual correction.
         log_level: Logging verbosity, one of :data:`VALID_LOG_LEVELS`.
+        on_space: Flush the buffer when Space is pressed (main trigger).
+        on_enter: Flush the buffer when Enter is pressed.
+        on_tab: Flush the buffer when Tab is pressed.
+        on_punctuation: Flush the buffer when a punctuation key is pressed.
+        punctuation_chars: Characters that act as a boundary when
+            ``on_punctuation`` is enabled.
+        backspace_settle_ms: Milliseconds to wait after the Backspace batch and
+            before typing the replacement. Chromium/Electron applications
+            process Backspace asynchronously, so a small pause avoids the race
+            that otherwise leaves the first character behind (``рhello``).
     """
 
     analysis_timeout: float = DEFAULT_ANALYSIS_TIMEOUT
@@ -114,6 +130,12 @@ class Config:
     tray_enabled: bool = True
     hotkey: str = "PAUSE"
     log_level: str = "INFO"
+    on_space: bool = True
+    on_enter: bool = True
+    on_tab: bool = False
+    on_punctuation: bool = False
+    punctuation_chars: str = DEFAULT_PUNCTUATION_CHARS
+    backspace_settle_ms: int = DEFAULT_BACKSPACE_SETTLE_MS
 
     def __post_init__(self) -> None:
         self.validate()
@@ -151,6 +173,16 @@ class Config:
         self.log_level = str(self.log_level).upper()
         if self.log_level not in VALID_LOG_LEVELS:
             raise ValueError(f"log_level must be one of {VALID_LOG_LEVELS}")
+
+        self.on_space = bool(self.on_space)
+        self.on_enter = bool(self.on_enter)
+        self.on_tab = bool(self.on_tab)
+        self.on_punctuation = bool(self.on_punctuation)
+        self.punctuation_chars = str(self.punctuation_chars)
+
+        self.backspace_settle_ms = int(self.backspace_settle_ms)
+        if self.backspace_settle_ms < 0:
+            raise ValueError("backspace_settle_ms must be >= 0")
 
         self.stop_words = [str(word).lower() for word in self.stop_words]
 

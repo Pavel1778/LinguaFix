@@ -67,7 +67,7 @@ def test_replace_text_wtype(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(injector_module, "_run", record)
     injector = TextInjector(backend="auto")
-    assert injector.replace_text("ghbdtn", "привет", "ru") is True
+    assert injector.replace_text(6, "привет", "ru") is True
     assert commands.count(["wtype", "key", "BackSpace"]) == 6
     assert ["wtype", "-s", "0", "-d", "0", "привет"] in commands
 
@@ -85,7 +85,7 @@ def test_replace_text_xdotool(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(injector_module, "_run", record)
     injector = TextInjector(backend="auto")
-    assert injector.replace_text("ab", "cd", "us") is True
+    assert injector.replace_text(2, "cd", "us") is True
     assert commands.count(["xdotool", "key", "BackSpace"]) == 2
     assert ["xdotool", "type", "--clearmodifiers", "cd"] in commands
 
@@ -94,7 +94,7 @@ def test_replace_text_no_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(injector_module, "_which", lambda name: None)
     monkeypatch.setattr(TextInjector, "_uinput_available", lambda self: False)
     injector = TextInjector(backend="auto")
-    assert injector.replace_text("a", "b", "us") is False
+    assert injector.replace_text(1, "b", "us") is False
 
 
 def test_replace_text_backspace_failure_aborts(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -104,7 +104,7 @@ def test_replace_text_backspace_failure_aborts(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(TextInjector, "_uinput_available", lambda self: False)
     monkeypatch.setattr(injector_module, "_run", lambda cmd, timeout=10.0: fake_completed(1))
     injector = TextInjector(backend="auto")
-    assert injector.replace_text("ab", "cd", "us") is False
+    assert injector.replace_text(2, "cd", "us") is False
 
 
 def test_replace_text_typing_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -120,7 +120,7 @@ def test_replace_text_typing_failure(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(injector_module, "_run", run)
     injector = TextInjector(backend="auto")
-    assert injector.replace_text("a", "b", "us") is False
+    assert injector.replace_text(1, "b", "us") is False
 
 
 def test_char_to_key_letters_and_shift() -> None:
@@ -244,7 +244,7 @@ def test_replace_text_uinput(
 ) -> None:
     monkeypatch.setattr(TextInjector, "_uinput_available", lambda self: True)
     injector = TextInjector(backend="uinput")
-    assert injector.replace_text("gh", "привет", "ru") is True
+    assert injector.replace_text(2, "привет", "ru") is True
 
 
 def test_uinput_missing_modules(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -284,10 +284,12 @@ def test_uinput_does_not_require_uinput_package(
 def test_uinput_batch_is_atomic(
     monkeypatch: pytest.MonkeyPatch, fake_uinput: type[_FakeUInputDevice]
 ) -> None:
-    """Backspaces and the new text must be flushed with a single ``syn``.
+    """The backspaces are flushed with one ``syn`` before the text is typed.
 
-    The kernel only delivers the batch once ``syn`` is called, so a crash before
-    that point leaves the text untouched instead of half-deleted.
+    The kernel only delivers the backspace batch once ``syn`` is called, so a
+    crash before that point leaves the text untouched instead of half-deleted.
+    The replacement characters are then emitted in a separate flush, so the
+    compositor can apply the deletion before the new text races in.
     """
     created: list[_FakeUInputDevice] = []
 
@@ -301,15 +303,19 @@ def test_uinput_batch_is_atomic(
     monkeypatch.setattr(fake_evdev_mod, "UInput", RecordingUInput)
 
     injector = TextInjector(backend="uinput")
-    assert injector.replace_text("ghbdtn", "привет", "ru") is True
+    assert injector.replace_text(6, "привет", "ru") is True
 
-    assert len(created) == 1
-    device = created[0]
-    # Exactly one syn for the whole replacement: nothing is applied until then.
-    assert device.synced == 1
-    # Six backspaces (press + release each) precede the typed characters.
-    backspaces = [e for e in device.events if e[1] == _KNOWN_FAKE_KEYS["KEY_BACKSPACE"]]
+    # One device for the backspace batch, one for the replacement text.
+    assert len(created) == 2
+    backspace_device, text_device = created
+    assert backspace_device.synced == 1
+    assert text_device.synced == 1
+    # The backspace device emits exactly six Backspaces (press + release each)
+    # and nothing else: the deletion is complete before the text is typed.
+    backspaces = [e for e in backspace_device.events if e[1] == _KNOWN_FAKE_KEYS["KEY_BACKSPACE"]]
     assert len(backspaces) == 12
+    assert all(e[1] == _KNOWN_FAKE_KEYS["KEY_BACKSPACE"] for e in backspace_device.events)
+    assert not any(e[1] == _KNOWN_FAKE_KEYS["KEY_BACKSPACE"] for e in text_device.events)
 
 
 def test_uinput_batch_no_syn_means_nothing_applied(
@@ -328,4 +334,4 @@ def test_uinput_batch_no_syn_means_nothing_applied(
     monkeypatch.setattr(fake_evdev_mod, "UInput", FailingUInput)
 
     injector = TextInjector(backend="uinput")
-    assert injector.replace_text("ghbdtn", "привет", "ru") is False
+    assert injector.replace_text(6, "привет", "ru") is False

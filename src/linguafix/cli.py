@@ -257,7 +257,7 @@ def cmd_fix(args: argparse.Namespace) -> int:
     if args.apply:
         switcher.switch_to(target)
         time.sleep(0.05)
-        if not injector.replace_text(text, converted, target):
+        if not injector.replace_text(len(text), converted, target):
             print("Не удалось применить исправление.")
             return 1
     return 0

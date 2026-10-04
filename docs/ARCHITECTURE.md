@@ -6,18 +6,22 @@ components were chosen, and where the boundaries of the design are.
 ## Overview
 
 LinguaFix is a background daemon with no main window. It observes raw keyboard
-events, keeps a short buffer of what was typed, and — after a pause — decides
-whether the text was typed in the wrong layout. When it is confident, it
-rewrites the text and switches the active layout.
+events, keeps the word currently being typed as a sequence of physical keys, and
+— the moment the user presses a word boundary (Space or Enter) — decides whether
+the word was typed in the wrong layout. When it is confident, it rewrites the
+word and switches the active layout, all within that one keystroke.
 
 ```
                        ┌──────────────────────────────────────────┐
                        │              LinguaFixDaemon             │
                        │                                          │
-  /dev/input/event*    │  ┌────────────┐    ┌──────────────────┐  │
-  ────────────────►    │  │  buffer    │    │  analysis timer  │  │
-      evdev            │  │  "ghbdtn"  │───►│  (idle 1.5 s)    │  │
-                       │  └────────────┘    └────────┬─────────┘  │
+  /dev/input/event*    │  ┌────────────────┐   ┌───────────────┐  │
+  ────────────────►    │  │ word buffer    │   │  boundary     │  │
+      evdev            │  │ "ghbdtn"       │──►│  Space/Enter  │  │
+                       │  │ keys: G H B ...│   │  (immediate)  │  │
+                       │  └────────────────┘   └──────┬────────┘  │
+                       │        idle fallback ────────┘           │
+                       │        (analysis_timeout 0.8 s)          │
                        │                             │            │
                        │                             ▼            │
                        │                 ┌──────────────────────┐ │
@@ -42,19 +46,49 @@ rewrites the text and switches the active layout.
 
 1. **Capture.** The daemon opens every keyboard-like device under
    `/dev/input/event*` and waits in a `selectors` event loop. Only `EV_KEY`
-   events for letter, space, backspace, enter and tab keys are considered;
-   modifiers and `EV_MSC` (scancode) events are ignored.
-2. **Buffer.** Printable characters are appended to `buffer`. Backspace removes
-   the last character. Enter and Tab flush the buffer immediately.
-3. **Analyse.** When no key has been pressed for `analysis_timeout` seconds the
-   buffer is handed to the detector. The detector tokenises the buffer, scores
+   events are considered; modifiers and `EV_MSC` (scancode) events are ignored.
+2. **Buffer.** Each printable key appends both its character (for detection) and
+   its evdev code (for deletion) to the word buffer. Backspace removes the last
+   character and its key. The buffer tracks the *word*, so it is flushed at every
+   word boundary.
+3. **Trigger.** Space and Enter flush the buffer immediately (Tab and
+   punctuation are opt-in). The correction therefore happens inside the same
+   keystroke that ends the word — there is no visible pause. An idle fallback
+   (`analysis_timeout`, default 0.8 s) catches words typed without a separator,
+   such as a long URL.
+4. **Analyse.** The buffer is handed to the detector, which tokenises it, scores
    each word against the Russian and English n-gram/word corpora and picks the
-   most likely language.
-4. **Decide.** If the detected language differs from the active layout, the
+   most likely language. Tokens that are not words — a URL, an e-mail address, a
+   path, a version number or a hyphenated identifier — are recognised by an
+   internal separator (`.` `@` `/` `\` `:` `_` `-`) and left alone.
+5. **Decide.** If the detected language differs from the active layout, the
    converter produces the "other-layout" rendering of the buffer. If that
    rendering looks more like a real word, the daemon proceeds.
-5. **Act.** The switcher changes the active layout and the injector deletes the
-   buffered text with Backspace and retypes it in the new layout.
+6. **Act.** The switcher changes the active layout and the injector deletes the
+   word with Backspace and retypes it in the new layout.
+
+## Scancode replay and the `рhello` bug
+
+The replacement sends one Backspace per *physical key* the user pressed, not per
+character in a string. The buffer keeps the evdev codes alongside the
+characters, so the deletion can never drift from what is on screen: if a key was
+processed late, its code is still in the list, and the count is still exact. A
+free-form character buffer can desynchronise (a key the daemon did not process
+in time) and leave the first character behind — the `рhello` symptom, where
+`руддщ` was deleted but the leading `р` survived.
+
+The uinput backend also flushes the deletion and the replacement as two separate
+`syn` batches, with an optional pause (`backspace_settle_ms`, default 30 ms)
+between them. Chromium and Electron applications process Backspace
+asynchronously, so typing into the same batch can race the deletion. The pause
+lets the compositor apply the deletion before the new text arrives. The
+backspace batch is still flushed with a single `syn`, so a crash before that
+point leaves the text untouched instead of half-deleted.
+
+A word-boundary trigger is the practical limit of "real time": a word cannot be
+corrected before it is finished, because until then the detector does not know
+what the word is. Pressing Space is that moment, and the correction costs no
+extra keystroke.
 
 ## Why evdev + uinput
 
@@ -168,11 +202,16 @@ config file, user journal and every subprocess argv for any trace of it.
 The daemon is designed to survive the failures that a long-running, keystroke-
 reading process will meet in practice:
 
-- **Atomic replacement.** The `uinput` backend writes every backspace and every
-  character of the corrected text and flushes them with a single `syn`. The
-  kernel delivers the batch together, so a crash or `SIGKILL` mid-fix cannot
-  leave the text half-deleted. The `wtype`/`xdotool` backends cannot be atomic;
-  that residual window is documented in the troubleshooting guide.
+- **Atomic deletion.** The `uinput` backend writes every backspace and flushes
+  them with a single `syn`, then types the replacement as a second flush after
+  `backspace_settle_ms`. A crash or `SIGKILL` before the first `syn` leaves the
+  text untouched rather than half-deleted, and the settle pause keeps the
+  replacement from racing an asynchronous compositor. The `wtype`/`xdotool`
+  backends cannot be atomic; that residual window is documented in the
+  troubleshooting guide.
+- **Exact deletion count.** The daemon counts physical keys, not characters, so
+  the number of Backspaces always matches what is on screen even under very fast
+  typing.
 - **Races.** The buffer is snapshotted and cleared under a lock, but the lock is
   released before the slow switch/inject, so keys pressed during a fix are
   buffered for the next pass instead of being dropped.

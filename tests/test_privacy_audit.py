@@ -42,6 +42,12 @@ _ALLOWED_CONFIG_KEYS = {
     "tray_enabled",
     "hotkey",
     "log_level",
+    "on_space",
+    "on_enter",
+    "on_tab",
+    "on_punctuation",
+    "punctuation_chars",
+    "backspace_settle_ms",
 }
 
 
@@ -53,7 +59,7 @@ class _RecordingInjector:
     def __init__(self) -> None:
         self.calls: list[list[str]] = []
 
-    def replace_text(self, old: str, new: str, layout: str) -> bool:
+    def replace_text(self, backspace_count: int, new: str, layout: str) -> bool:
         # A real wtype/xdotool backend passes the text as an argument; record it
         # so the test can assert the daemon never leaks it that way either.
         self.calls.append(["wtype", new])

@@ -87,11 +87,11 @@ class FakeInjector:
     backend = "fake"
 
     def __init__(self, on_replace: Callable[[], None] | None = None) -> None:
-        self.replacements: list[tuple[str, str, str]] = []
+        self.replacements: list[tuple[int, str, str]] = []
         self.on_replace = on_replace
 
-    def replace_text(self, old: str, new: str, layout: str) -> bool:
-        self.replacements.append((old, new, layout))
+    def replace_text(self, backspace_count: int, new: str, layout: str) -> bool:
+        self.replacements.append((backspace_count, new, layout))
         if self.on_replace is not None:
             self.on_replace()
         return True
@@ -127,7 +127,7 @@ def test_typing_during_fix_is_not_lost() -> None:
     daemon.buffer = "ghbdtn"
     daemon._process_buffer()
 
-    assert injector.replacements == [("ghbdtn", "привет", "ru")]
+    assert injector.replacements == [(0, "привет", "ru")]
     # The keystroke landed in the buffer and was not swallowed by the fix.
     assert daemon.buffer == "x"
 
@@ -308,7 +308,7 @@ def test_shutdown_arriving_mid_fix_completes_atomically() -> None:
     daemon._process_buffer()
 
     # Once started, the fix finishes: all backspaces and the text go together.
-    assert injector.replacements == [("ghbdtn", "привет", "ru")]
+    assert injector.replacements == [(0, "привет", "ru")]
 
 
 def test_sigterm_handler_sets_flags() -> None:

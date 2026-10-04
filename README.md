@@ -26,8 +26,9 @@ LinguaFix переписывает его и переключает язык. П
 
 LinguaFix is a background daemon for Debian GNOME (X11 and Wayland) that
 detects text typed in the wrong keyboard layout and fixes it automatically.
-It reads raw key events via `evdev`, buffers what you type, and — after a short
-idle timeout — replaces mistyped text and switches the layout. Inspired by
+It reads raw key events via `evdev`, tracks the word you are typing, and — the
+moment you press Space or Enter — replaces mistyped text and switches the
+layout, with no visible pause. Inspired by
 Caramba Switcher for Windows.
 
 ## 🖼️ Демо / Demo
@@ -137,7 +138,7 @@ systemctl --user status linguafix.service
 Файл: `~/.config/linguafix/config.toml` (создаётся с настройками по умолчанию).
 
 ```toml
-analysis_timeout = 1.5     # пауза перед анализом, секунды
+analysis_timeout = 0.8     # запасной таймер простоя, секунды (слова без разделителя)
 min_word_length = 3        # не анализировать короткие слова
 max_buffer_size = 200      # верхняя граница буфера нажатий
 layouts = ["us", "ru"]     # порядок раскладок
@@ -148,11 +149,27 @@ tray_enabled = true        # иконка в трее
 hotkey = "PAUSE"           # ручной триггер исправления
 log_level = "INFO"         # DEBUG | INFO | WARNING | ERROR
 
+# Триггеры по границе слова: слово исправляется мгновенно, без паузы.
+on_space = true            # пробел — основной триггер
+on_enter = true            # Enter — конец строки
+on_tab = false             # Tab (включать осторожно)
+on_punctuation = false     # знаки препинания (включать осторожно)
+punctuation_chars = ".!?,;:"
+
+# Пауза после удаления перед вводом нового текста (Chromium/Electron).
+backspace_settle_ms = 30
+
 # Слова, которые никогда не исправляются (пароли, логины, токены).
 stop_words = [
   "password", "passwd", "login", "token", "secret", "apikey", "sudo",
 ]
 ```
+
+Слова исправляются **сразу** при нажатии пробела или Enter — ждать паузы не
+нужно. `analysis_timeout` — это лишь запасной таймер для слов, набранных без
+разделителя (например, длинного URL). Слова, которые являются частью URL,
+e-mail, пути или версии (`github.com`, `test@example.com`, `3.14`), не
+исправляются.
 
 После правки конфига перезапустите сервис или отправьте `SIGHUP`:
 
