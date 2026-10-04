@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=LinguaFix
+GenericName=Auto Layout Switcher
+Comment=Автоматическое переключение раскладки клавиатуры
+# @BIN@ is substituted at install time: install.sh uses the venv launcher,
+# the .deb uses /usr/bin/linguafix.
+Exec=@BIN@ gui
+Icon=linguafix
+Terminal=false
+Categories=Utility;Accessibility;
+Keywords=keyboard;layout;switcher;
+StartupNotify=true

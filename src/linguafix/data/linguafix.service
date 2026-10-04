@@ -1,0 +1,18 @@
+[Unit]
+Description=LinguaFix — автоматический переключатель раскладки
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+# @BIN@ is substituted at install time: install.sh uses the venv launcher,
+# the .deb uses /usr/bin/linguafix.
+ExecStart=@BIN@ start --foreground
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target

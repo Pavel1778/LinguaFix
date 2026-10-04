@@ -1,0 +1,31 @@
+# LinguaFix — project memory
+
+## Build / test
+- Python venv at `.venv`; run `.venv/bin/python -m pytest`. GUI tests need `xvfb-run -a` + `PYTHONPATH=/usr/lib/python3/dist-packages` (GTK available in this dev container).
+- Local coverage gate is 85 %; CI gate is 80 % (`--cov-fail-under=80`). Current baseline: 505 tests, ~86 % with `gui/*` omitted.
+- **`[tool.coverage.run] omit = ["src/linguafix/gui/*"]`** — CI installs no PyGObject, so the 23 GUI tests skip and the ~800 GUI lines would report 0 %, dropping CI total to ~66 % and failing the gate. Re-add only if CI starts installing GTK.
+- CI runs Python 3.10/3.11/3.12, all green.
+
+## Key invariants (easy to regress)
+- The daemon tracks the current word as **scancodes** (`daemon._scancodes`), not just characters. `TextInjector.replace_text(backspace_count: int, new: str, layout: str)`. The daemon passes `len(self._scancodes)`. A string-based backspace count reintroduces the `рhello` truncation bug (first char left behind).
+- `uinput` replace = two flushes: backspaces (one `syn`), sleep `backspace_settle_ms` (default **50**), then replacement (second `syn`). Single-batch raced Chromium/Electron async Backspace.
+- Boundary-triggered flushes (Space/Enter/Tab/punctuation) sleep `trigger_settle_ms` (default 50) **before** deleting, because the boundary key is still being processed; without it Chromium/Electron coalesce the fast Backspaces and the first char survives (`руддщ ` → `рhello`). Only boundary flushes pass `boundary=True`; idle fallback and hotkey do not.
+- Double-tap modifier hotkey fires only when no *other* modifier family is held (`_held_modifiers - {family}` check) — `Ctrl+Shift+Shift` is a chord, not a fix.
+- Word-boundary triggers (`on_space`/`on_enter` on by default, `on_tab`/`on_punctuation` off) flush+fix inside the same keystroke. `analysis_timeout` default 0.8 is only the idle fallback for unseparated words.
+- Token with an internal separator (`.` `@` `/` `\` `:` `_` `-`) is never rewritten (URLs, e-mails, paths, versions, hyphenated ids). Guard sits AFTER conversion in `_process_buffer_inner` — the privacy test's secret contains `_` and needs the convert path to run.
+- Config TOML is **flat** (no `[sections]`), despite the task prompt suggesting `[trigger]`/`[timing]`. `Config.to_dict` has a fixed key set asserted by tests.
+- **Default detector corpora are `en`+`ru` only** (`DEFAULT_DETECTOR_LANGUAGES` in `detector.py`). The Latin layouts `us`/`de`/`fr` share physical positions; loading all shipped corpora makes them compete and changes borderline results. `uk`/`de`/`fr` are opt-in via `Config.languages`; a missing corpus is skipped, never an empty model.
+- User dictionary is consulted in **two directions**: (1) typed form is an **absolute** override (`target_layout` → `None`); (2) the *converted* form is checked inside the candidate loop in `target_layout` and returns the layout outright, before the corpus guard. So `dict add vercel` makes `муксуд`→`vercel` fire even though `vercel` is absent from the corpora. Without (2) an unknown brand stays silent. Not a score bonus — a bonus is drowned by n-gram penalties. File `~/.local/share/linguafix/dictionary.txt`; edited explicitly (`linguafix dict list|add|remove`, GUI Dictionary tab), never auto-written from typed text. `reload_config` always re-reads it.
+- **Default fix hotkey is `SHIFT+SHIFT`** (`DEFAULT_FIX_HOTKEY`), a double tap of a modifier within `hotkey_double_tap_ms` (100–1000, default 300). `daemon._double_tap_family`/`_build_double_tap_hotkeys`/`_handle_modifier` handle taps; `_parse_hotkey` returns `None` for pure-modifier forms so they don't hit the single-key matcher. Any non-modifier key press clears `_last_modifier_tap`, so a capital letter between two Shifts is not a tap. `LEGACY_FIX_HOTKEY = "PAUSE"`: an old config where **both** `hotkey` and `hotkey_fix_last_word` are `PAUSE` migrates to `SHIFT+SHIFT` on load (a deliberately-set `PAUSE` on only one field is kept).
+- Context analysis (`context_analysis`/`context_weight`) may only *add* to a candidate and never push the current layout below zero.
+- **False-positive guards** (`plausibility_check`, `structural_boundaries`, `identifier_guard`; all default true) sit in `detector._should_guard`, called in `target_layout` **after** the user-dictionary absolute override. Plausibility = score the buffer in the layout it was typed in; if it already reads as real words there, veto the conversion (stops `сb cj,jq?ye;yjn/g/`). Structural = URL/e-mail/path/version separators. Identifier = `_IDENTIFIER_RE` (snake_case, camelCase, `x86_64`). A taught word still wins because it is checked first. `should_fix` uses `_should_guard_structure_only` (no plausibility) so it stays a superset of `target_layout`.
+- **`daemon_control.py` is the single GUI control surface** (replaces deleted `gui/systemd_bridge.py`). `is_running` = PID lock alive **or** systemd active; `stop` prefers `systemctl stop` then SIGTERM→SIGKILL; `reload_config` sends SIGHUP; `undo_last_fix` sends SIGUSR1 (daemon already installs a SIGUSR1 undo handler); `spawn_detached` prefers the installed `linguafix` launcher over `sys.executable -m` (the launcher sets PYTHONPATH for the `.deb` layout). The daemon writes `~/.cache/linguafix/daemon.lock` with `flock`, so a manually-started daemon is visible/controllable from the GUI (the old flaky-toggle root cause).
+- GUI HomePage toggle: `_on_toggle_clicked` calls start/stop then `_reconcile` polls `is_active()` (12×150 ms) before `refresh()` — do not trust the start/stop return value for the UI state; systemd can return before `is-active` flips.
+
+## Environment quirks
+- `evdev` installed but has no `__version__`. Real target: Debian 13 trixie + GNOME 48 + Wayland (outside declared 42–45 range, still works).
+- No `/dev/uinput` access or real keyboard in the dev container; tests monkeypatch `evdev.UInput` with a recording fake and `TextInjector._uinput_available`.
+- Tray (AppIndicator3) absent in dev; not a blocker.
+
+## Repo / process
+- PR #1 stays in draft; branch `feat/linguafix-initial-implementation`. Use `create_pr` tool only when asked.

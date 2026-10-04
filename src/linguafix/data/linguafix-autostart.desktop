@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=LinguaFix
+Comment=Автоматическое переключение раскладки клавиатуры
+# @BIN@ is substituted at install time (venv launcher or /usr/bin/linguafix).
+Exec=@BIN@ start --foreground
+Icon=linguafix
+Terminal=false
+Hidden=false
+X-GNOME-Autostart-enabled=true

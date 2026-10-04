@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build .deb and publish release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev
+          python -m pip install --upgrade pip build
+
+      - name: Build .deb
+        run: bash scripts/build_deb.sh
+
+      - name: Smoke-test the .deb in a clean Debian container
+        run: bash scripts/smoke_test.sh
+
+      - name: Prove the .deb installs with no manual step (zero-config)
+        run: bash scripts/deb_selfsufficiency_test.sh
+
+      - name: Build source distribution
+        run: python -m build --sdist
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum *.deb *.tar.gz > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.deb
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
+          generate_release_notes: true

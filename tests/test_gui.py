@@ -1,0 +1,555 @@
+"""Tests for the GTK4 GUI.
+
+GTK cannot be initialised without a display (it aborts the process), so these
+tests are skipped unless one is available. In CI the suite runs under
+``xvfb-run``, which provides a virtual display; on a developer machine with a
+desktop session they run against the real display.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from linguafix.config import Config
+
+_DIST_PACKAGES = "/usr/lib/python3/dist-packages"
+if os.path.isdir(_DIST_PACKAGES) and _DIST_PACKAGES not in sys.path:
+    sys.path.append(_DIST_PACKAGES)
+
+
+def _gtk_usable() -> bool:
+    """GTK aborts without a display, so only run when one is reachable."""
+    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        return False
+    try:
+        import gi
+
+        gi.require_version("Gtk", "4.0")
+        gi.require_version("Adw", "1")
+        from gi.repository import Adw, Gtk  # noqa: F401
+    except (ImportError, ValueError):
+        return False
+    return True
+
+
+pytestmark = pytest.mark.skipif(not _gtk_usable(), reason="GTK4/libadwaita or display unavailable")
+
+
+@pytest.fixture
+def gui_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Return a :class:`GuiState` isolated to ``tmp_path`` and a fake backend."""
+    from linguafix.gui import state as state_module
+    from linguafix.gui.state import GuiState
+
+    config = Config()
+    monkeypatch.setattr(state_module, "load_config", lambda: config)
+    monkeypatch.setattr(state_module, "save_config", lambda _cfg, _path=None: tmp_path)
+    return GuiState(config=config)
+
+
+def test_window_creates_with_expected_pages(gui_state: Any) -> None:
+    import gi
+
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw
+
+    from linguafix.gui.window import LinguaFixWindow
+
+    app = Adw.Application(application_id="io.github.pavel1778.LinguaFixTest")
+    window = LinguaFixWindow(gui_state, app)
+    assert len(window.stack.get_pages()) == 3
+    assert window.home.toggle.state == "off"
+    window._on_show_advanced(None, None)
+    assert len(window.stack.get_pages()) == 4
+
+
+def test_big_toggle_start_and_stop(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    from linguafix.gui import state as state_module
+
+    active = {"value": False}
+    calls: list[str] = []
+
+    monkeypatch.setattr(state_module, "daemon_is_running", lambda: active["value"])
+    monkeypatch.setattr(state_module, "daemon_start", lambda: calls.append("start") or True)
+    monkeypatch.setattr(state_module, "daemon_stop", lambda: calls.append("stop") or True)
+    monkeypatch.setattr(state_module, "daemon_autostart_enabled", lambda: False)
+    monkeypatch.setattr(state_module, "subprocess", _NoLayout())
+
+    import gi
+
+    from linguafix.gui.home_page import HomePage
+    from linguafix.gui.widgets.big_toggle import STATE_BUSY, STATE_OFF, STATE_ON
+
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw
+
+    page = HomePage(gui_state, Adw.ToastOverlay())
+    assert page.toggle.state == STATE_OFF
+
+    # Turn on: the service is not active, so a click starts it.
+    page._on_toggle_clicked()
+    assert calls == ["start"]
+    assert page.toggle.state == STATE_BUSY
+
+    # The service is now active; the next click stops it.
+    active["value"] = True
+    page.refresh()
+    assert page.toggle.state == STATE_ON
+    page._on_toggle_clicked()
+    assert calls == ["start", "stop"]
+    assert page.toggle.state == STATE_BUSY
+
+
+def test_undo_button_asks_daemon(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    from linguafix.gui import state as state_module
+
+    calls: list[str] = []
+    monkeypatch.setattr(state_module, "daemon_is_running", lambda: True)
+    monkeypatch.setattr(state_module, "daemon_undo_last_fix", lambda: calls.append("undo") or True)
+    monkeypatch.setattr(state_module, "subprocess", _NoLayout())
+
+    import gi
+
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw
+
+    from linguafix.gui.home_page import HomePage
+
+    page = HomePage(gui_state, Adw.ToastOverlay())
+    page._on_undo_clicked(None)
+    assert calls == ["undo"]
+
+
+def test_mode_switcher_persists(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    saved: list[str] = []
+    monkeypatch.setattr(gui_state, "save", lambda: saved.append(gui_state.config.mode))
+
+    from linguafix.gui.widgets.mode_switcher import ModeSwitcher
+
+    switcher = ModeSwitcher(on_change=gui_state.set_mode)
+    switcher.set_mode("hybrid", notify=True)
+    assert gui_state.config.mode == "hybrid"
+    assert saved == ["hybrid"]
+
+
+def test_autostart_switch_enables_and_disables(
+    gui_state: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from linguafix.gui import state as state_module
+
+    enabled = {"value": False}
+    calls: list[bool] = []
+    monkeypatch.setattr(state_module, "daemon_autostart_enabled", lambda: enabled["value"])
+    monkeypatch.setattr(
+        state_module,
+        "daemon_enable_autostart",
+        lambda: calls.append(True) or True,
+    )
+    monkeypatch.setattr(
+        state_module,
+        "daemon_disable_autostart",
+        lambda: calls.append(False) or True,
+    )
+    monkeypatch.setattr(state_module, "subprocess", _NoLayout())
+
+    import gi
+
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw
+
+    from linguafix.gui.home_page import HomePage
+
+    page = HomePage(gui_state, Adw.ToastOverlay())
+    page.autostart_row.set_active(True)
+    assert calls == [True]
+    enabled["value"] = True
+    page.autostart_row.set_active(False)
+    assert calls == [True, False]
+
+
+def test_hotkey_row_validation(gui_state: Any) -> None:
+    from linguafix.gui.widgets.hotkey_row import HotkeyRow
+
+    changes: list[str] = []
+    row = HotkeyRow("Исправить", value="PAUSE", on_change=changes.append)
+    row._start_recording(None)
+    # ENTER must be rejected (forbidden key): nothing is recorded.
+    assert row._on_key_pressed(None, 0xFF0D, 0, 0) is True
+    assert row.value == "PAUSE"
+    assert changes == []
+
+
+def test_hotkey_row_records_and_clears(gui_state: Any) -> None:
+    import gi
+
+    gi.require_version("Gdk", "4.0")
+    from gi.repository import Gdk
+
+    from linguafix.gui.widgets.hotkey_row import HotkeyRow
+
+    changes: list[str] = []
+    row = HotkeyRow("Исправить", value="PAUSE", on_change=changes.append)
+
+    row._start_recording(None)
+    keyval = Gdk.unicode_to_keyval(ord("r"))
+    state = int(Gdk.ModifierType.CONTROL_MASK) | int(Gdk.ModifierType.SHIFT_MASK)
+    assert row._on_key_pressed(None, keyval, 0, state) is True
+    assert row.value == "CTRL+SHIFT+R"
+    assert changes == ["CTRL+SHIFT+R"]
+
+    # Backspace clears the binding.
+    row._start_recording(None)
+    backspace = Gdk.KEY_BackSpace
+    assert row._on_key_pressed(None, backspace, 0, 0) is True
+    assert row.value == ""
+    assert changes == ["CTRL+SHIFT+R", ""]
+
+
+def test_keyval_to_hotkey_rejects_modifier_only() -> None:
+    import gi
+
+    gi.require_version("Gdk", "4.0")
+    from gi.repository import Gdk
+
+    from linguafix.gui.widgets.hotkey_row import keyval_to_hotkey
+
+    assert keyval_to_hotkey(Gdk.KEY_Control_L, 0) is None
+
+
+def test_app_exceptions_list_add_remove(gui_state: Any) -> None:
+    from linguafix.gui.widgets.app_exceptions_list import AppExceptionsList
+
+    changes: list[list[str]] = []
+    widget = AppExceptionsList("Исключения", apps=["code"], on_change=changes.append)
+    assert widget.apps == ["code"]
+
+    class _Entry:
+        def __init__(self, text: str) -> None:
+            self._text = text
+
+        def get_text(self) -> str:
+            return self._text
+
+        def set_text(self, text: str) -> None:
+            self._text = text
+
+    widget._on_add(None, _Entry("gnome-terminal"))
+    assert widget.apps == ["code", "gnome-terminal"]
+    assert changes[-1] == ["code", "gnome-terminal"]
+
+    # Duplicates are ignored.
+    widget._on_add(None, _Entry("code"))
+    assert widget.apps == ["code", "gnome-terminal"]
+
+    widget._on_remove(None, "code")
+    assert widget.apps == ["gnome-terminal"]
+
+
+def test_dictionary_list_add_remove_search(gui_state: Any) -> None:
+    from linguafix.gui.widgets.dictionary_list import DictionaryList
+
+    changes: list[list[str]] = []
+    widget = DictionaryList("Словарь", words=["vercel"], on_change=changes.append)
+    assert widget.words == ["vercel"]
+
+    class _Entry:
+        def __init__(self, text: str) -> None:
+            self._text = text
+
+        def get_text(self) -> str:
+            return self._text
+
+        def set_text(self, text: str) -> None:
+            self._text = text
+
+    widget._on_add(None, _Entry("муксуд"))
+    assert widget.words == ["vercel", "муксуд"]
+    assert changes[-1] == ["vercel", "муксуд"]
+
+    # Duplicates (case-insensitive) are ignored.
+    widget._on_add(None, _Entry("Vercel"))
+    assert widget.words == ["vercel", "муксуд"]
+
+    widget._on_remove(None, "vercel")
+    assert widget.words == ["муксуд"]
+
+
+def test_dictionary_list_import_export(tmp_path: Path, gui_state: Any) -> None:
+    from linguafix.gui.widgets.dictionary_list import DictionaryList
+
+    widget = DictionaryList("Словарь", words=["vercel"])
+    source = tmp_path / "in.txt"
+    source.write_text("# comment\nghbdtn\n\nvercel\n", encoding="utf-8")
+    assert widget.import_words(str(source)) == 1
+    assert widget.words == ["vercel", "ghbdtn"]
+
+    target = tmp_path / "out.txt"
+    assert widget.export_words(str(target)) is True
+    assert target.read_text(encoding="utf-8") == "vercel\nghbdtn\n"
+
+
+def test_dictionary_page_persists_words(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import gi
+
+    gi.require_version("Adw", "1")
+
+    from linguafix.config import Config
+    from linguafix.gui.dictionary_page import DictionaryPage
+    from linguafix.gui.state import GuiState
+
+    config = Config(dictionary_custom_path=str(tmp_path / "dictionary.txt"))
+    state = GuiState(config=config)
+    saved: list[str] = []
+    page = DictionaryPage(state, on_saved=saved.append)
+
+    assert page.dictionary.add_word("vercel") is True
+    assert (tmp_path / "dictionary.txt").read_text(encoding="utf-8") == "vercel\n"
+
+    # The apply button asks the daemon to reload its configuration.
+    monkeypatch.setattr(state, "reload_config", lambda: True)
+    page._on_apply(None)
+    assert saved == ["Словарь применён"]
+
+
+def test_hotkey_row_records_double_tap_modifier(gui_state: Any) -> None:
+    import gi
+
+    gi.require_version("Gdk", "4.0")
+    from gi.repository import Gdk
+
+    from linguafix.gui.widgets.hotkey_row import HotkeyRow
+
+    changes: list[str] = []
+    row = HotkeyRow("Исправить", value="", on_change=changes.append)
+    row._start_recording(None)
+    # First Shift press waits for a second tap.
+    assert row._on_key_pressed(None, Gdk.KEY_Shift_L, 0, 0) is True
+    assert row.value == ""
+    assert changes == []
+    # Second Shift within the window records SHIFT+SHIFT.
+    assert row._on_key_pressed(None, Gdk.KEY_Shift_L, 0, 0) is True
+    assert row.value == "SHIFT+SHIFT"
+    assert changes == ["SHIFT+SHIFT"]
+
+
+def test_status_summary_uses_metadata_only(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gui_state, "current_layout", lambda: "us")
+    gui_state.config.mode = "manual"
+    assert gui_state.status_summary() == "Раскладка: us · Режим: Ручной"
+
+
+def test_seconds_since_last_fix(gui_state: Any) -> None:
+    assert gui_state.seconds_since_last_fix() is None
+    gui_state.last_fix_at = 0.0
+    assert isinstance(gui_state.seconds_since_last_fix(), int)
+
+
+class _NoLayout:
+    """Stand-in for ``subprocess`` so layout probes never touch the system."""
+
+    class CompletedProcess:  # pragma: no cover - trivial
+        returncode = 1
+        stdout = ""
+
+    @staticmethod
+    def run(*_args: Any, **_kwargs: Any) -> Any:
+        return _NoLayout.CompletedProcess()
+
+
+def test_status_row_renders_all_branches() -> None:
+    from linguafix.gui.widgets.status_row import StatusRow
+
+    row = StatusRow()
+    row.update(layout="us", backend="uinput", mode="Авто", seconds_since_fix=None)
+    row.update(layout="ru", backend="", mode="", seconds_since_fix=3)
+    assert True
+
+
+def test_mode_switcher_click_notifies(gui_state: Any) -> None:
+    from linguafix.gui.widgets.mode_switcher import ModeSwitcher
+
+    seen: list[str] = []
+    switcher = ModeSwitcher(on_change=seen.append)
+    switcher._buttons["manual"].set_active(True)
+    assert seen == ["manual"]
+    switcher._buttons["manual"].set_active(True)
+    assert seen == ["manual"]
+    switcher.set_mode("nonsense", notify=True)
+    assert switcher.mode == "manual"
+
+
+def test_big_toggle_states_and_poller() -> None:
+    from linguafix.gui.widgets.big_toggle import (
+        STATE_BUSY,
+        STATE_OFF,
+        STATE_ON,
+        BigToggle,
+        BusyPoller,
+    )
+
+    clicks: list[int] = []
+    toggle = BigToggle(on_toggle=lambda: clicks.append(1))
+    toggle.set_state(STATE_ON, "ru")
+    toggle.set_state(STATE_BUSY)
+    toggle.set_state(STATE_OFF)
+    toggle._on_clicked(None)
+    assert clicks == [1]
+    toggle.set_busy()
+    assert toggle.state == STATE_BUSY
+    toggle._on_clicked(None)
+    assert clicks == [1]
+
+    ready: list[bool] = []
+    poller = BusyPoller(lambda: True, lambda: ready.append(True), attempts=1)
+    assert poller._tick() is False
+    assert ready == [True]
+    ready2: list[bool] = []
+    poller2 = BusyPoller(lambda: False, lambda: ready2.append(True), attempts=0)
+    assert poller2._tick() is False
+    assert ready2 == [True]
+
+
+def test_app_exceptions_set_apps_and_detect(gui_state: Any) -> None:
+    from linguafix.gui.widgets.app_exceptions_list import AppExceptionsList
+
+    widget = AppExceptionsList("Исключения", apps=["code"], on_detect=lambda: "firefox")
+    widget.set_apps(["vim", "nano"])
+    assert widget.apps == ["vim", "nano"]
+
+    class _Entry:
+        def __init__(self) -> None:
+            self.text = ""
+
+        def get_text(self) -> str:
+            return self.text
+
+        def set_text(self, value: str) -> None:
+            self.text = value
+
+    entry = _Entry()
+    widget._on_detect_clicked(None, entry)
+    assert entry.get_text() == "firefox"
+
+
+def test_app_exceptions_add_empty_is_ignored(gui_state: Any) -> None:
+    from linguafix.gui.widgets.app_exceptions_list import AppExceptionsList
+
+    widget = AppExceptionsList("Исключения")
+
+    class _Entry:
+        def get_text(self) -> str:
+            return "   "
+
+        def set_text(self, _value: str) -> None:
+            pass
+
+    widget._on_add(None, _Entry())
+    assert widget.apps == []
+
+
+def test_settings_page_bindings(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    saved: list[str] = []
+    monkeypatch.setattr(gui_state, "save", lambda: saved.append("save"))
+
+    from linguafix.gui.settings_page import SettingsPage
+
+    page = SettingsPage(gui_state, on_saved=saved.append)
+    page._on_mode_selected("hybrid")
+    assert gui_state.config.mode == "hybrid"
+    page._make_hotkey_handler("hotkey_fix_last_word")("CTRL+Q")
+    assert gui_state.config.hotkey_fix_last_word == "CTRL+Q"
+
+
+def test_settings_page_language_toggle(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gui_state, "save", lambda: None)
+
+    from linguafix.gui.settings_page import SettingsPage
+
+    page = SettingsPage(gui_state, on_saved=lambda _m: None)
+    row = page.language_rows["ru"]
+    row.set_active(not row.get_active())
+    gui_state.config.validate()
+    assert isinstance(gui_state.config.languages, list)
+
+
+def test_advanced_page_handlers(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    saved: list[str] = []
+    monkeypatch.setattr(gui_state, "save", lambda: saved.append("save"))
+
+    from linguafix.gui.advanced_page import AdvancedPage
+
+    page = AdvancedPage(gui_state, on_saved=saved.append)
+    page._on_exceptions_changed(["code", "gnome-terminal"])
+    assert gui_state.config.exceptions_apps == ["code", "gnome-terminal"]
+    page._on_force_manual_changed(["kitty"])
+    assert gui_state.config.exceptions_force_in_manual == ["kitty"]
+    page._on_dictionary_size("10000")
+    assert gui_state.config.dictionary_size == 10000
+    page._on_log_level("DEBUG")
+    assert gui_state.config.log_level == "DEBUG"
+    page._make_hotkey_handler("hotkey_toggle_mode")("CTRL+M")
+    assert gui_state.config.hotkey_toggle_mode == "CTRL+M"
+    page._on_reset_hotkeys(None)
+    assert gui_state.config.hotkey_reload_config == "CTRL+SHIFT+R"
+
+
+def test_advanced_page_regex_validation(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gui_state, "save", lambda: None)
+    from linguafix.gui.advanced_page import AdvancedPage
+
+    page = AdvancedPage(gui_state)
+    assert page._validate_regex("") is True
+    assert page._validate_regex("^[a-z]+$") is True
+    assert page._validate_regex("(") is False
+
+
+def test_window_menu_actions(gui_state: Any) -> None:
+    import gi
+
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw
+
+    from linguafix.gui.window import LinguaFixWindow
+
+    app = Adw.Application(application_id="io.github.pavel1778.LinguaFixTest2")
+    window = LinguaFixWindow(gui_state, app)
+    window._on_open_config(None, None)
+    window._on_saved("ok")
+    window._on_show_advanced(None, None)
+    window._on_show_advanced(None, None)
+    assert len(window.stack.get_pages()) == 4
+
+
+def test_about_window_builds() -> None:
+    import gi
+
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw
+
+    from linguafix.gui.about_page import build_about_window
+
+    Adw.Application(application_id="io.github.pavel1778.LinguaFixTest3")
+    dialog = build_about_window()
+    assert dialog.get_application_name() == "LinguaFix"
+
+
+def test_gui_module_availability() -> None:
+    from linguafix.gui import gtk_available
+
+    assert gtk_available() is True
+
+
+def test_gui_main_runs_and_quits(monkeypatch: pytest.MonkeyPatch) -> None:
+    from linguafix.gui import app as app_module, main
+
+    class _App:
+        def run(self, _argv: list[str]) -> int:
+            return 0
+
+    monkeypatch.setattr(app_module, "LinguaFixApplication", _App)
+    assert main([]) == 0

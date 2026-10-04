@@ -1,0 +1,48 @@
+# Changelog
+
+All notable changes to this project are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.1.0] - 2026-10-04
+
+### Added
+
+- Automatic keyboard-layout correction (`ru` <-> `en`; `uk`/`de`/`fr` opt-in).
+- Word-boundary triggers: Space, Enter, Tab, punctuation, plus an idle timeout.
+- Scancode-replay replacement with an atomic Backspace batch and
+  `backspace_settle_ms` / `trigger_settle_ms` pauses for Chromium/Electron.
+- GUI (GTK4 + libadwaita): big on/off toggle, mode switcher, autostart switch,
+  user-dictionary page, per-app exceptions.
+- Working modes `auto` / `manual` / `hybrid` with undo via `Ctrl+Z`.
+- Manual fix hotkey bound to a double tap of Shift by default (configurable).
+- Per-app exceptions, context analysis and a user dictionary.
+- CLI: `start`, `stop`, `kill`, `status`, `config`, `fix`, `doctor`,
+  `collect-logs`, `dict`, `gui`, `mode`, `undo`.
+- Zero-config `.deb`: `uaccess` udev rule, systemd user service, autostart entry
+  and an application-menu entry.
+
+### Fixed
+
+- Truncation when a fix was triggered by Space/Enter (`руддщ ` -> `рhello`):
+  a boundary flush now waits `trigger_settle_ms` before deleting, so the
+  boundary key is processed before the Backspaces arrive.
+- `Ctrl+Shift+Shift` (and other chords) no longer fire the double-tap fix
+  hotkey; a tap counts only when no other modifier family is held.
+- Application menu entry appears immediately after install
+  (`update-desktop-database` in the `.deb` postinst and `install.sh`).
+- False-positive corrections on plausible text, hyphenated identifiers and
+  tokens with internal separators.
+- Multi-character undo is reliable through the daemon (`linguafix undo`).
+
+### Known limitations
+
+- Password-field detection is not possible on Wayland; stop words are the
+  mitigation.
+- The `wtype` and `xdotool` backends are not atomic (only `uinput` is).
+- GNOME layout switching requires `g3kb-switch`.
+- The `uk`/`de`/`fr` corpora are opt-in and have not been calibrated against
+  live input.
+
+[0.1.0]: https://github.com/Pavel1778/LinguaFix/releases/tag/v0.1.0

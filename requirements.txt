@@ -1,0 +1,7 @@
+# Runtime dependencies for LinguaFix.
+# On Debian/Ubuntu most of these are available as system packages:
+#   sudo apt install python3-evdev python3-tomli-w
+# The list below is used when installing inside the bundled virtualenv.
+evdev>=1.6.0
+tomli>=2.0.1; python_version < "3.11"
+tomli-w>=1.0.0
