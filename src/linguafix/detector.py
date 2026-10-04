@@ -161,7 +161,13 @@ class LanguageDetector:
         )
         for language in candidates:
             payload = self._read_corpus(language)
-            vocabulary = {str(w).lower() for w in payload.get("words", [])}
+            raw_words = payload.get("words", [])
+            if self._dictionary_size > 0:
+                # ``dictionary_size`` trades memory for recall. The corpora are
+                # stored most-frequent-first, so slicing keeps the common words;
+                # sorting the set instead would drop exactly those.
+                raw_words = raw_words[: self._dictionary_size]
+            vocabulary = {str(w).lower() for w in raw_words}
             bigrams = {str(bg): float(freq) for bg, freq in payload.get("bigrams", {}).items()}
             if not vocabulary and not bigrams:
                 # A layout whose language has no bundled corpus yet (for example
@@ -170,11 +176,6 @@ class LanguageDetector:
                 # win by accident.
                 logger.debug("No corpus for language %s; skipping it", language)
                 continue
-            if self._dictionary_size > 0:
-                # ``dictionary_size`` trades memory for recall. The bundled
-                # lists are already sorted by frequency, so truncation keeps the
-                # most common words.
-                vocabulary = set(sorted(vocabulary)[: self._dictionary_size])
             self._vocabularies[language] = vocabulary
             self._bigrams[language] = bigrams
 
@@ -251,6 +252,25 @@ class LanguageDetector:
         if tokens & self._stop_words:
             return True
         return bool(self._stop_words & {text.strip().lower()})
+
+    def _taught_conversion(self, text: str, current_layout: str) -> str | None:
+        """Return a layout whose conversion of ``text`` is a user-taught word.
+
+        The user dictionary validates the *converted* form, so ``муксуд`` (typed
+        in the wrong layout) is recognised as ``vercel``. This is checked before
+        the false-positive guards because a taught brand must win even when the
+        source text looks plausible.
+        """
+        if not self._user_words:
+            return None
+        for layout in self.converter.available_layouts:
+            if layout == current_layout:
+                continue
+            if self.converter.convert(text, current_layout, layout).strip().lower() in (
+                self._user_words
+            ):
+                return layout
+        return None
 
     def _bigram_score(self, word: str, language: str) -> float:
         """Return the average log-probability of ``word`` in ``language``."""
@@ -489,6 +509,20 @@ class LanguageDetector:
             )
             return None
 
+        # A conversion the user taught is a *known good* result, not a guess: the
+        # user dictionary validates the converted form (``муксуд`` -> ``vercel``),
+        # so it wins outright — before the false-positive guards, which would
+        # otherwise veto a real brand that reads as plausible noise in the source
+        # layout.
+        taught = self._taught_conversion(stripped, current_layout)
+        if taught is not None:
+            logger.debug(
+                "detect(len=%d): conversion matches the user dictionary; target %s",
+                len(stripped),
+                taught,
+            )
+            return taught
+
         # False-positive guards. They only ever prevent a conversion; a taught
         # word was already handled above, so this cannot suppress an intended fix.
         if self._should_guard(stripped, current_layout):
@@ -524,18 +558,6 @@ class LanguageDetector:
             if layout == current_layout:
                 continue
             converted = self.converter.convert(stripped, current_layout, layout)
-            # A conversion the user taught is a *known good* result, not a guess:
-            # the user dictionary validates the converted form (``муксуд`` ->
-            # ``vercel``), so the candidate wins outright. Checked before the
-            # corpus guard so a taught word still works when the target language
-            # has no bundled corpus loaded.
-            if converted.strip().lower() in self._user_words:
-                logger.debug(
-                    "detect(len=%d): conversion matches the user dictionary; target %s",
-                    len(stripped),
-                    layout,
-                )
-                return layout
             language = self._layout_language(layout)
             if language is None or language not in self._vocabularies:
                 # Without a corpus the candidate scores 0.0 for everything and

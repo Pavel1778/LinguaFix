@@ -134,8 +134,8 @@ def test_extra_keypress_is_included_in_the_count() -> None:
     even if a character-level buffer would have drifted.
     """
     daemon = _daemon_with_fake_injector()
-    _press(daemon, ["KEY_H", "KEY_E", "KEY_L", "KEY_L", "KEY_O", "KEY_Q"])
-    assert daemon.buffer == "руддщй"
+    _press(daemon, ["KEY_H", "KEY_E", "KEY_L", "KEY_L", "KEY_O", "KEY_DOT"])
+    assert daemon.buffer == "руддщю"
     _press(daemon, ["KEY_SPACE"])
 
     injector = daemon.injector

@@ -83,6 +83,7 @@ def make_daemon(monkeypatch: pytest.MonkeyPatch, **kwargs: object) -> LinguaFixD
         converter=LayoutConverter(),
         stop_words=config.stop_words,
         min_word_length=config.min_word_length,
+        confidence_threshold=config.confidence_threshold,
     )
     if "dictionary_custom_path" in kwargs:
         monkeypatch.setattr(
@@ -108,15 +109,15 @@ def _injector(daemon: LinguaFixDaemon) -> FakeInjector:
 
 def test_context_analysis_can_flip_a_borderline_word() -> None:
     converter = LayoutConverter()
-    without = LanguageDetector(converter)
+    without = LanguageDetector(converter, confidence_threshold=0.3)
     without.context_weight = 0.0
-    with_context = LanguageDetector(converter)
+    with_context = LanguageDetector(converter, confidence_threshold=0.3)
     with_context.context_weight = 0.3
 
-    # A borderline 4-letter buffer that the plain model leaves alone; a clear
-    # Russian neighbour tips it over the line.
-    assert without.target_layout("qqrh", "us", "привет") is None
-    assert with_context.target_layout("qqrh", "us", "привет") == "ru"
+    # A borderline 3-letter buffer the plain model leaves alone; a clear Russian
+    # neighbour tips it over the line.
+    assert without.target_layout("xno", "us", "привет") is None
+    assert with_context.target_layout("xno", "us", "привет") == "ru"
 
 
 def test_context_does_not_change_the_current_layout() -> None:
@@ -128,10 +129,10 @@ def test_context_does_not_change_the_current_layout() -> None:
 
 
 def test_daemon_uses_neighbour_as_context(monkeypatch: pytest.MonkeyPatch) -> None:
-    daemon = make_daemon(monkeypatch, context_analysis=True, context_weight=0.3)
+    daemon = make_daemon(monkeypatch, context_analysis=True, context_weight=0.6)
     daemon._last_word = "привет"
     injector = _injector(daemon)
-    press(daemon, "qqrh")
+    press(daemon, "xno")
     tap(daemon, "KEY_SPACE")
     assert injector.replacements and injector.replacements[0][2] == "ru"
 
@@ -139,7 +140,7 @@ def test_daemon_uses_neighbour_as_context(monkeypatch: pytest.MonkeyPatch) -> No
 def test_context_disabled_ignores_neighbour(monkeypatch: pytest.MonkeyPatch) -> None:
     daemon = make_daemon(monkeypatch, context_analysis=False)
     daemon._last_word = "привет"
-    press(daemon, "qqrh")
+    press(daemon, "xno")
     tap(daemon, "KEY_SPACE")
     assert _injector(daemon).replacements == []
 

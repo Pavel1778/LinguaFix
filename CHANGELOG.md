@@ -5,6 +5,35 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-10-04
+
+### Added
+
+- Full 10 000-word frequency dictionaries for all five supported languages
+  (`en`, `ru`, `uk`, `de`, `fr`), built from the FrequencyWords lists. The
+  detector now loads any of them; `uk`/`de`/`fr` remain opt-in through
+  `Config.languages`.
+- A Ctrl/Alt chord abandons the word being typed, so `Ctrl+C` no longer leaves a
+  stale word for the next Space to "correct". A Ctrl-based fix hotkey
+  (`CTRL+F12`) and the `CTRL+CTRL` double tap still see the suspended word.
+- A word taught in the user dictionary is honoured as a *converted* form before
+  the false-positive guards run, so a brand typed in the wrong layout
+  (`муксуд` -> `vercel`) is always fixed.
+
+### Changed
+
+- Default undo hotkey `CTRL+Z` -> `SHIFT+BACKSPACE` (Ctrl+Z collides with the
+  application's own undo).
+- The systemd unit runs the daemon with `Nice=-10` and round-robin scheduling so
+  a fix wins the race against the compositor's handling of the boundary key.
+- `dictionary_size` truncation now keeps the most frequent words (the corpora
+  are stored frequency-first) instead of an alphabetical slice.
+
+### Fixed
+
+- A user-taught brand whose source text looks plausible (`муксуд`) was rejected
+  by the plausibility guard before the user dictionary was consulted.
+
 ## [0.1.0] - 2026-10-04
 
 ### Added
@@ -45,4 +74,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `uk`/`de`/`fr` corpora are opt-in and have not been calibrated against
   live input.
 
+[0.2.0]: https://github.com/Pavel1778/LinguaFix/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Pavel1778/LinguaFix/releases/tag/v0.1.0
