@@ -42,7 +42,7 @@ watching the log. It is safe to paste as one piece. It exercises the
 
 ```bash
 # 1. Install the package. No usermod, no manual enable.
-sudo apt install ./linguafix_0.1.0_all.deb
+sudo apt install ./linguafix_0.2.0_all.deb
 
 # 2. Verify that nothing else is required.
 systemctl --user is-enabled linguafix.service   # -> enabled
@@ -89,7 +89,7 @@ GDM).
 
 `.deb` path (primary):
 
-1. `sudo apt install ./linguafix_0.1.0_all.deb` — note every prompt and any failure.
+1. `sudo apt install ./linguafix_0.2.0_all.deb` — note every prompt and any failure.
 2. Confirm the udev rule: `cat /usr/lib/udev/rules.d/71-linguafix.rules` — uses
    `TAG+="uaccess"`, no `GROUP="input"`.
 3. `systemctl --user is-enabled linguafix.service` — prints `enabled`, without

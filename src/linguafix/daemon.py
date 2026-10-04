@@ -33,15 +33,21 @@ import subprocess
 import threading
 import time
 import traceback
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Final
 
-from .config import Config, cache_dir
+from .app_focus import get_active_app, get_focused_role
+from .app_layouts import AppLayoutManager
+from .config import Config, cache_dir, snippets_path
 from .converter import LayoutConverter
 from .detector import LanguageDetector
 from .dictionary import load_user_dictionary
 from .injector import TextInjector
+from .selection_fix import SelectionFix
 from .switcher import LayoutSwitcher
+from .text_expander import TextExpander
 from .tray import TrayIcon
+from .typo import TypoCorrector
 
 if TYPE_CHECKING:  # pragma: no cover - import used only for typing
     from evdev import InputDevice
@@ -256,6 +262,7 @@ class LinguaFixDaemon:
             "undo": self._parse_hotkey(config.hotkey_undo_last_fix),
             "toggle_mode": self._parse_hotkey(config.hotkey_toggle_mode),
             "reload": self._parse_hotkey(config.hotkey_reload_config),
+            "selection_fix": self._parse_hotkey(config.selection_fix_hotkey),
         }
         # Modifier families currently held down, used to match hotkeys.
         self._held_modifiers: set[str] = set()
@@ -277,6 +284,25 @@ class LinguaFixDaemon:
         user_words = load_user_dictionary(config.dictionary_custom_path)
         if user_words:
             self.detector.set_user_words(user_words)
+        # T9: one corrector per language, built lazily from the detector's
+        # vocabulary the first time a typo is checked.
+        self._typo_correctors: dict[str, TypoCorrector] = {}
+        # Text expansion (snippets). Loaded once here and re-loaded on reload.
+        self._expander = TextExpander()
+        self._load_snippets(config)
+        # Selection fix converts the layout of text that is already selected.
+        self.selection_fix = SelectionFix(converter=self.converter, injector=self.injector)
+        # Per-app preferred layout: switch when the focused app changes.
+        self.app_layout_manager = AppLayoutManager(
+            layouts=config.app_layouts,
+            switch_layout=self.switcher.switch_to,
+            probe=get_active_app,
+            enabled=config.app_layout_switch,
+        )
+        # Stage 13: the loop checks for updates at most once a day. The deadline
+        # is kept in memory so the poll loop never touches the disk or network
+        # until it is actually due.
+        self._next_update_check: float = 0.0
 
         # The characters currently on screen for the word being typed. Derived
         # from ``_scancodes`` and kept in step with it (one char per printable
@@ -303,6 +329,9 @@ class LinguaFixDaemon:
         # the event loop. ``_lock`` serialises buffer processing so the same text
         # is never corrected twice.
         self._lock = threading.RLock()
+        # Focused-role probe (AT-SPI). Injectable so tests can simulate a
+        # password field without an accessibility bus.
+        self._focused_role_probe: Callable[[], str | None] = get_focused_role
 
     # ------------------------------------------------------------------
     # Device discovery
@@ -687,8 +716,6 @@ class LinguaFixDaemon:
         if not manual and not self._excepted_apps:
             return True
 
-        from .app_focus import get_active_app
-
         try:
             app = get_active_app()
         except Exception:
@@ -738,6 +765,68 @@ class LinguaFixDaemon:
             self._cycle_mode()
         elif action == "reload":
             self.reload_config()
+        elif action == "selection_fix":
+            if self.config.selection_fix_enabled:
+                self.selection_fix.convert_selection()
+
+    def _load_snippets(self, config: Config) -> None:
+        """(Re)load the snippet file named by ``config``, best-effort."""
+        if not config.text_expander_enabled:
+            return
+        path = config.text_expander_snippets_path or str(snippets_path())
+        self._expander.load(path)
+
+    def _expand_snippet(self, buffer: str, current: str, backspace_count: int) -> bool:
+        """Replace ``buffer`` with its snippet expansion. Return ``True`` on success."""
+        match = self._expander.check(buffer)
+        if match is None:
+            return False
+        trigger, expansion = match
+        logger.info("Expanding snippet of length %d", len(trigger))
+        if self.dry_run:
+            logger.info("Dry run: skipping snippet expansion")
+            return True
+        if self._shutdown_requested:
+            return False
+        if self.injector.replace_text(backspace_count, expansion, current):
+            self._record_undo(buffer, current, backspace_count)
+            if self.config.notify_on_fix:
+                self._notify()
+        return True
+
+    def _typo_correction(self, buffer: str, current: str) -> str | None:
+        """Return a single-word typo correction for ``buffer``, or ``None``.
+
+        Only a plain letter word in the language the user is typing is
+        considered, and only when T9 is enabled. A taught word and any word with
+        a structural separator are never touched, so a brand or a path cannot be
+        "corrected" into a dictionary word.
+        """
+        if not self.config.typo_correction:
+            return None
+        word = buffer.strip()
+        if len(word) < self.config.typo_min_word_length or not word.isalpha():
+            return None
+        if self.detector.is_user_word(word) or _INTERNAL_SEPARATOR_RE.search(word):
+            return None
+        language = self.detector.language_for_layout(current)
+        if language is None:
+            return None
+        corrector = self._typo_correctors.get(language)
+        if corrector is None:
+            corrector = TypoCorrector(
+                list(self.detector.vocabulary(language)),
+                max_distance=self.config.typo_max_distance,
+                min_length=self.config.typo_min_word_length,
+            )
+            self._typo_correctors[language] = corrector
+        suggestion = corrector.suggest(word)
+        if suggestion is None or suggestion == word:
+            return None
+        # Preserve the user's capitalisation (``Teh`` -> ``The``).
+        if word[0].isupper():
+            suggestion = suggestion[:1].upper() + suggestion[1:]
+        return suggestion
 
     def _record_undo(self, original: str, layout: str, backspace_count: int) -> None:
         """Remember a successful fix so it can be undone shortly afterwards."""
@@ -883,6 +972,8 @@ class LinguaFixDaemon:
             backspace_count = len(self._scancodes)
             self.buffer = ""
             self._scancodes = []
+        # Per-app preferred layout: cheap when disabled, throttled otherwise.
+        self.app_layout_manager.maybe_apply(time.monotonic())
         if boundary:
             logger.debug(
                 "Boundary flush: trigger=%s scancodes=%d buffer_len=%d",
@@ -895,6 +986,28 @@ class LinguaFixDaemon:
 
         if self.detector.is_stop_word(buffer):
             logger.debug("Buffer of length %d is a stop word; skipping", len(buffer))
+            return
+
+        # Never rewrite what is typed into a password field. AT-SPI reports the
+        # focused element's role; a positive "password" verdict skips the fix.
+        # An unavailable/undetermined role returns None and correction proceeds
+        # as before, so a missing accessibility bus does not disable the daemon.
+        if self.config.password_guard:
+            try:
+                role = self._focused_role_probe()
+            except Exception:
+                logger.debug("Focused-role probe failed", exc_info=True)
+                role = None
+            if role == "password":
+                logger.debug("Focused element is a password field; skipping")
+                return
+
+        # Text expansion runs before any layout analysis: a snippet trigger is
+        # honoured verbatim and never converted to another layout. It is also
+        # independent of the auto/manual mode.
+        if self.config.text_expander_enabled and self._expand_snippet(
+            buffer, self.switcher.get_current_layout(), backspace_count
+        ):
             return
 
         # In manual mode nothing is corrected unless the user forces it (hotkey)
@@ -916,9 +1029,16 @@ class LinguaFixDaemon:
         current = self.switcher.get_current_layout()
         target = self.detector.target_layout(buffer, current, neighbor)
         if target is None:
-            return
-
-        converted = self.converter.convert(buffer, current, target)
+            # Layout detection found nothing. A separate, opt-in step then looks
+            # for a single-character typo in the language the user is typing;
+            # that fix stays in the current layout.
+            corrected = self._typo_correction(buffer, current)
+            if corrected is None:
+                return
+            converted = corrected
+            target = current
+        else:
+            converted = self.converter.convert(buffer, current, target)
         if converted == buffer:
             return
 
@@ -1018,6 +1138,9 @@ class LinguaFixDaemon:
         # Always re-read the user dictionary: the reload hotkey is also how a
         # user picks up words they just added to the file.
         self.detector.set_user_words(load_user_dictionary(new_config.dictionary_custom_path))
+        # The vocabularies may have changed, so any cached corrector is stale.
+        self._typo_correctors.clear()
+        self._load_snippets(new_config)
         self._skip_regex = _compile_skip_regex(new_config.custom_skip_regex)
         self._excepted_apps = {app.lower() for app in new_config.exceptions_apps}
         self.switcher.layouts = list(new_config.layouts)
@@ -1026,9 +1149,17 @@ class LinguaFixDaemon:
             "undo": self._parse_hotkey(new_config.hotkey_undo_last_fix),
             "toggle_mode": self._parse_hotkey(new_config.hotkey_toggle_mode),
             "reload": self._parse_hotkey(new_config.hotkey_reload_config),
+            "selection_fix": self._parse_hotkey(new_config.selection_fix_hotkey),
         }
         self._double_tap_hotkeys = self._build_double_tap_hotkeys(new_config)
         self._last_modifier_tap.clear()
+        self.app_layout_manager.update(
+            new_config.app_layouts,
+            enabled=new_config.app_layout_switch,
+            switch_layout=self.switcher.switch_to,
+        )
+        if not new_config.update_check_enabled:
+            self._next_update_check = 0.0
         logger.info("Configuration reloaded")
 
     # ------------------------------------------------------------------
@@ -1176,6 +1307,51 @@ class LinguaFixDaemon:
                         device.close()
 
             self._flush_if_idle()
+            self._maybe_check_update()
+
+    def _maybe_check_update(self) -> None:
+        """Run the opt-in update check at most once a day (Stage 13)."""
+        if not self.config.update_check_enabled:
+            return
+        now = time.time()
+        if now < self._next_update_check:
+            return
+        from .update_check import CHECK_INTERVAL_SECONDS, check_for_update
+
+        # Throttle in memory; the loop runs every ``SELECT_TIMEOUT`` and must
+        # not read the stamp file (or the network) on each iteration.
+        self._next_update_check = now + CHECK_INTERVAL_SECONDS
+        info = check_for_update()
+        if info is None or not info.update_available:
+            return
+        logger.info(
+            "LinguaFix %s is available (running %s): %s",
+            info.latest,
+            info.current,
+            info.url,
+        )
+        self._notify_update(info.latest)
+
+    def _notify_update(self, latest: str) -> None:
+        """Show a desktop notification about an available update.
+
+        The text is built from the remote version tag only; no typed text or
+        local configuration is involved.
+        """
+        try:
+            subprocess.run(
+                [
+                    "notify-send",
+                    "--app-name=LinguaFix",
+                    "LinguaFix",
+                    f"Доступна версия {latest}",
+                ],
+                check=False,
+                capture_output=True,
+                timeout=NOTIFY_TIMEOUT,
+            )
+        except (OSError, subprocess.SubprocessError):
+            logger.debug("notify-send failed", exc_info=True)
 
     def _flush_if_idle(self) -> None:
         """Flush the buffer when it has been idle past the fallback timeout.

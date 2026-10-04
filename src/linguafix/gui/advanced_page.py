@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from pathlib import Path
 
 import gi
 
@@ -15,6 +16,8 @@ from ..config import DEFAULT_FIX_HOTKEY, DEFAULT_UNDO_HOTKEY, config_path  # noq
 from .prefs_base import BoundPreferencesPage  # noqa: E402
 from .state import GuiState  # noqa: E402
 from .widgets.app_exceptions_list import AppExceptionsList  # noqa: E402
+from .widgets.app_layout_map import AppLayoutMap  # noqa: E402
+from .widgets.backup_group import BackupGroup  # noqa: E402
 from .widgets.hotkey_row import HotkeyRow  # noqa: E402
 
 DICTIONARY_OPTIONS = ("1000", "5000", "10000")
@@ -31,8 +34,11 @@ class AdvancedPage(BoundPreferencesPage):
         self._build_injection_group()
         self._build_exceptions_group()
         self._build_dictionary_group()
+        self._build_typo_group()
+        self._build_expander_group()
         self._build_hotkeys_group()
         self._build_notifications_group()
+        self._build_backup_group()
         self._build_logs_group()
 
     # --- detector ---------------------------------------------------------
@@ -63,6 +69,12 @@ class AdvancedPage(BoundPreferencesPage):
         self.add_switch(group, "Не трогать СЛОВА_КАПСОМ", "ignore_all_caps")
         self.add_switch(group, "Не трогать слова с цифрами", "ignore_with_digits")
         self.add_switch(group, "Не трогать email и URL", "ignore_emails_urls")
+        self.add_switch(
+            group,
+            "Не трогать поля пароля",
+            "password_guard",
+            subtitle="Через AT-SPI (доступность); при недоступности — обычное поведение",
+        )
         self._regex_entry = self.add_entry(
             group,
             "Свой regex-пропуск",
@@ -148,6 +160,21 @@ class AdvancedPage(BoundPreferencesPage):
             on_change=self._on_force_manual_changed,
         )
         self.add(self._force_manual)
+        self._app_layouts = AppLayoutMap(
+            "Раскладка по приложениям",
+            "При переключении на приложение включать эту раскладку",
+            self._config.app_layouts,
+            on_change=self._on_app_layouts_changed,
+            on_detect=self._detect_current_app,
+        )
+        self.add(self._app_layouts)
+        self.add_switch(
+            self._app_layouts, "Переключать раскладку по приложению", "app_layout_switch"
+        )
+
+    def _on_app_layouts_changed(self, mapping: dict[str, str]) -> None:
+        self._config.app_layouts = mapping
+        self._save("Раскладка по приложениям сохранена")
 
     def _on_exceptions_changed(self, apps: list[str]) -> None:
         self._config.exceptions_apps = apps
@@ -184,6 +211,43 @@ class AdvancedPage(BoundPreferencesPage):
         self._config.dictionary_size = int(value)
         self._save("Словарь сохранён")
 
+    # --- typo correction (T9) ---------------------------------------------
+    def _build_typo_group(self) -> None:
+        group = Adw.PreferencesGroup(
+            title="Исправление опечаток (T9)",
+            description="Меняет слово на ближайшее из словаря, только если "
+            "вариант ровно один. Выключено по умолчанию.",
+        )
+        self._typo_switch = self.add_switch(group, "Исправлять опечатки", "typo_correction")
+        self.add_spin(
+            group,
+            "Максимум опечаток в слове",
+            "typo_max_distance",
+            lower=1,
+            upper=2,
+            step=1,
+        )
+        self.add_spin(
+            group,
+            "Минимальная длина слова",
+            "typo_min_word_length",
+            lower=3,
+            upper=12,
+            step=1,
+        )
+        self.add(group)
+
+    # --- text expansion (snippets) ----------------------------------------
+    def _build_expander_group(self) -> None:
+        group = Adw.PreferencesGroup(
+            title="Текстовые сокращения",
+            description="Короткий триггер превращается в длинный текст, "
+            "например !!email → адрес. Выключено по умолчанию.",
+        )
+        self.add_switch(group, "Включить сокращения", "text_expander_enabled")
+        self.add_entry(group, "Файл сокращений", "text_expander_snippets_path")
+        self.add(group)
+
     # --- hotkeys ----------------------------------------------------------
     def _build_hotkeys_group(self) -> None:
         group = Adw.PreferencesGroup(title="Хоткеи")
@@ -201,7 +265,15 @@ class AdvancedPage(BoundPreferencesPage):
             on_change=self._make_hotkey_handler("hotkey_reload_config"),
         )
         group.add(self._reload_row)
+        self._selection_row = HotkeyRow(
+            "Исправить выделенный текст",
+            "CTRL+SHIFT+L",
+            self._config.selection_fix_hotkey,
+            on_change=self._make_hotkey_handler("selection_fix_hotkey"),
+        )
+        group.add(self._selection_row)
         self.add_switch(group, "Не передавать хоткей в приложение", "hotkey_swallow")
+        self.add_switch(group, "Исправлять выделенный текст", "selection_fix_enabled")
         reset = Gtk.Button(label="Сбросить к дефолтным")
         reset.connect("clicked", self._on_reset_hotkeys)
         reset.set_halign(Gtk.Align.START)
@@ -224,8 +296,10 @@ class AdvancedPage(BoundPreferencesPage):
         self._config.hotkey_toggle_mode = ""
         self._config.hotkey_reload_config = "CTRL+SHIFT+R"
         self._config.hotkey = DEFAULT_FIX_HOTKEY
+        self._config.selection_fix_hotkey = "CTRL+SHIFT+L"
         self._toggle_row.set_value("")
         self._reload_row.set_value("CTRL+SHIFT+R")
+        self._selection_row.set_value("CTRL+SHIFT+L")
         self._save("Хоткеи сброшены")
 
     # --- notifications ----------------------------------------------------
@@ -235,9 +309,45 @@ class AdvancedPage(BoundPreferencesPage):
         self.add_switch(group, "Уведомлять об ошибке", "notify_on_error")
         self.add_switch(group, "Звук при исправлении", "sound_on_fix")
         self.add_switch(group, "Иконка в трее", "tray_enabled")
+        self.add_switch(
+            group,
+            "Проверять обновления",
+            "update_check_enabled",
+            subtitle="Раз в сутки запрашивает номер последней версии на GitHub",
+        )
         self.add(group)
 
-    # --- logs -------------------------------------------------------------
+    # --- backup -----------------------------------------------------------
+    def _build_backup_group(self) -> None:
+        self._backup_group = BackupGroup(
+            on_export=self._export_settings,
+            on_import=self._import_settings,
+            on_notify=self._on_saved,
+        )
+        self.add(self._backup_group)
+
+    @staticmethod
+    def _export_settings(path: str) -> bool:
+        from ..backup import write_backup
+
+        try:
+            write_backup(Path(path))
+        except OSError:
+            return False
+        return True
+
+    def _import_settings(self, path: str) -> bool:
+        from ..backup import apply_backup, read_backup
+
+        try:
+            data = read_backup(Path(path))
+        except (OSError, ValueError):
+            return False
+        apply_backup(data)
+        self._state.reload()
+        self._config = self._state.config
+        return True
+
     def _build_logs_group(self) -> None:
         group = Adw.PreferencesGroup(title="Логи")
         self.add_combo(

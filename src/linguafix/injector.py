@@ -302,6 +302,47 @@ class TextInjector:
             return False
         return True
 
+    def tap_combo(self, key_names: list[str]) -> bool:
+        """Press ``key_names`` together (in order) through a virtual keyboard.
+
+        Used for shortcuts such as ``Ctrl+C``. ``key_names`` are evdev names
+        (``"KEY_LEFTCTRL"``, ``"KEY_C"``); modifiers are held while the last key
+        is tapped. Only the ``uinput`` backend is supported; other backends
+        return ``False``.
+        """
+        if not key_names or self._backend != BACKEND_UINPUT:
+            return False
+        try:
+            import evdev
+        except ImportError:
+            logger.error("uinput backend requested but evdev is missing")
+            return False
+        resolved: list[int] = []
+        for name in key_names:
+            code = getattr(evdev.ecodes, name, None)
+            if code is None:
+                logger.error("Unknown key in combo %s", key_names)
+                return False
+            resolved.append(int(code))
+        code_set = set(resolved)
+        ev_key = evdev.ecodes.EV_KEY
+        try:
+            device = self._open_uinput(evdev, code_set)
+            try:
+                for code in resolved[:-1]:
+                    device.write(ev_key, code, 1)
+                device.write(ev_key, resolved[-1], 1)
+                device.write(ev_key, resolved[-1], 0)
+                for code in reversed(resolved[:-1]):
+                    device.write(ev_key, code, 0)
+                device.syn()
+            finally:
+                self._close_uinput(device)
+        except (OSError, PermissionError, ValueError):
+            logger.error("Could not create uinput device", exc_info=True)
+            return False
+        return True
+
     def _resolve_uinput_keys(
         self, text: str, layout: str
     ) -> tuple[list[tuple[int, bool]], set[int]] | None:

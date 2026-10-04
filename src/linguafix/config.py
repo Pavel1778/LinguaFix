@@ -59,6 +59,11 @@ DEFAULT_PLAUSIBILITY_FLOOR: Final[float] = -7.0
 # A run of consonants longer than this is a strong "not a word" signal.
 DEFAULT_MAX_CONSECUTIVE_CONSONANTS: Final[int] = 6
 DEFAULT_MIN_VOWEL_RATIO: Final[float] = 0.15
+# T9 typo correction. Off by default: a wrong correction is worse than none, so
+# the user opts in. Only a single edit is accepted, and only for words of at
+# least ``DEFAULT_TYPO_MIN_WORD_LENGTH`` characters.
+DEFAULT_TYPO_MAX_DISTANCE: Final[int] = 1
+DEFAULT_TYPO_MIN_WORD_LENGTH: Final[int] = 4
 # The manual-fix hotkey default. A double tap of the same modifier works on
 # every keyboard, unlike the previous ``PAUSE`` default (many laptops have no
 # Pause key). ``SHIFT+SHIFT`` is the double-tap of the shift family.
@@ -127,6 +132,10 @@ _SECTION_PREFIXES: Final[dict[str, str]] = {
     "exceptions": "exceptions_",
     "dictionary": "dictionary_",
     "dictionaries": "dictionary_",
+    "typo": "typo_",
+    "t9": "typo_",
+    "expander": "text_expander_",
+    "selection": "selection_fix_",
     "apps": "exceptions_",
 }
 
@@ -168,6 +177,11 @@ def config_dir() -> Path:
 def config_path() -> Path:
     """Return the full path to ``config.toml``."""
     return config_dir() / "config.toml"
+
+
+def snippets_path() -> Path:
+    """Return the default path to ``snippets.toml``."""
+    return config_dir() / "snippets.toml"
 
 
 def state_dir() -> Path:
@@ -277,6 +291,7 @@ class Config:
     plausibility_check: bool = True
     structural_boundaries: bool = True
     identifier_guard: bool = True
+    password_guard: bool = True
     plausibility_floor: float = DEFAULT_PLAUSIBILITY_FLOOR
     max_consecutive_consonants: int = DEFAULT_MAX_CONSECUTIVE_CONSONANTS
     min_vowel_ratio: float = DEFAULT_MIN_VOWEL_RATIO
@@ -285,6 +300,29 @@ class Config:
     exceptions_force_in_manual: list[str] = field(default_factory=list)
     dictionary_size: int = DEFAULT_DICTIONARY_SIZE
     dictionary_custom_path: str = ""
+
+    # --- Task F: T9 typo correction ----------------------------------------
+    typo_correction: bool = False
+    typo_max_distance: int = DEFAULT_TYPO_MAX_DISTANCE
+    typo_min_word_length: int = DEFAULT_TYPO_MIN_WORD_LENGTH
+
+    # --- Stage 7: text expansion (snippets) --------------------------------
+    text_expander_enabled: bool = False
+    text_expander_snippets_path: str = ""
+
+    # --- Stage 8: selection fix --------------------------------------------
+    selection_fix_enabled: bool = True
+    selection_fix_hotkey: str = "CTRL+SHIFT+L"
+
+    # --- Stage 9: per-app default layout -----------------------------------
+    # Maps an application name (as reported by app_focus) to the layout that
+    # should be active when it gains focus, e.g. {"kitty": "ru"}.
+    app_layouts: dict[str, str] = field(default_factory=dict)
+    app_layout_switch: bool = False
+
+    # --- Stage 13: opt-in update check -------------------------------------
+    # The only feature that uses the network; off by default.
+    update_check_enabled: bool = False
 
     def __post_init__(self) -> None:
         self.validate()
@@ -405,6 +443,7 @@ class Config:
         self.plausibility_check = bool(self.plausibility_check)
         self.structural_boundaries = bool(self.structural_boundaries)
         self.identifier_guard = bool(self.identifier_guard)
+        self.password_guard = bool(self.password_guard)
         self.plausibility_floor = float(self.plausibility_floor)
         self.max_consecutive_consonants = int(self.max_consecutive_consonants)
         if self.max_consecutive_consonants < 2:
@@ -430,6 +469,31 @@ class Config:
         if self.dictionary_size not in VALID_DICTIONARY_SIZES:
             raise ValueError(f"dictionary_size must be one of {VALID_DICTIONARY_SIZES}")
         self.dictionary_custom_path = str(self.dictionary_custom_path)
+
+        # --- T9 typo correction --------------------------------------------
+        self.typo_correction = bool(self.typo_correction)
+        self.typo_max_distance = int(self.typo_max_distance)
+        if self.typo_max_distance not in (1, 2):
+            raise ValueError("typo_max_distance must be 1 or 2")
+        self.typo_min_word_length = int(self.typo_min_word_length)
+        if self.typo_min_word_length < 3:
+            raise ValueError("typo_min_word_length must be >= 3")
+
+        # --- Stage 7: text expansion ---------------------------------------
+        self.text_expander_enabled = bool(self.text_expander_enabled)
+        self.text_expander_snippets_path = str(self.text_expander_snippets_path)
+
+        # --- Stage 8: selection fix ----------------------------------------
+        self.selection_fix_enabled = bool(self.selection_fix_enabled)
+        self.selection_fix_hotkey = str(self.selection_fix_hotkey).upper()
+
+        # --- Stage 9: per-app default layout -------------------------------
+        self.app_layouts = {
+            str(app).strip().lower(): str(layout).strip().lower()
+            for app, layout in (self.app_layouts or {}).items()
+            if str(app).strip() and str(layout).strip()
+        }
+        self.app_layout_switch = bool(self.app_layout_switch)
 
         self.stop_words = [str(word).lower() for word in self.stop_words]
 

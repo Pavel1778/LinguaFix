@@ -498,6 +498,154 @@ def test_advanced_page_handlers(gui_state: Any, monkeypatch: pytest.MonkeyPatch)
     assert gui_state.config.hotkey_reload_config == "CTRL+SHIFT+R"
 
 
+def test_advanced_page_typo_group_reflects_config(
+    gui_state: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gui_state, "save", lambda: None)
+    from linguafix.gui.advanced_page import AdvancedPage
+
+    gui_state.config.typo_correction = True
+    gui_state.config.typo_max_distance = 2
+    page = AdvancedPage(gui_state)
+
+    assert page._typo_switch.get_active() is True
+    # Toggling the row writes through to the config and saves.
+    page._typo_switch.set_active(False)
+    assert gui_state.config.typo_correction is False
+
+
+def test_advanced_page_expander_group_reflects_config(
+    gui_state: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gui_state, "save", lambda: None)
+    from linguafix.gui.advanced_page import AdvancedPage
+
+    gui_state.config.text_expander_enabled = True
+    gui_state.config.selection_fix_enabled = False
+    gui_state.config.selection_fix_hotkey = "CTRL+ALT+L"
+    page = AdvancedPage(gui_state)
+
+    # The selection-fix hotkey row reflects the configured binding.
+    page._make_hotkey_handler("selection_fix_hotkey")("CTRL+SHIFT+L")
+    assert gui_state.config.selection_fix_hotkey == "CTRL+SHIFT+L"
+
+
+def test_app_layout_map_add_remove(gui_state: Any) -> None:
+    from linguafix.gui.widgets.app_layout_map import AppLayoutMap
+
+    changes: list[dict[str, str]] = []
+    widget = AppLayoutMap("Раскладка", mapping={"code": "us"}, on_change=changes.append)
+    assert widget.mapping == {"code": "us"}
+
+    class _Entry:
+        def __init__(self, text: str) -> None:
+            self._text = text
+
+        def get_text(self) -> str:
+            return self._text
+
+        def set_text(self, text: str) -> None:
+            self._text = text
+
+    widget._app_entry = _Entry("kitty")
+    widget._layout_entry = _Entry("RU")
+    widget._on_add(None)
+    assert widget.mapping == {"code": "us", "kitty": "ru"}
+    assert changes[-1] == {"code": "us", "kitty": "ru"}
+
+    # Missing app or layout is ignored.
+    widget._app_entry = _Entry("")
+    widget._layout_entry = _Entry("de")
+    widget._on_add(None)
+    assert widget.mapping == {"code": "us", "kitty": "ru"}
+
+    widget._on_remove(None, "code")
+    assert widget.mapping == {"kitty": "ru"}
+
+
+def test_app_layout_map_detect(gui_state: Any) -> None:
+    from linguafix.gui.widgets.app_layout_map import AppLayoutMap
+
+    widget = AppLayoutMap("Раскладка", on_detect=lambda: "firefox")
+    widget._on_detect_clicked(None)
+    assert widget._app_entry.get_text() == "firefox"
+
+    no_detect = AppLayoutMap("Раскладка")
+    no_detect._on_detect_clicked(None)  # no crash without a probe
+
+
+def test_advanced_page_app_layouts_changed(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gui_state, "save", lambda: None)
+    from linguafix.gui.advanced_page import AdvancedPage
+
+    page = AdvancedPage(gui_state)
+    page._on_app_layouts_changed({"kitty": "ru"})
+    assert gui_state.config.app_layouts == {"kitty": "ru"}
+
+
+def test_backup_group_export_import(gui_state: Any) -> None:
+    from linguafix.gui.widgets.backup_group import BackupGroup
+
+    exported: list[str] = []
+    imported: list[str] = []
+    notes: list[str] = []
+    widget = BackupGroup(
+        on_export=lambda p: exported.append(p) or True,
+        on_import=lambda p: imported.append(p) or True,
+        on_notify=notes.append,
+    )
+
+    class _File:
+        def get_path(self) -> str:
+            return "/tmp/x.json"
+
+    class _Dialog:
+        def save_finish(self, _result: object) -> _File:
+            return _File()
+
+        def open_finish(self, _result: object) -> _File:
+            return _File()
+
+    widget._on_export_done(_Dialog(), None)
+    assert exported == ["/tmp/x.json"]
+    assert notes[-1] == "Настройки сохранены"
+
+    widget._on_import_done(_Dialog(), None)
+    assert imported == ["/tmp/x.json"]
+    assert notes[-1] == "Настройки восстановлены"
+
+
+def test_backup_group_cancel_is_silent(gui_state: Any) -> None:
+    from linguafix.gui.widgets.backup_group import BackupGroup
+
+    notes: list[str] = []
+    widget = BackupGroup(
+        on_export=lambda _p: True,
+        on_import=lambda _p: True,
+        on_notify=notes.append,
+    )
+
+    class _Dialog:
+        def save_finish(self, _result: object) -> None:
+            raise RuntimeError("cancelled")
+
+    widget._on_export_done(_Dialog(), None)
+    assert notes == []
+
+
+def test_advanced_page_settings_roundtrip(
+    gui_state: Any, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gui_state, "save", lambda: None)
+    from linguafix.gui.advanced_page import AdvancedPage
+
+    page = AdvancedPage(gui_state)
+    out = tmp_path / "backup.json"
+    assert page._export_settings(str(out)) is True
+    assert page._import_settings(str(out)) is True
+    assert page._import_settings(str(tmp_path / "missing.json")) is False
+
+
 def test_advanced_page_regex_validation(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(gui_state, "save", lambda: None)
     from linguafix.gui.advanced_page import AdvancedPage

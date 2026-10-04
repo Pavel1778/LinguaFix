@@ -284,6 +284,18 @@ word is scored against the corpora whose *layout could have produced it*.
   the correction fires, even though the brand is absent from the frequency
   corpora. Without this, an unknown brand makes the detector stay silent.
   `dictionary_size` caps the bundled vocabulary (larger = more recall, more RAM).
+- **Typo correction (T9)** (`typo_correction`, `typo_max_distance`,
+  `typo_min_word_length`). A second, independent correction path, off by
+  default. It runs only when `target_layout` returned `None` — that is, when the
+  layout is already right — so it can never fight the layout switcher. It uses
+  the same vocabulary the detector scores against (`LanguageDetector.vocabulary`)
+  and accepts a replacement only when the word is absent from the vocabulary and
+  within `typo_max_distance` edits of **exactly one** word (optimal string
+  alignment / Damerau-Levenshtein, so a transposition counts as one edit). Two
+  equally close candidates mean no change. Taught words and tokens with an
+  internal separator are never corrected. `TypoCorrector` instances are built
+  lazily per language and dropped on `reload_config`, because the vocabulary can
+  change with `dictionary_size` and `languages`.
 
 ## Modes and hotkeys
 
@@ -324,10 +336,19 @@ fix, so normal capitalisation is unaffected. Hotkeys are re-parsed on
 | `converter.py` | Character maps between layouts (`us`, `ru`, `uk`, `de`, `fr`) |
 | `detector.py` | Language detection, context, user dictionary, `target_layout` |
 | `dictionary.py` | Reading/writing the user dictionary file |
+| `typo.py` | T9: bounded Damerau-Levenshtein + `TypoCorrector` (opt-in) |
+| `text_expander.py` | Snippet expansion (trigger -> text) |
+| `selection_fix.py` | Convert the layout of already-selected text |
 | `app_focus.py` | Best-effort focused-application detection for exceptions |
+| `app_layouts.py` | `AppLayoutManager`: switch layout when a mapped app gains focus |
 | `switcher.py` | `g3kb-switch` / `setxkbmap` layout control |
 | `injector.py` | Text replacement via `uinput` / `wtype` / `xdotool` |
 | `daemon.py` | `LinguaFixDaemon`: event loop, buffering, orchestration |
 | `daemon_control.py` | Start/stop/reload/undo a daemon however it was launched |
+| `backup.py` | Export/import a JSON bundle of config + dictionary + snippets |
+| `update_check.py` | Opt-in GitHub release check (daily, off by default) |
+| `doctor.py` | `linguafix doctor`: environment and permission diagnosis |
+| `collect_logs.py` | `linguafix collect-logs`: bundle logs for a bug report |
 | `tray.py` | Optional AppIndicator icon |
 | `cli.py` | `argparse` command-line interface |
+| `gui/` | Optional GTK4 + libadwaita preferences window |

@@ -72,6 +72,7 @@ _ALLOWED_CONFIG_KEYS = {
     "plausibility_check",
     "structural_boundaries",
     "identifier_guard",
+    "password_guard",
     "plausibility_floor",
     "max_consecutive_consonants",
     "min_vowel_ratio",
@@ -80,6 +81,16 @@ _ALLOWED_CONFIG_KEYS = {
     "exceptions_force_in_manual",
     "dictionary_size",
     "dictionary_custom_path",
+    "typo_correction",
+    "typo_max_distance",
+    "typo_min_word_length",
+    "text_expander_enabled",
+    "text_expander_snippets_path",
+    "selection_fix_enabled",
+    "selection_fix_hotkey",
+    "app_layouts",
+    "app_layout_switch",
+    "update_check_enabled",
 }
 
 
