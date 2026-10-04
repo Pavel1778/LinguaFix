@@ -1,0 +1,17 @@
+# Coverage configuration for the GUI test job.
+#
+# The default pyproject.toml config omits `src/linguafix/gui/*` because the
+# core CI job installs no GTK. The dedicated GUI job (see .github/workflows/
+# ci.yml) runs under xvfb with PyGObject available, so it includes the GUI
+# package here to measure the real coverage of the whole source tree.
+[run]
+branch = True
+source = ["linguafix"]
+
+[report]
+show_missing = True
+exclude_lines =
+    pragma: no cover
+    if TYPE_CHECKING:
+    raise NotImplementedError
+    if __name__ == .__main__.:

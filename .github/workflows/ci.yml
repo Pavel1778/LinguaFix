@@ -48,3 +48,33 @@ jobs:
 
       - name: Pytest
         run: pytest tests/ -q --cov=linguafix --cov-report=term-missing --cov-fail-under=80
+
+  gui:
+    name: GUI (GTK4 under xvfb)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libudev-dev xvfb pkg-config \
+            libcairo2-dev libgirepository1.0-dev \
+            gir1.2-gtk-4.0 gir1.2-adw-1
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,gui]"
+          pip install evdev
+
+      - name: Pytest (GUI included in coverage)
+        run: |
+          xvfb-run -a pytest tests/ -q \
+            --cov=linguafix --cov-config=coverage-gui.rc \
+            --cov-report=term-missing --cov-fail-under=85
