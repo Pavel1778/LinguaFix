@@ -106,6 +106,91 @@ def test_validation_rejects_bad_values(kwargs: dict[str, object]) -> None:
         Config(**kwargs)
 
 
+def test_new_field_defaults() -> None:
+    config = Config()
+    assert config.mode == "auto"
+    assert config.languages == ["en", "ru"]
+    assert config.hotkeys_enabled is True
+    assert config.hotkey_fix_last_word == "PAUSE"
+    assert config.hotkey_undo_last_fix == "CTRL+Z"
+    assert config.hotkey_reload_config == "CTRL+SHIFT+R"
+    assert config.hotkey_toggle_mode == ""
+    assert config.undo_window_seconds == 10
+    assert config.undo_history_depth == 3
+    assert config.confidence_threshold == 0.6
+    assert config.context_analysis is True
+    assert config.context_weight == 0.3
+    assert config.ignore_emails_urls is True
+    assert config.dictionary_size == 5000
+    assert config.exceptions_apps == []
+    assert config.log_rotation_mb == 5
+    assert config.notify_on_error is False
+    assert config.sound_on_fix is False
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"mode": "bogus"},
+        {"languages": ["xx"]},
+        {"languages": []},
+        {"undo_window_seconds": 1},
+        {"undo_window_seconds": 100},
+        {"undo_history_depth": 0},
+        {"confidence_threshold": 0.1},
+        {"confidence_threshold": 0.99},
+        {"context_weight": 2.0},
+        {"dictionary_size": 123},
+        {"log_rotation_mb": 0},
+        {"log_rotation_mb": 100},
+        {"backspace_settle_ms": 500},
+        {"custom_skip_regex": "([unclosed"},
+        {"hotkey_fix_last_word": "ENTER"},
+        {"hotkey_fix_last_word": "CTRL+SPACE"},
+        {"hotkey_undo_last_fix": "TAB"},
+    ],
+)
+def test_new_field_validation_rejects_bad_values(kwargs: dict[str, object]) -> None:
+    with pytest.raises(ValueError):
+        Config(**kwargs)
+
+
+def test_hotkey_normalisation() -> None:
+    config = Config(hotkey_fix_last_word="ctrl+shift+f12", hotkey_undo_last_fix="pause")
+    assert config.hotkey_fix_last_word == "CTRL+SHIFT+F12"
+    assert config.hotkey_undo_last_fix == "PAUSE"
+
+
+def test_legacy_hotkey_syncs_to_fix_hotkey() -> None:
+    config = Config(hotkey="F13")
+    assert config.hotkey_fix_last_word == "F13"
+
+
+def test_section_tables_are_flattened() -> None:
+    config = Config.from_dict(
+        {
+            "trigger": {"on_space": False},
+            "hotkeys": {"fix_last_word": "F13", "swallow": False},
+            "notifications": {"sound_on_fix": True},
+            "undo": {"window_seconds": 20},
+            "exceptions": {"apps": ["gnome-terminal"]},
+            "dictionary": {"size": 1000},
+        }
+    )
+    assert config.on_space is False
+    assert config.hotkey_fix_last_word == "F13"
+    assert config.hotkey_swallow is False
+    assert config.sound_on_fix is True
+    assert config.undo_window_seconds == 20
+    assert config.exceptions_apps == ["gnome-terminal"]
+    assert config.dictionary_size == 1000
+
+
+def test_exceptions_strip_blanks() -> None:
+    config = Config(exceptions_apps=[" code ", "", "kitty"])
+    assert config.exceptions_apps == ["code", "kitty"]
+
+
 def test_trigger_and_timing_fields_round_trip(tmp_config_path: Path) -> None:
     config = Config()
     config.on_tab = True

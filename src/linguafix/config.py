@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import sys
 from dataclasses import asdict, dataclass, field
@@ -37,9 +38,91 @@ DEFAULT_MIN_WORD_LENGTH: Final[int] = 3
 DEFAULT_MAX_BUFFER_SIZE: Final[int] = 200
 DEFAULT_BACKSPACE_SETTLE_MS: Final[int] = 30
 DEFAULT_PUNCTUATION_CHARS: Final[str] = ".!?,;:"
+DEFAULT_CONFIDENCE_THRESHOLD: Final[float] = 0.6
+DEFAULT_CONTEXT_WEIGHT: Final[float] = 0.3
+DEFAULT_UNDO_WINDOW_SECONDS: Final[int] = 10
+DEFAULT_UNDO_HISTORY_DEPTH: Final[int] = 3
+DEFAULT_DICTIONARY_SIZE: Final[int] = 5000
+DEFAULT_LOG_ROTATION_MB: Final[int] = 5
 VALID_BACKENDS: Final[tuple[str, ...]] = ("auto", "uinput", "wtype", "xdotool")
 VALID_SWITCH_METHODS: Final[tuple[str, ...]] = ("auto", "g3kb-switch", "setxkbmap")
 VALID_LOG_LEVELS: Final[tuple[str, ...]] = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+VALID_MODES: Final[tuple[str, ...]] = ("auto", "manual", "hybrid")
+VALID_DICTIONARY_SIZES: Final[tuple[int, ...]] = (1000, 5000, 10000)
+# The languages LinguaFix ships layouts and dictionaries for.
+SUPPORTED_LANGUAGES: Final[tuple[str, ...]] = ("en", "ru", "uk", "de", "fr")
+DEFAULT_LANGUAGES: Final[tuple[str, ...]] = ("en", "ru")
+# Keys that may never be bound as a hotkey: they are the word boundaries and
+# would make the daemon unusable if swallowed.
+FORBIDDEN_HOTKEY_KEYS: Final[frozenset[str]] = frozenset(
+    {"ESC", "ESCAPE", "ENTER", "RETURN", "KPENTER", "SPACE", "TAB"}
+)
+_HOTKEY_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z0-9+_]+$")
+
+
+def normalise_hotkey(value: str) -> str:
+    """Normalise a hotkey string to ``MOD+MOD+KEY`` upper-case form.
+
+    Accepts ``"PAUSE"``, ``"CTRL+SHIFT+F12"`` and ``"RIGHTCTRL+RIGHTALT"``.
+    Empty strings are allowed and mean "unbound".
+
+    Raises:
+        ValueError: If the value is malformed or uses a forbidden key.
+    """
+    text = str(value).strip().upper()
+    if not text:
+        return ""
+    if not _HOTKEY_TOKEN_RE.match(text):
+        raise ValueError(f"invalid hotkey {value!r}")
+    parts = [part for part in text.split("+") if part]
+    if not parts:
+        return ""
+    key = parts[-1]
+    if key in FORBIDDEN_HOTKEY_KEYS:
+        raise ValueError(f"hotkey key {key!r} is not allowed")
+    if len(parts) > 4:
+        raise ValueError(f"too many modifiers in hotkey {value!r}")
+    return "+".join(parts)
+
+
+# Maps a nested TOML table to the prefix its keys gain when flattened. Keys that
+# already start with the prefix are left untouched, so ``[trigger] on_space``
+# and a flat ``on_space`` behave identically.
+_SECTION_PREFIXES: Final[dict[str, str]] = {
+    "trigger": "",
+    "timing": "",
+    "hotkeys": "hotkey_",
+    "undo": "undo_",
+    "notifications": "notify_",
+    "logs": "log_",
+    "log": "log_",
+    "detector": "",
+    "exceptions": "exceptions_",
+    "dictionary": "dictionary_",
+    "dictionaries": "dictionary_",
+    "apps": "exceptions_",
+}
+
+
+def _flatten_sections(data: dict[str, Any]) -> dict[str, Any]:
+    """Flatten known TOML tables into their field-name form.
+
+    Unknown keys and unknown tables are passed through unchanged so
+    :meth:`Config.from_dict` can ignore them as before.
+    """
+    flat: dict[str, Any] = {}
+    for key, value in data.items():
+        if isinstance(value, dict) and key in _SECTION_PREFIXES:
+            prefix = _SECTION_PREFIXES[key]
+            for sub_key, sub_value in value.items():
+                name = str(sub_key)
+                if prefix and name.startswith(prefix):
+                    flat[name] = sub_value
+                else:
+                    flat[f"{prefix}{name}"] = sub_value
+        else:
+            flat[key] = value
+    return flat
 
 
 def _xdg_dir(env_var: str, fallback: Path) -> Path:
@@ -124,18 +207,46 @@ class Config:
     max_buffer_size: int = DEFAULT_MAX_BUFFER_SIZE
     stop_words: list[str] = field(default_factory=load_default_stop_words)
     layouts: list[str] = field(default_factory=lambda: ["us", "ru"])
+    languages: list[str] = field(default_factory=lambda: list(DEFAULT_LANGUAGES))
     backend: str = "auto"
     switch_method: str = "auto"
     notify_on_fix: bool = False
+    notify_on_error: bool = False
+    sound_on_fix: bool = False
     tray_enabled: bool = True
     hotkey: str = "PAUSE"
     log_level: str = "INFO"
+    log_rotation_mb: int = DEFAULT_LOG_ROTATION_MB
     on_space: bool = True
     on_enter: bool = True
     on_tab: bool = False
     on_punctuation: bool = False
     punctuation_chars: str = DEFAULT_PUNCTUATION_CHARS
     backspace_settle_ms: int = DEFAULT_BACKSPACE_SETTLE_MS
+
+    # --- Task D: modes and hotkeys -----------------------------------------
+    mode: str = "auto"
+    hotkeys_enabled: bool = True
+    hotkey_fix_last_word: str = "PAUSE"
+    hotkey_undo_last_fix: str = "CTRL+Z"
+    hotkey_toggle_mode: str = ""
+    hotkey_reload_config: str = "CTRL+SHIFT+R"
+    hotkey_swallow: bool = True
+    undo_window_seconds: int = DEFAULT_UNDO_WINDOW_SECONDS
+    undo_history_depth: int = DEFAULT_UNDO_HISTORY_DEPTH
+
+    # --- Task E: detector tuning, context, exceptions, dictionaries --------
+    confidence_threshold: float = DEFAULT_CONFIDENCE_THRESHOLD
+    context_analysis: bool = True
+    context_weight: float = DEFAULT_CONTEXT_WEIGHT
+    ignore_all_caps: bool = False
+    ignore_with_digits: bool = False
+    ignore_emails_urls: bool = True
+    custom_skip_regex: str = ""
+    exceptions_apps: list[str] = field(default_factory=list)
+    exceptions_force_in_manual: list[str] = field(default_factory=list)
+    dictionary_size: int = DEFAULT_DICTIONARY_SIZE
+    dictionary_custom_path: str = ""
 
     def __post_init__(self) -> None:
         self.validate()
@@ -162,6 +273,13 @@ class Config:
             raise ValueError("layouts must contain at least one layout")
         self.layouts = [str(layout).lower() for layout in self.layouts]
 
+        self.languages = [str(lang).lower() for lang in self.languages]
+        unknown = [lang for lang in self.languages if lang not in SUPPORTED_LANGUAGES]
+        if unknown:
+            raise ValueError(f"unsupported languages: {unknown}")
+        if not self.languages:
+            raise ValueError("languages must contain at least one language")
+
         self.backend = str(self.backend).lower()
         if self.backend not in VALID_BACKENDS:
             raise ValueError(f"backend must be one of {VALID_BACKENDS}")
@@ -174,6 +292,10 @@ class Config:
         if self.log_level not in VALID_LOG_LEVELS:
             raise ValueError(f"log_level must be one of {VALID_LOG_LEVELS}")
 
+        self.log_rotation_mb = int(self.log_rotation_mb)
+        if not 1 <= self.log_rotation_mb <= 50:
+            raise ValueError("log_rotation_mb must be between 1 and 50")
+
         self.on_space = bool(self.on_space)
         self.on_enter = bool(self.on_enter)
         self.on_tab = bool(self.on_tab)
@@ -181,14 +303,78 @@ class Config:
         self.punctuation_chars = str(self.punctuation_chars)
 
         self.backspace_settle_ms = int(self.backspace_settle_ms)
-        if self.backspace_settle_ms < 0:
-            raise ValueError("backspace_settle_ms must be >= 0")
+        if not 0 <= self.backspace_settle_ms <= 200:
+            raise ValueError("backspace_settle_ms must be between 0 and 200")
+
+        # --- modes and hotkeys ---------------------------------------------
+        self.mode = str(self.mode).lower()
+        if self.mode not in VALID_MODES:
+            raise ValueError(f"mode must be one of {VALID_MODES}")
+
+        self.hotkeys_enabled = bool(self.hotkeys_enabled)
+        self.hotkey_swallow = bool(self.hotkey_swallow)
+        # ``hotkey`` is the legacy name for the manual-fix hotkey; keep the two
+        # in sync so old config files and the new GUI agree. The legacy value
+        # only wins when it was changed from the default and the new field was
+        # not, so an explicit ``hotkey_fix_last_word`` always takes precedence.
+        legacy = normalise_hotkey(self.hotkey)
+        self.hotkey = legacy
+        if not self.hotkey_fix_last_word or (
+            self.hotkey_fix_last_word == "PAUSE" and legacy not in ("", "PAUSE")
+        ):
+            self.hotkey_fix_last_word = legacy
+        self.hotkey_fix_last_word = normalise_hotkey(self.hotkey_fix_last_word)
+        self.hotkey_undo_last_fix = normalise_hotkey(self.hotkey_undo_last_fix)
+        self.hotkey_toggle_mode = normalise_hotkey(self.hotkey_toggle_mode)
+        self.hotkey_reload_config = normalise_hotkey(self.hotkey_reload_config)
+
+        self.undo_window_seconds = int(self.undo_window_seconds)
+        if not 3 <= self.undo_window_seconds <= 60:
+            raise ValueError("undo_window_seconds must be between 3 and 60")
+        self.undo_history_depth = int(self.undo_history_depth)
+        if not 1 <= self.undo_history_depth <= 10:
+            raise ValueError("undo_history_depth must be between 1 and 10")
+
+        # --- detector / context / exceptions / dictionaries ----------------
+        self.confidence_threshold = float(self.confidence_threshold)
+        if not 0.5 <= self.confidence_threshold <= 0.95:
+            raise ValueError("confidence_threshold must be between 0.5 and 0.95")
+        self.context_analysis = bool(self.context_analysis)
+        self.context_weight = float(self.context_weight)
+        if not 0.0 <= self.context_weight <= 1.0:
+            raise ValueError("context_weight must be between 0 and 1")
+        self.ignore_all_caps = bool(self.ignore_all_caps)
+        self.ignore_with_digits = bool(self.ignore_with_digits)
+        self.ignore_emails_urls = bool(self.ignore_emails_urls)
+        self.custom_skip_regex = str(self.custom_skip_regex)
+        if self.custom_skip_regex:
+            try:
+                re.compile(self.custom_skip_regex)
+            except re.error as exc:
+                raise ValueError(f"custom_skip_regex is not a valid regex: {exc}") from exc
+
+        self.exceptions_apps = [
+            str(app).strip() for app in self.exceptions_apps if str(app).strip()
+        ]
+        self.exceptions_force_in_manual = [
+            str(app).strip() for app in self.exceptions_force_in_manual if str(app).strip()
+        ]
+
+        self.dictionary_size = int(self.dictionary_size)
+        if self.dictionary_size not in VALID_DICTIONARY_SIZES:
+            raise ValueError(f"dictionary_size must be one of {VALID_DICTIONARY_SIZES}")
+        self.dictionary_custom_path = str(self.dictionary_custom_path)
 
         self.stop_words = [str(word).lower() for word in self.stop_words]
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Config:
         """Build a :class:`Config` from a mapping, ignoring unknown keys.
+
+        Flat keys are accepted directly. Nested TOML tables (``[trigger]``,
+        ``[timing]``, ``[hotkeys]``, ``[detector]``, ``[exceptions]``,
+        ``[notifications]``, ``[logs]``, ``[dictionary]``, ``[undo]``) are
+        flattened into their field names so a hand-written config keeps working.
 
         Args:
             data: Mapping loaded from a TOML file.
@@ -197,7 +383,17 @@ class Config:
             A validated :class:`Config` instance.
         """
         known = set(cls.__dataclass_fields__)
-        filtered = {key: value for key, value in data.items() if key in known}
+        filtered: dict[str, Any] = {}
+        for key, value in _flatten_sections(data).items():
+            if key in known:
+                filtered[key] = value
+                continue
+            # A section prefix may not fit every key (``[notifications]
+            # sound_on_fix``): fall back to the bare key when it is a field.
+            for prefix in ("hotkey_", "undo_", "notify_", "log_", "exceptions_", "dictionary_"):
+                if key.startswith(prefix) and key[len(prefix) :] in known:
+                    filtered[key[len(prefix) :]] = value
+                    break
         try:
             return cls(**filtered)
         except (TypeError, ValueError) as exc:
