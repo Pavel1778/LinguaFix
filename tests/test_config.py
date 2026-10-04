@@ -114,7 +114,7 @@ def test_new_field_defaults() -> None:
     assert config.languages == ["en", "ru"]
     assert config.hotkeys_enabled is True
     assert config.hotkey_fix_last_word == "SHIFT+SHIFT"
-    assert config.hotkey_undo_last_fix == "CTRL+Z"
+    assert config.hotkey_undo_last_fix == "SHIFT+BACKSPACE"
     assert config.hotkey_reload_config == "CTRL+SHIFT+R"
     assert config.hotkey_toggle_mode == ""
     assert config.hotkey_double_tap_ms == 300

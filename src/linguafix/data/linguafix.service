@@ -10,6 +10,11 @@ Type=simple
 ExecStart=@BIN@ start --foreground
 Restart=always
 RestartSec=5
+# Keep the daemon responsive: a layout fix must beat the compositor's own
+# handling of the boundary key that triggered it.
+Nice=-10
+CPUSchedulingPolicy=rr
+CPUSchedulingPriority=20
 Environment=PYTHONUNBUFFERED=1
 StandardOutput=journal
 StandardError=journal

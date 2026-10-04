@@ -149,6 +149,12 @@ _MODE_CYCLE: Final[tuple[str, ...]] = ("auto", "hybrid", "manual")
 # means "tap the shift family twice within ``hotkey_double_tap_ms``"; it works
 # on every keyboard, unlike the old ``PAUSE`` default.
 _DOUBLE_TAP_MODIFIERS: Final[frozenset[str]] = frozenset({"shift", "ctrl", "alt"})
+# Modifier keys that begin a chord and therefore abandon the word being typed:
+# Ctrl+C, Alt+Tab and friends move or copy the text, so the buffer must not be
+# corrected afterwards. Shift is excluded — it is part of normal typing.
+_BUFFER_RESET_KEYS: Final[frozenset[str]] = frozenset(
+    {"KEY_LEFTCTRL", "KEY_RIGHTCTRL", "KEY_LEFTALT", "KEY_RIGHTALT"}
+)
 # Keys that carry no printable character but that we must not treat as a
 # continuation of the current word either (arrow keys, Delete, Home, …). A key
 # in this set ends the word without flushing it.
@@ -281,6 +287,11 @@ class LinguaFixDaemon:
         self._scancodes: list[int] = []
         self.last_key_time: float = 0.0
         self._shift = False
+        # Set while a Ctrl/Alt chord is held: the word typed before the chord is
+        # suspended (dropped if the chord turns out not to be a hotkey) so that
+        # ``Ctrl+C`` does not leave a stale word behind, while a Ctrl-based fix
+        # hotkey such as ``CTRL+F12`` can still see it.
+        self._suspended_buffer: tuple[str, list[int]] | None = None
         self._running = False
         self._reload_requested = False
         self._shutdown_requested = False
@@ -451,6 +462,8 @@ class LinguaFixDaemon:
         # Track modifier state for hotkey matching (press and release), and
         # detect a double tap of the same modifier (the fix hotkey default).
         if name in _MODIFIER_FAMILIES:
+            if name in _BUFFER_RESET_KEYS:
+                self._handle_chord_modifier(value)
             self._handle_modifier(name, value)
             return
 
@@ -467,6 +480,11 @@ class LinguaFixDaemon:
             if action is not None:
                 self._run_hotkey(action)
                 return
+
+        # A real key that is not a hotkey was pressed while Ctrl/Alt was held:
+        # the chord was not a fix, so any suspended word is abandoned.
+        if self._suspended_buffer is not None:
+            self._drop_suspended_buffer()
 
         if value == 2:  # auto-repeat: only backspace repeats meaningfully
             if name == "KEY_BACKSPACE":
@@ -710,6 +728,9 @@ class LinguaFixDaemon:
         """Execute the action bound to a hotkey."""
         logger.info("Hotkey action: %s", action)
         if action == "fix":
+            # A Ctrl/Alt-based fix hotkey (``CTRL+F12``) suspended the word when
+            # the modifier was pressed; put it back so the fix can see it.
+            self._restore_suspended_buffer()
             self._process_buffer(force=True)
         elif action == "undo":
             self._undo_last_fix()
@@ -776,11 +797,41 @@ class LinguaFixDaemon:
             if self._scancodes:
                 self._scancodes.pop()
 
+    def _handle_chord_modifier(self, value: int) -> None:
+        """Suspend the buffer when Ctrl/Alt starts a chord.
+
+        Pressing Ctrl/Alt begins a chord (``Ctrl+C``, ``Alt+Tab``): the word
+        typed before it must not be corrected once the chord is over. The word is
+        *suspended* rather than dropped, so a Ctrl-based fix hotkey such as
+        ``CTRL+F12`` — and the ``CTRL+CTRL`` double tap — can still reach it. Any
+        ordinary key pressed afterwards abandons it (see ``_drop_suspended``).
+        """
+        if value != 1:
+            return
+        with self._lock:
+            if self._suspended_buffer is None and (self.buffer or self._scancodes):
+                self._suspended_buffer = (self.buffer, list(self._scancodes))
+                self.buffer = ""
+                self._scancodes = []
+
+    def _drop_suspended_buffer(self) -> None:
+        """Discard a word suspended by a Ctrl/Alt chord that was not a hotkey."""
+        with self._lock:
+            self._suspended_buffer = None
+
+    def _restore_suspended_buffer(self) -> None:
+        """Put a suspended word back so a fix hotkey can process it."""
+        with self._lock:
+            if self._suspended_buffer is not None and not self.buffer:
+                self.buffer, self._scancodes = self._suspended_buffer
+                self._suspended_buffer = None
+
     def _reset_buffer(self) -> None:
         """Drop the current word without analysing it."""
         with self._lock:
             self.buffer = ""
             self._scancodes = []
+            self._suspended_buffer = None
 
     def _process_buffer(self, *, force: bool = False, boundary: bool = False) -> None:
         """Analyse the buffer, never letting an error escape.

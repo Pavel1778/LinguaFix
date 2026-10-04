@@ -11,7 +11,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk  # noqa: E402
 
-from ..config import DEFAULT_FIX_HOTKEY, config_path  # noqa: E402
+from ..config import DEFAULT_FIX_HOTKEY, DEFAULT_UNDO_HOTKEY, config_path  # noqa: E402
 from .prefs_base import BoundPreferencesPage  # noqa: E402
 from .state import GuiState  # noqa: E402
 from .widgets.app_exceptions_list import AppExceptionsList  # noqa: E402
@@ -220,7 +220,7 @@ class AdvancedPage(BoundPreferencesPage):
         # The fix/undo rows live on the Settings page, so only the two rows on
         # this page are redrawn here; the config fields are all reset.
         self._config.hotkey_fix_last_word = DEFAULT_FIX_HOTKEY
-        self._config.hotkey_undo_last_fix = "CTRL+Z"
+        self._config.hotkey_undo_last_fix = DEFAULT_UNDO_HOTKEY
         self._config.hotkey_toggle_mode = ""
         self._config.hotkey_reload_config = "CTRL+SHIFT+R"
         self._config.hotkey = DEFAULT_FIX_HOTKEY

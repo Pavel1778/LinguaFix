@@ -66,6 +66,9 @@ DEFAULT_FIX_HOTKEY: Final[str] = "SHIFT+SHIFT"
 # The pre-1.0 manual-fix default. Kept so an unmodified old config migrates to
 # the double-tap default instead of staying on a key many laptops lack.
 LEGACY_FIX_HOTKEY: Final[str] = "PAUSE"
+# The undo hotkey default. ``CTRL+Z`` collides with the application's own undo,
+# so the daemon uses ``SHIFT+BACKSPACE`` instead.
+DEFAULT_UNDO_HOTKEY: Final[str] = "SHIFT+BACKSPACE"
 # Maximum gap between the two taps of a double-tap hotkey.
 DEFAULT_DOUBLE_TAP_MS: Final[int] = 300
 VALID_BACKENDS: Final[tuple[str, ...]] = ("auto", "uinput", "wtype", "xdotool")
@@ -256,7 +259,7 @@ class Config:
     mode: str = "auto"
     hotkeys_enabled: bool = True
     hotkey_fix_last_word: str = DEFAULT_FIX_HOTKEY
-    hotkey_undo_last_fix: str = "CTRL+Z"
+    hotkey_undo_last_fix: str = DEFAULT_UNDO_HOTKEY
     hotkey_toggle_mode: str = ""
     hotkey_reload_config: str = "CTRL+SHIFT+R"
     hotkey_swallow: bool = True
