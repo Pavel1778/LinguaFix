@@ -52,29 +52,25 @@ def _lock_path() -> Path:
 
 
 def _read_pid() -> int | None:
-    """Return the PID stored in the lock file, if any and alive."""
-    path = _lock_path()
-    try:
-        raw = path.read_text(encoding="utf-8").strip()
-    except OSError:
-        return None
-    if not raw.isdigit():
-        return None
-    pid = int(raw)
-    if _pid_alive(pid):
-        return pid
-    return None
+    """Return the PID stored in the lock file, if any and alive.
+
+    Delegates to :func:`linguafix.daemon_control.read_pid` so the CLI and the
+    GUI share one implementation, including the cleanup of a stale lock file.
+    """
+    from .daemon_control import read_pid
+
+    return read_pid()
 
 
 def _pid_alive(pid: int) -> bool:
-    """Return ``True`` when a process with ``pid`` exists."""
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    return True
+    """Return ``True`` when a process with ``pid`` exists and has not exited.
+
+    Delegates to :func:`linguafix.daemon_control.pid_alive` so the CLI and the
+    GUI agree on what "alive" means (a zombie is not alive).
+    """
+    from .daemon_control import pid_alive
+
+    return pid_alive(pid)
 
 
 def _autostart_path() -> Path:
@@ -109,9 +105,16 @@ def cmd_start(args: argparse.Namespace) -> int:
     )
     deadline = time.time() + START_TIMEOUT
     while time.time() < deadline:
-        if _read_pid() is not None:
-            print(MSG_STARTED)
-            return 0
+        pid = _read_pid()
+        if pid is not None:
+            # The daemon writes the lock before it discovers devices, so a fast
+            # failure (no keyboard devices, bad config) briefly looks like a
+            # successful start. Wait a moment and re-check before claiming
+            # success, so ``start`` never lies about a daemon that just died.
+            time.sleep(0.4)
+            if _pid_alive(pid):
+                print(MSG_STARTED)
+                return 0
         time.sleep(0.1)
     print("Не удалось запустить LinguaFix. Смотрите логи: ~/.local/state/linguafix/")
     return 1

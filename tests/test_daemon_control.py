@@ -134,8 +134,22 @@ def test_start_spawns_when_systemd_disabled(
         daemon_control, "spawn_detached", lambda dry_run=False: spawned.append(True)
     )
     monkeypatch.setattr(daemon_control, "_wait_until", lambda predicate, timeout: True)
+    monkeypatch.setattr(daemon_control, "read_pid", lambda: 4242)
     assert daemon_control.start() is True
     assert spawned == [True]
+
+
+def test_start_reports_failure_when_daemon_dies(
+    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A daemon that writes the lock then dies must not look like a start."""
+    monkeypatch.setattr(daemon_control, "is_running", lambda: False)
+    monkeypatch.setattr(daemon_control, "systemd_enabled", lambda: False)
+    monkeypatch.setattr(daemon_control, "spawn_detached", lambda dry_run=False: None)
+    monkeypatch.setattr(daemon_control, "_wait_until", lambda predicate, timeout: True)
+    monkeypatch.setattr(daemon_control, "read_pid", lambda: None)
+    monkeypatch.setattr(daemon_control.time, "sleep", lambda _s: None)
+    assert daemon_control.start() is False
 
 
 def test_start_already_running_is_noop(isolated_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -320,3 +334,68 @@ def test_undo_signals_daemon(isolated_env: Path, monkeypatch: pytest.MonkeyPatch
     )
     assert daemon_control.undo_last_fix() is True
     assert sent == [(4242, signal.SIGUSR1)]
+
+
+def test_pid_alive_rejects_nonpositive() -> None:
+    assert daemon_control.pid_alive(0) is False
+    assert daemon_control.pid_alive(-1) is False
+
+
+def test_read_pid_removes_stale_lock(isolated_env: Path) -> None:
+    """A lock file left by a crashed daemon is cleaned up on read."""
+    path = daemon_control.lock_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("999999999", encoding="utf-8")
+    assert daemon_control.read_pid() is None
+    assert not path.exists()
+
+
+def test_is_zombie_true_for_zombie(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        daemon_control.Path,
+        "read_text",
+        lambda self, encoding=None: "123 (linguafix) Z 1 2 3",
+    )
+    assert daemon_control._is_zombie(123) is True
+
+
+def test_is_zombie_false_for_sleeping(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        daemon_control.Path,
+        "read_text",
+        lambda self, encoding=None: "123 (linguafix) S 1 2 3",
+    )
+    assert daemon_control._is_zombie(123) is False
+
+
+def test_is_zombie_false_when_proc_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    def raise_missing(self: Path, encoding: str | None = None) -> str:
+        raise FileNotFoundError
+
+    monkeypatch.setattr(daemon_control.Path, "read_text", raise_missing)
+    assert daemon_control._is_zombie(123) is False
+
+
+def test_pid_alive_treats_zombie_as_dead(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The "toggle works every other time" bug: a zombie must not read as alive."""
+    monkeypatch.setattr(daemon_control.os, "kill", lambda pid, sig: None)
+    monkeypatch.setattr(daemon_control, "_is_zombie", lambda pid: True)
+    assert daemon_control.pid_alive(4242) is False
+
+
+def test_pid_alive_real_zombie() -> None:
+    """End-to-end: a child that exited but is not reaped must not read as alive."""
+    import subprocess
+    import sys
+    import time
+
+    if not Path("/proc/self/stat").exists():  # pragma: no cover - Linux only
+        pytest.skip("requires /proc")
+
+    child = subprocess.Popen([sys.executable, "-c", "pass"])
+    try:
+        time.sleep(0.4)
+        assert Path(f"/proc/{child.pid}/stat").read_text().split()[2] == "Z"
+        assert daemon_control.pid_alive(child.pid) is False
+    finally:
+        child.wait()

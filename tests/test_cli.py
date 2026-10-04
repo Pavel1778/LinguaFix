@@ -376,6 +376,38 @@ def test_cmd_gui_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cli.cmd_gui(argparse.Namespace()) == 0
 
 
+def test_start_detached_reports_success_when_alive(
+    isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class _Popen:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+    monkeypatch.setattr(cli.subprocess, "Popen", _Popen)
+    monkeypatch.setattr(cli, "_read_pid", lambda: 4242)
+    monkeypatch.setattr(cli, "_pid_alive", lambda pid: True)
+    monkeypatch.setattr(cli.time, "sleep", lambda _s: None)
+    assert cli.cmd_start(argparse.Namespace(foreground=False, dry_run=False)) == 0
+    assert "запущен" in capsys.readouterr().out
+
+
+def test_start_detached_reports_failure_when_daemon_dies(
+    isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A daemon that never comes up must not print success."""
+
+    class _Popen:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+    monkeypatch.setattr(cli.subprocess, "Popen", _Popen)
+    monkeypatch.setattr(cli, "_read_pid", lambda: None)
+    monkeypatch.setattr(cli, "START_TIMEOUT", 0.01)
+    monkeypatch.setattr(cli.time, "sleep", lambda _s: None)
+    assert cli.cmd_start(argparse.Namespace(foreground=False, dry_run=False)) == 1
+    assert "Не удалось запустить" in capsys.readouterr().out
+
+
 def test_mode_show_and_set(isolated_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main(["mode"]) == 0
     assert capsys.readouterr().out.strip() == "auto"

@@ -44,18 +44,50 @@ def lock_path() -> Path:
 
 
 def pid_alive(pid: int) -> bool:
-    """Return ``True`` when a process with ``pid`` exists."""
+    """Return ``True`` when a process with ``pid`` exists and has not exited.
+
+    A *zombie* process (exited but not yet reaped by its parent) still answers
+    ``os.kill(pid, 0)``, so the signal probe alone reports a dead daemon as
+    alive. That is the "toggle works every other time" failure: the GUI spawns
+    the daemon as a child, the daemon exits, the GUI has not reaped it yet, and
+    the ON/OFF button keeps reading the stale state. We therefore also consult
+    ``/proc`` and treat a zombie as gone.
+    """
+    if pid <= 0:
+        return False
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
     except PermissionError:
+        # A live process owned by another user: we cannot inspect it, assume alive.
         return True
-    return True
+    return not _is_zombie(pid)
+
+
+def _is_zombie(pid: int) -> bool:
+    """Return ``True`` when ``pid`` is a zombie (exited, not yet reaped)."""
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except OSError:
+        return False
+    # Format: ``pid (comm) state ...``; ``comm`` may contain spaces and
+    # parentheses, so split after the last ')'.
+    close = stat.rfind(")")
+    if close == -1:
+        return False
+    fields = stat[close + 1 :].split()
+    return bool(fields) and fields[0] == "Z"
 
 
 def read_pid() -> int | None:
-    """Return the PID in the lock file when that process is still alive."""
+    """Return the PID in the lock file when that process is still alive.
+
+    A lock file left behind by a crashed daemon is removed (best effort) so a
+    later ``start`` does not trip over it. The unlink only happens when the file
+    still names the dead pid, so a fresh daemon that has just rewritten the lock
+    is never affected.
+    """
     try:
         raw = lock_path().read_text(encoding="utf-8").strip()
     except OSError:
@@ -63,7 +95,14 @@ def read_pid() -> int | None:
     if not raw.isdigit():
         return None
     pid = int(raw)
-    return pid if pid_alive(pid) else None
+    if pid_alive(pid):
+        return pid
+    try:
+        if lock_path().read_text(encoding="utf-8").strip() == raw:
+            lock_path().unlink()
+    except OSError:
+        logger.debug("Could not remove stale lock file", exc_info=True)
+    return None
 
 
 def systemctl_available() -> bool:
@@ -159,7 +198,13 @@ def start(dry_run: bool = False) -> bool:
         if _wait_until(lambda: read_pid() is not None or systemd_active(), START_TIMEOUT):
             return True
     spawn_detached(dry_run=dry_run)
-    return _wait_until(lambda: read_pid() is not None, START_TIMEOUT)
+    if not _wait_until(lambda: read_pid() is not None, START_TIMEOUT):
+        return False
+    # The lock appears before the daemon checks for devices, so confirm it is
+    # still alive a moment later; otherwise a daemon that died instantly (no
+    # keyboard devices) would be reported as a successful start.
+    time.sleep(0.3)
+    return read_pid() is not None
 
 
 def _kill_pid(pid: int, sig: int) -> bool:

@@ -343,8 +343,12 @@ class LinguaFixDaemon:
         directory.mkdir(parents=True, exist_ok=True)
         lock_path = directory / LOCK_FILE_NAME
         try:
-            handle = open(lock_path, "w", encoding="utf-8")  # noqa: SIM115 - kept open
+            # Open without truncating and take the lock first: truncating before
+            # the flock would wipe the PID of the instance that already holds it.
+            handle = open(lock_path, "a+", encoding="utf-8")  # noqa: SIM115 - kept open
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            handle.seek(0)
+            handle.truncate()
             handle.write(str(os.getpid()))
             handle.flush()
         except OSError as exc:
@@ -354,10 +358,16 @@ class LinguaFixDaemon:
         return True
 
     def release_lock(self) -> None:
-        """Release the single-instance lock if held."""
+        """Release the single-instance lock if held.
+
+        The lock file is also removed, but only while it still names this
+        process: if a new daemon already acquired the lock and rewrote the file,
+        deleting it would break that instance.
+        """
         handle = self._lock_handle
         if handle is None:
             return
+        pid = str(os.getpid())
         try:
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)  # type: ignore[attr-defined]
             handle.close()  # type: ignore[attr-defined]
@@ -365,6 +375,12 @@ class LinguaFixDaemon:
             logger.debug("Could not release lock cleanly", exc_info=True)
         finally:
             self._lock_handle = None
+        try:
+            path = cache_dir() / LOCK_FILE_NAME
+            if path.read_text(encoding="utf-8").strip() == pid:
+                path.unlink()
+        except OSError:
+            logger.debug("Could not remove lock file", exc_info=True)
 
     # ------------------------------------------------------------------
     # Signal handling
