@@ -36,7 +36,8 @@ import traceback
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Final
 
-from .app_focus import get_focused_role
+from .app_focus import get_active_app, get_focused_role
+from .app_layouts import AppLayoutManager
 from .config import Config, cache_dir, snippets_path
 from .converter import LayoutConverter
 from .detector import LanguageDetector
@@ -291,6 +292,13 @@ class LinguaFixDaemon:
         self._load_snippets(config)
         # Selection fix converts the layout of text that is already selected.
         self.selection_fix = SelectionFix(converter=self.converter, injector=self.injector)
+        # Per-app preferred layout: switch when the focused app changes.
+        self.app_layout_manager = AppLayoutManager(
+            layouts=config.app_layouts,
+            switch_layout=self.switcher.switch_to,
+            probe=get_active_app,
+            enabled=config.app_layout_switch,
+        )
 
         # The characters currently on screen for the word being typed. Derived
         # from ``_scancodes`` and kept in step with it (one char per printable
@@ -704,8 +712,6 @@ class LinguaFixDaemon:
         if not manual and not self._excepted_apps:
             return True
 
-        from .app_focus import get_active_app
-
         try:
             app = get_active_app()
         except Exception:
@@ -962,6 +968,8 @@ class LinguaFixDaemon:
             backspace_count = len(self._scancodes)
             self.buffer = ""
             self._scancodes = []
+        # Per-app preferred layout: cheap when disabled, throttled otherwise.
+        self.app_layout_manager.maybe_apply(time.monotonic())
         if boundary:
             logger.debug(
                 "Boundary flush: trigger=%s scancodes=%d buffer_len=%d",
@@ -1141,6 +1149,11 @@ class LinguaFixDaemon:
         }
         self._double_tap_hotkeys = self._build_double_tap_hotkeys(new_config)
         self._last_modifier_tap.clear()
+        self.app_layout_manager.update(
+            new_config.app_layouts,
+            enabled=new_config.app_layout_switch,
+            switch_layout=self.switcher.switch_to,
+        )
         logger.info("Configuration reloaded")
 
     # ------------------------------------------------------------------

@@ -15,6 +15,7 @@ from ..config import DEFAULT_FIX_HOTKEY, DEFAULT_UNDO_HOTKEY, config_path  # noq
 from .prefs_base import BoundPreferencesPage  # noqa: E402
 from .state import GuiState  # noqa: E402
 from .widgets.app_exceptions_list import AppExceptionsList  # noqa: E402
+from .widgets.app_layout_map import AppLayoutMap  # noqa: E402
 from .widgets.hotkey_row import HotkeyRow  # noqa: E402
 
 DICTIONARY_OPTIONS = ("1000", "5000", "10000")
@@ -156,6 +157,21 @@ class AdvancedPage(BoundPreferencesPage):
             on_change=self._on_force_manual_changed,
         )
         self.add(self._force_manual)
+        self._app_layouts = AppLayoutMap(
+            "Раскладка по приложениям",
+            "При переключении на приложение включать эту раскладку",
+            self._config.app_layouts,
+            on_change=self._on_app_layouts_changed,
+            on_detect=self._detect_current_app,
+        )
+        self.add(self._app_layouts)
+        self.add_switch(
+            self._app_layouts, "Переключать раскладку по приложению", "app_layout_switch"
+        )
+
+    def _on_app_layouts_changed(self, mapping: dict[str, str]) -> None:
+        self._config.app_layouts = mapping
+        self._save("Раскладка по приложениям сохранена")
 
     def _on_exceptions_changed(self, apps: list[str]) -> None:
         self._config.exceptions_apps = apps

@@ -127,7 +127,7 @@ def test_manual_mode_skips_automatic_fix() -> None:
 
 
 def test_manual_mode_forces_fix_for_listed_app(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("linguafix.app_focus.get_active_app", lambda: "kitty")
+    monkeypatch.setattr("linguafix.daemon.get_active_app", lambda: "kitty")
     daemon = make_daemon(mode="manual", exceptions_force_in_manual=["kitty"])
     press(daemon, "ghbdtn")
     tap(daemon, "KEY_SPACE")
@@ -135,7 +135,7 @@ def test_manual_mode_forces_fix_for_listed_app(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_manual_mode_ignores_unlisted_app(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("linguafix.app_focus.get_active_app", lambda: "firefox")
+    monkeypatch.setattr("linguafix.daemon.get_active_app", lambda: "firefox")
     daemon = make_daemon(mode="manual", exceptions_force_in_manual=["kitty"])
     press(daemon, "ghbdtn")
     tap(daemon, "KEY_SPACE")

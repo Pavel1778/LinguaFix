@@ -149,7 +149,7 @@ def test_context_disabled_ignores_neighbour(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 def test_app_exception_skips_even_in_auto_mode(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("linguafix.app_focus.get_active_app", lambda: "gnome-terminal")
+    monkeypatch.setattr("linguafix.daemon.get_active_app", lambda: "gnome-terminal")
     daemon = make_daemon(monkeypatch, mode="auto", exceptions_apps=["gnome-terminal"])
     press(daemon, "ghbdtn")
     tap(daemon, "KEY_SPACE")
@@ -157,7 +157,7 @@ def test_app_exception_skips_even_in_auto_mode(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_unlisted_app_still_fixes(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("linguafix.app_focus.get_active_app", lambda: "firefox")
+    monkeypatch.setattr("linguafix.daemon.get_active_app", lambda: "firefox")
     daemon = make_daemon(monkeypatch, mode="auto", exceptions_apps=["gnome-terminal"])
     press(daemon, "ghbdtn")
     tap(daemon, "KEY_SPACE")
@@ -167,7 +167,7 @@ def test_unlisted_app_still_fixes(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_force_in_manual_list_applies_to_manual_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("linguafix.app_focus.get_active_app", lambda: "kitty")
+    monkeypatch.setattr("linguafix.daemon.get_active_app", lambda: "kitty")
     daemon = make_daemon(monkeypatch, mode="manual", exceptions_force_in_manual=["kitty"])
     press(daemon, "ghbdtn")
     tap(daemon, "KEY_SPACE")

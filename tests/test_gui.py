@@ -530,6 +530,59 @@ def test_advanced_page_expander_group_reflects_config(
     assert gui_state.config.selection_fix_hotkey == "CTRL+SHIFT+L"
 
 
+def test_app_layout_map_add_remove(gui_state: Any) -> None:
+    from linguafix.gui.widgets.app_layout_map import AppLayoutMap
+
+    changes: list[dict[str, str]] = []
+    widget = AppLayoutMap("Раскладка", mapping={"code": "us"}, on_change=changes.append)
+    assert widget.mapping == {"code": "us"}
+
+    class _Entry:
+        def __init__(self, text: str) -> None:
+            self._text = text
+
+        def get_text(self) -> str:
+            return self._text
+
+        def set_text(self, text: str) -> None:
+            self._text = text
+
+    widget._app_entry = _Entry("kitty")
+    widget._layout_entry = _Entry("RU")
+    widget._on_add(None)
+    assert widget.mapping == {"code": "us", "kitty": "ru"}
+    assert changes[-1] == {"code": "us", "kitty": "ru"}
+
+    # Missing app or layout is ignored.
+    widget._app_entry = _Entry("")
+    widget._layout_entry = _Entry("de")
+    widget._on_add(None)
+    assert widget.mapping == {"code": "us", "kitty": "ru"}
+
+    widget._on_remove(None, "code")
+    assert widget.mapping == {"kitty": "ru"}
+
+
+def test_app_layout_map_detect(gui_state: Any) -> None:
+    from linguafix.gui.widgets.app_layout_map import AppLayoutMap
+
+    widget = AppLayoutMap("Раскладка", on_detect=lambda: "firefox")
+    widget._on_detect_clicked(None)
+    assert widget._app_entry.get_text() == "firefox"
+
+    no_detect = AppLayoutMap("Раскладка")
+    no_detect._on_detect_clicked(None)  # no crash without a probe
+
+
+def test_advanced_page_app_layouts_changed(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gui_state, "save", lambda: None)
+    from linguafix.gui.advanced_page import AdvancedPage
+
+    page = AdvancedPage(gui_state)
+    page._on_app_layouts_changed({"kitty": "ru"})
+    assert gui_state.config.app_layouts == {"kitty": "ru"}
+
+
 def test_advanced_page_regex_validation(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(gui_state, "save", lambda: None)
     from linguafix.gui.advanced_page import AdvancedPage

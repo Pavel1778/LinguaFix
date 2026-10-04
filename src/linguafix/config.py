@@ -314,6 +314,12 @@ class Config:
     selection_fix_enabled: bool = True
     selection_fix_hotkey: str = "CTRL+SHIFT+L"
 
+    # --- Stage 9: per-app default layout -----------------------------------
+    # Maps an application name (as reported by app_focus) to the layout that
+    # should be active when it gains focus, e.g. {"kitty": "ru"}.
+    app_layouts: dict[str, str] = field(default_factory=dict)
+    app_layout_switch: bool = False
+
     def __post_init__(self) -> None:
         self.validate()
 
@@ -476,6 +482,14 @@ class Config:
         # --- Stage 8: selection fix ----------------------------------------
         self.selection_fix_enabled = bool(self.selection_fix_enabled)
         self.selection_fix_hotkey = str(self.selection_fix_hotkey).upper()
+
+        # --- Stage 9: per-app default layout -------------------------------
+        self.app_layouts = {
+            str(app).strip().lower(): str(layout).strip().lower()
+            for app, layout in (self.app_layouts or {}).items()
+            if str(app).strip() and str(layout).strip()
+        }
+        self.app_layout_switch = bool(self.app_layout_switch)
 
         self.stop_words = [str(word).lower() for word in self.stop_words]
 

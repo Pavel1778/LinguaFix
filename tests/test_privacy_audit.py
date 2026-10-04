@@ -88,6 +88,8 @@ _ALLOWED_CONFIG_KEYS = {
     "text_expander_snippets_path",
     "selection_fix_enabled",
     "selection_fix_hotkey",
+    "app_layouts",
+    "app_layout_switch",
 }
 
 
