@@ -42,6 +42,7 @@ from .dictionary import load_user_dictionary
 from .injector import TextInjector
 from .switcher import LayoutSwitcher
 from .tray import TrayIcon
+from .typo import TypoCorrector
 
 if TYPE_CHECKING:  # pragma: no cover - import used only for typing
     from evdev import InputDevice
@@ -277,6 +278,9 @@ class LinguaFixDaemon:
         user_words = load_user_dictionary(config.dictionary_custom_path)
         if user_words:
             self.detector.set_user_words(user_words)
+        # T9: one corrector per language, built lazily from the detector's
+        # vocabulary the first time a typo is checked.
+        self._typo_correctors: dict[str, TypoCorrector] = {}
 
         # The characters currently on screen for the word being typed. Derived
         # from ``_scancodes`` and kept in step with it (one char per printable
@@ -739,6 +743,40 @@ class LinguaFixDaemon:
         elif action == "reload":
             self.reload_config()
 
+    def _typo_correction(self, buffer: str, current: str) -> str | None:
+        """Return a single-word typo correction for ``buffer``, or ``None``.
+
+        Only a plain letter word in the language the user is typing is
+        considered, and only when T9 is enabled. A taught word and any word with
+        a structural separator are never touched, so a brand or a path cannot be
+        "corrected" into a dictionary word.
+        """
+        if not self.config.typo_correction:
+            return None
+        word = buffer.strip()
+        if len(word) < self.config.typo_min_word_length or not word.isalpha():
+            return None
+        if self.detector.is_user_word(word) or _INTERNAL_SEPARATOR_RE.search(word):
+            return None
+        language = self.detector.language_for_layout(current)
+        if language is None:
+            return None
+        corrector = self._typo_correctors.get(language)
+        if corrector is None:
+            corrector = TypoCorrector(
+                list(self.detector.vocabulary(language)),
+                max_distance=self.config.typo_max_distance,
+                min_length=self.config.typo_min_word_length,
+            )
+            self._typo_correctors[language] = corrector
+        suggestion = corrector.suggest(word)
+        if suggestion is None or suggestion == word:
+            return None
+        # Preserve the user's capitalisation (``Teh`` -> ``The``).
+        if word[0].isupper():
+            suggestion = suggestion[:1].upper() + suggestion[1:]
+        return suggestion
+
     def _record_undo(self, original: str, layout: str, backspace_count: int) -> None:
         """Remember a successful fix so it can be undone shortly afterwards."""
         now = time.monotonic()
@@ -916,9 +954,16 @@ class LinguaFixDaemon:
         current = self.switcher.get_current_layout()
         target = self.detector.target_layout(buffer, current, neighbor)
         if target is None:
-            return
-
-        converted = self.converter.convert(buffer, current, target)
+            # Layout detection found nothing. A separate, opt-in step then looks
+            # for a single-character typo in the language the user is typing;
+            # that fix stays in the current layout.
+            corrected = self._typo_correction(buffer, current)
+            if corrected is None:
+                return
+            converted = corrected
+            target = current
+        else:
+            converted = self.converter.convert(buffer, current, target)
         if converted == buffer:
             return
 
@@ -1018,6 +1063,8 @@ class LinguaFixDaemon:
         # Always re-read the user dictionary: the reload hotkey is also how a
         # user picks up words they just added to the file.
         self.detector.set_user_words(load_user_dictionary(new_config.dictionary_custom_path))
+        # The vocabularies may have changed, so any cached corrector is stale.
+        self._typo_correctors.clear()
         self._skip_regex = _compile_skip_regex(new_config.custom_skip_regex)
         self._excepted_apps = {app.lower() for app in new_config.exceptions_apps}
         self.switcher.layouts = list(new_config.layouts)

@@ -59,6 +59,11 @@ DEFAULT_PLAUSIBILITY_FLOOR: Final[float] = -7.0
 # A run of consonants longer than this is a strong "not a word" signal.
 DEFAULT_MAX_CONSECUTIVE_CONSONANTS: Final[int] = 6
 DEFAULT_MIN_VOWEL_RATIO: Final[float] = 0.15
+# T9 typo correction. Off by default: a wrong correction is worse than none, so
+# the user opts in. Only a single edit is accepted, and only for words of at
+# least ``DEFAULT_TYPO_MIN_WORD_LENGTH`` characters.
+DEFAULT_TYPO_MAX_DISTANCE: Final[int] = 1
+DEFAULT_TYPO_MIN_WORD_LENGTH: Final[int] = 4
 # The manual-fix hotkey default. A double tap of the same modifier works on
 # every keyboard, unlike the previous ``PAUSE`` default (many laptops have no
 # Pause key). ``SHIFT+SHIFT`` is the double-tap of the shift family.
@@ -127,6 +132,8 @@ _SECTION_PREFIXES: Final[dict[str, str]] = {
     "exceptions": "exceptions_",
     "dictionary": "dictionary_",
     "dictionaries": "dictionary_",
+    "typo": "typo_",
+    "t9": "typo_",
     "apps": "exceptions_",
 }
 
@@ -286,6 +293,11 @@ class Config:
     dictionary_size: int = DEFAULT_DICTIONARY_SIZE
     dictionary_custom_path: str = ""
 
+    # --- Task F: T9 typo correction ----------------------------------------
+    typo_correction: bool = False
+    typo_max_distance: int = DEFAULT_TYPO_MAX_DISTANCE
+    typo_min_word_length: int = DEFAULT_TYPO_MIN_WORD_LENGTH
+
     def __post_init__(self) -> None:
         self.validate()
 
@@ -430,6 +442,15 @@ class Config:
         if self.dictionary_size not in VALID_DICTIONARY_SIZES:
             raise ValueError(f"dictionary_size must be one of {VALID_DICTIONARY_SIZES}")
         self.dictionary_custom_path = str(self.dictionary_custom_path)
+
+        # --- T9 typo correction --------------------------------------------
+        self.typo_correction = bool(self.typo_correction)
+        self.typo_max_distance = int(self.typo_max_distance)
+        if self.typo_max_distance not in (1, 2):
+            raise ValueError("typo_max_distance must be 1 or 2")
+        self.typo_min_word_length = int(self.typo_min_word_length)
+        if self.typo_min_word_length < 3:
+            raise ValueError("typo_min_word_length must be >= 3")
 
         self.stop_words = [str(word).lower() for word in self.stop_words]
 

@@ -239,6 +239,23 @@ class LanguageDetector:
         """Return the user dictionary (lower-cased, sorted)."""
         return sorted(self._user_words)
 
+    def language_for_layout(self, layout: str) -> str | None:
+        """Return the language a layout types, or ``None`` when unknown."""
+        return self._layout_language(layout)
+
+    def is_user_word(self, word: str) -> bool:
+        """Return ``True`` when ``word`` is in the user dictionary."""
+        return word.lower() in self._user_words
+
+    def vocabulary(self, language: str) -> set[str]:
+        """Return the loaded vocabulary for ``language`` (empty when absent).
+
+        Used by the T9 corrector, which needs the same word list the detector
+        scores against so a correction can never invent a word the detector
+        would then consider implausible.
+        """
+        return set(self._vocabularies.get(language, set()))
+
     def is_stop_word(self, text: str) -> bool:
         """Return ``True`` if ``text`` contains any configured stop word.
 

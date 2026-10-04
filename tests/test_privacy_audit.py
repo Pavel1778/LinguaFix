@@ -80,6 +80,9 @@ _ALLOWED_CONFIG_KEYS = {
     "exceptions_force_in_manual",
     "dictionary_size",
     "dictionary_custom_path",
+    "typo_correction",
+    "typo_max_distance",
+    "typo_min_word_length",
 }
 
 
