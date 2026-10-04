@@ -63,18 +63,24 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libudev-dev xvfb pkg-config \
-            libcairo2-dev libgirepository1.0-dev \
-            gir1.2-gtk-4.0 gir1.2-adw-1
+          sudo apt-get install -y libudev-dev xvfb \
+            python3-gi gir1.2-gtk-4.0 gir1.2-adw-1
 
+      # PyGObject comes from the distribution (``python3-gi``) rather than a
+      # source build: building it needs ``girepository-2.0``, which Ubuntu's
+      # dev packages do not provide, so ``pip install PyGObject`` fails during
+      # metadata generation. The interpreter is 3.12, matching the distro's
+      # ``gi`` ABI; ``PYTHONPATH`` points the pytest run at Debian's
+      # ``dist-packages`` so ``import gi`` resolves. The ``gui`` extra is not
+      # installed, so pip never tries to build PyGObject.
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev,gui]"
+          pip install -e ".[dev]"
           pip install evdev
 
       - name: Pytest (GUI included in coverage)
         run: |
-          xvfb-run -a pytest tests/ -q \
+          PYTHONPATH=/usr/lib/python3/dist-packages xvfb-run -a python -m pytest tests/ -q \
             --cov=linguafix --cov-config=coverage-gui.rc \
             --cov-report=term-missing --cov-fail-under=85
