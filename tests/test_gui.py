@@ -514,6 +514,22 @@ def test_advanced_page_typo_group_reflects_config(
     assert gui_state.config.typo_correction is False
 
 
+def test_advanced_page_expander_group_reflects_config(
+    gui_state: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gui_state, "save", lambda: None)
+    from linguafix.gui.advanced_page import AdvancedPage
+
+    gui_state.config.text_expander_enabled = True
+    gui_state.config.selection_fix_enabled = False
+    gui_state.config.selection_fix_hotkey = "CTRL+ALT+L"
+    page = AdvancedPage(gui_state)
+
+    # The selection-fix hotkey row reflects the configured binding.
+    page._make_hotkey_handler("selection_fix_hotkey")("CTRL+SHIFT+L")
+    assert gui_state.config.selection_fix_hotkey == "CTRL+SHIFT+L"
+
+
 def test_advanced_page_regex_validation(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(gui_state, "save", lambda: None)
     from linguafix.gui.advanced_page import AdvancedPage

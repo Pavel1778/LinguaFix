@@ -135,6 +135,7 @@ _SECTION_PREFIXES: Final[dict[str, str]] = {
     "typo": "typo_",
     "t9": "typo_",
     "expander": "text_expander_",
+    "selection": "selection_fix_",
     "apps": "exceptions_",
 }
 
@@ -309,6 +310,10 @@ class Config:
     text_expander_enabled: bool = False
     text_expander_snippets_path: str = ""
 
+    # --- Stage 8: selection fix --------------------------------------------
+    selection_fix_enabled: bool = True
+    selection_fix_hotkey: str = "CTRL+SHIFT+L"
+
     def __post_init__(self) -> None:
         self.validate()
 
@@ -467,6 +472,10 @@ class Config:
         # --- Stage 7: text expansion ---------------------------------------
         self.text_expander_enabled = bool(self.text_expander_enabled)
         self.text_expander_snippets_path = str(self.text_expander_snippets_path)
+
+        # --- Stage 8: selection fix ----------------------------------------
+        self.selection_fix_enabled = bool(self.selection_fix_enabled)
+        self.selection_fix_hotkey = str(self.selection_fix_hotkey).upper()
 
         self.stop_words = [str(word).lower() for word in self.stop_words]
 

@@ -246,7 +246,15 @@ class AdvancedPage(BoundPreferencesPage):
             on_change=self._make_hotkey_handler("hotkey_reload_config"),
         )
         group.add(self._reload_row)
+        self._selection_row = HotkeyRow(
+            "Исправить выделенный текст",
+            "CTRL+SHIFT+L",
+            self._config.selection_fix_hotkey,
+            on_change=self._make_hotkey_handler("selection_fix_hotkey"),
+        )
+        group.add(self._selection_row)
         self.add_switch(group, "Не передавать хоткей в приложение", "hotkey_swallow")
+        self.add_switch(group, "Исправлять выделенный текст", "selection_fix_enabled")
         reset = Gtk.Button(label="Сбросить к дефолтным")
         reset.connect("clicked", self._on_reset_hotkeys)
         reset.set_halign(Gtk.Align.START)
@@ -269,8 +277,10 @@ class AdvancedPage(BoundPreferencesPage):
         self._config.hotkey_toggle_mode = ""
         self._config.hotkey_reload_config = "CTRL+SHIFT+R"
         self._config.hotkey = DEFAULT_FIX_HOTKEY
+        self._config.selection_fix_hotkey = "CTRL+SHIFT+L"
         self._toggle_row.set_value("")
         self._reload_row.set_value("CTRL+SHIFT+R")
+        self._selection_row.set_value("CTRL+SHIFT+L")
         self._save("Хоткеи сброшены")
 
     # --- notifications ----------------------------------------------------

@@ -42,6 +42,7 @@ from .converter import LayoutConverter
 from .detector import LanguageDetector
 from .dictionary import load_user_dictionary
 from .injector import TextInjector
+from .selection_fix import SelectionFix
 from .switcher import LayoutSwitcher
 from .text_expander import TextExpander
 from .tray import TrayIcon
@@ -260,6 +261,7 @@ class LinguaFixDaemon:
             "undo": self._parse_hotkey(config.hotkey_undo_last_fix),
             "toggle_mode": self._parse_hotkey(config.hotkey_toggle_mode),
             "reload": self._parse_hotkey(config.hotkey_reload_config),
+            "selection_fix": self._parse_hotkey(config.selection_fix_hotkey),
         }
         # Modifier families currently held down, used to match hotkeys.
         self._held_modifiers: set[str] = set()
@@ -287,6 +289,8 @@ class LinguaFixDaemon:
         # Text expansion (snippets). Loaded once here and re-loaded on reload.
         self._expander = TextExpander()
         self._load_snippets(config)
+        # Selection fix converts the layout of text that is already selected.
+        self.selection_fix = SelectionFix(converter=self.converter, injector=self.injector)
 
         # The characters currently on screen for the word being typed. Derived
         # from ``_scancodes`` and kept in step with it (one char per printable
@@ -751,6 +755,9 @@ class LinguaFixDaemon:
             self._cycle_mode()
         elif action == "reload":
             self.reload_config()
+        elif action == "selection_fix":
+            if self.config.selection_fix_enabled:
+                self.selection_fix.convert_selection()
 
     def _load_snippets(self, config: Config) -> None:
         """(Re)load the snippet file named by ``config``, best-effort."""
@@ -1130,6 +1137,7 @@ class LinguaFixDaemon:
             "undo": self._parse_hotkey(new_config.hotkey_undo_last_fix),
             "toggle_mode": self._parse_hotkey(new_config.hotkey_toggle_mode),
             "reload": self._parse_hotkey(new_config.hotkey_reload_config),
+            "selection_fix": self._parse_hotkey(new_config.selection_fix_hotkey),
         }
         self._double_tap_hotkeys = self._build_double_tap_hotkeys(new_config)
         self._last_modifier_tap.clear()
