@@ -269,11 +269,14 @@ LinguaFix avoids this in two ways, both on by default:
 - The `uinput` backend flushes the backspaces, waits `backspace_settle_ms`, then
   types the replacement.
 
-If you still see a stray character, the application needs a longer pause. Raise
-the settle window:
+If you still see a stray character, the application needs a longer pause. Two
+windows are involved: `trigger_settle_ms` (the pause after the Space/Enter that
+triggered the fix) and `backspace_settle_ms` (the pause between deleting and
+typing). Raise them:
 
 ```toml
-backspace_settle_ms = 60   # 30 by default; try 50-80 for slow Electron apps
+trigger_settle_ms = 80     # 50 by default; pause after the boundary key
+backspace_settle_ms = 80   # 50 by default; try 50-80 for slow Electron apps
 ```
 
 A very large value only adds latency; it cannot corrupt the text, because the

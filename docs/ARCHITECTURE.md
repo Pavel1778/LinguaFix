@@ -78,12 +78,19 @@ in time) and leave the first character behind — the `рhello` symptom, where
 `руддщ` was deleted but the leading `р` survived.
 
 The uinput backend also flushes the deletion and the replacement as two separate
-`syn` batches, with an optional pause (`backspace_settle_ms`, default 30 ms)
+`syn` batches, with an optional pause (`backspace_settle_ms`, default 50 ms)
 between them. Chromium and Electron applications process Backspace
 asynchronously, so typing into the same batch can race the deletion. The pause
 lets the compositor apply the deletion before the new text arrives. The
 backspace batch is still flushed with a single `syn`, so a crash before that
 point leaves the text untouched instead of half-deleted.
+
+When the flush is triggered by a word-boundary key (Space/Enter/Tab), the daemon
+waits an additional `trigger_settle_ms` (default 50 ms) *before* the deletion.
+The boundary key that ended the word is still being processed by the compositor
+at that instant; deleting immediately races it and leaves the first character
+behind (`руддщ ` -> `рhello`). The idle fallback and an explicit hotkey skip this
+pause, because no boundary key is in flight.
 
 A word-boundary trigger is the practical limit of "real time": a word cannot be
 corrected before it is finished, because until then the detector does not know
@@ -206,9 +213,10 @@ reading process will meet in practice:
   them with a single `syn`, then types the replacement as a second flush after
   `backspace_settle_ms`. A crash or `SIGKILL` before the first `syn` leaves the
   text untouched rather than half-deleted, and the settle pause keeps the
-  replacement from racing an asynchronous compositor. The `wtype`/`xdotool`
-  backends cannot be atomic; that residual window is documented in the
-  troubleshooting guide.
+  replacement from racing an asynchronous compositor. A boundary-triggered flush
+  also waits `trigger_settle_ms` before the deletion, so the Space/Enter that
+  ended the word is processed first. The `wtype`/`xdotool` backends cannot be
+  atomic; that residual window is documented in the troubleshooting guide.
 - **Exact deletion count.** The daemon counts physical keys, not characters, so
   the number of Backspaces always matches what is on screen even under very fast
   typing.

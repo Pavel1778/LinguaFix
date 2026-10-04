@@ -469,21 +469,21 @@ class LinguaFixDaemon:
 
         if name == "KEY_SPACE":
             if self.config.on_space:
-                self._process_buffer()
+                self._process_buffer(boundary=True)
             else:
                 self._reset_buffer()
             return
 
         if name in _ENTER_KEYS:
             if self.config.on_enter:
-                self._process_buffer()
+                self._process_buffer(boundary=True)
             else:
                 self._reset_buffer()
             return
 
         if name in _TAB_KEYS:
             if self.config.on_tab:
-                self._process_buffer()
+                self._process_buffer(boundary=True)
             else:
                 self._reset_buffer()
             return
@@ -495,7 +495,7 @@ class LinguaFixDaemon:
         if self.config.on_punctuation and char in self.config.punctuation_chars:
             # A punctuation boundary ends the word. The character itself is not
             # buffered: it is not part of the word and must not be deleted.
-            self._process_buffer()
+            self._process_buffer(boundary=True)
             return
 
         with self._lock:
@@ -607,8 +607,20 @@ class LinguaFixDaemon:
             return
         if not self.config.hotkeys_enabled:
             return
+
+        # A tap only counts when no *other* modifier family is held. Otherwise
+        # ``Ctrl`` + ``Shift`` + ``Shift`` would look like a double tap of Shift
+        # and fire a fix, even though the user was forming a chord. Any other
+        # held family cancels a pending tap.
+        if self._held_modifiers - {family}:
+            self._last_modifier_tap.clear()
+            return
+
         action = self._double_tap_hotkeys.get(family)
         if action is None:
+            # This family is not a double-tap hotkey, but pressing it is still a
+            # key press and must cancel a pending tap of another family.
+            self._last_modifier_tap.clear()
             return
         now = time.monotonic()
         window = self.config.hotkey_double_tap_ms / 1000.0
@@ -619,7 +631,9 @@ class LinguaFixDaemon:
             logger.debug("Double tap of %s matched hotkey %s", family, action)
             self._run_hotkey(action)
         else:
-            self._last_modifier_tap[family] = now
+            # Re-arm: replace any previously armed family so only the most
+            # recent tap can complete a double tap.
+            self._last_modifier_tap = {family: now}
 
     def _match_hotkey(self, code: int) -> str | None:
         """Return the action whose hotkey matches, or ``None``."""
@@ -752,7 +766,7 @@ class LinguaFixDaemon:
             self.buffer = ""
             self._scancodes = []
 
-    def _process_buffer(self, *, force: bool = False) -> None:
+    def _process_buffer(self, *, force: bool = False, boundary: bool = False) -> None:
         """Analyse the buffer, never letting an error escape.
 
         A failure in the detector, converter, switcher or injector must not kill
@@ -761,12 +775,16 @@ class LinguaFixDaemon:
         Args:
             force: When ``True`` the working mode is ignored (the user asked for
                 the fix explicitly through a hotkey).
+            boundary: When ``True`` the flush was triggered by a word-boundary
+                key (Space/Enter/Tab). The daemon then waits
+                ``trigger_settle_ms`` before deleting, so the boundary key is
+                processed by the application first.
         """
         # Capture the text so a traceback can be scrubbed of it before logging.
         with self._lock:
             sensitive = self.buffer.strip()
         try:
-            self._process_buffer_inner(force=force)
+            self._process_buffer_inner(force=force, boundary=boundary)
         except Exception as exc:  # the daemon must survive any failure
             self._log_sanitized("Failed to process the buffer", exc, sensitive)
 
@@ -785,7 +803,7 @@ class LinguaFixDaemon:
                 formatted = formatted.replace(needle, "<redacted>")
         logger.error("%s\n%s", message, formatted.rstrip())
 
-    def _process_buffer_inner(self, *, force: bool = False) -> None:
+    def _process_buffer_inner(self, *, force: bool = False, boundary: bool = False) -> None:
         """Analyse the current word and apply a correction when appropriate."""
         # Snapshot and clear the buffer under the lock, then release it before
         # the (slow) switch/inject so typing during a fix is never lost. Holding
@@ -798,6 +816,13 @@ class LinguaFixDaemon:
             backspace_count = len(self._scancodes)
             self.buffer = ""
             self._scancodes = []
+        if boundary:
+            logger.debug(
+                "Boundary flush: trigger=%s scancodes=%d buffer_len=%d",
+                "space/enter/tab",
+                backspace_count,
+                len(buffer),
+            )
         if not buffer or len(buffer) < self.config.min_word_length:
             return
 
@@ -858,12 +883,29 @@ class LinguaFixDaemon:
             logger.info("Shutdown requested; skipping replacement")
             return
 
+        # When the flush came from a word-boundary key (Space/Enter/Tab), that
+        # key is still being processed by the compositor. Deleting immediately
+        # races it: Chromium/Electron coalesce the fast synthetic Backspaces and
+        # the first character survives (``руддщ `` -> ``рhello``). A short pause
+        # lets the boundary settle first. The idle fallback and an explicit
+        # hotkey do not need it.
+        if boundary and self.config.trigger_settle_ms > 0:
+            logger.debug("Trigger settle: waiting %d ms", self.config.trigger_settle_ms)
+            time.sleep(self.config.trigger_settle_ms / 1000.0)
+
         self.switcher.switch_to(target)
         time.sleep(0.05)
+        logger.debug(
+            "Sending %d backspaces, then injecting %d chars into %s",
+            backspace_count,
+            len(converted),
+            target,
+        )
         if self.injector.replace_text(backspace_count, converted, target):
             # The fixed text has the same length as the original, so recording
             # the original lets a later undo restore the screen exactly.
             self._record_undo(buffer, current, backspace_count)
+            logger.debug("Flush complete, buffer cleared")
             if self.config.notify_on_fix:
                 self._notify()
 

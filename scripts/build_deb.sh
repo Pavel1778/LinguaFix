@@ -107,6 +107,12 @@ if command -v udevadm >/dev/null 2>&1; then
     udevadm trigger || true
 fi
 
+# Refresh the desktop database so the application menu shows LinguaFix right
+# after installation, without waiting for a re-login or a desktop refresh.
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database -q /usr/share/applications || true
+fi
+
 # Load uinput so /dev/uinput exists (best effort; a container may lack it).
 if command -v modprobe >/dev/null 2>&1; then
     modprobe uinput 2>/dev/null || true

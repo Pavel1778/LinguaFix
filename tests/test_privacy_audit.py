@@ -48,6 +48,7 @@ _ALLOWED_CONFIG_KEYS = {
     "on_punctuation",
     "punctuation_chars",
     "backspace_settle_ms",
+    "trigger_settle_ms",
     "languages",
     "notify_on_error",
     "sound_on_fix",

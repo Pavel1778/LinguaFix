@@ -176,3 +176,72 @@ def test_reload_config_refreshes_double_tap_binding(monkeypatch: pytest.MonkeyPa
     daemon.reload_config()
     assert daemon._double_tap_hotkeys == {"ctrl": "fix"}
     assert daemon._hotkeys["fix"] is None
+
+
+# --- chords must not be mistaken for a double tap ---------------------------
+
+
+def hold(daemon: LinguaFixDaemon, name: str) -> None:
+    daemon._handle_event(make_event(name, 1))
+
+
+def release(daemon: LinguaFixDaemon, name: str) -> None:
+    daemon._handle_event(make_event(name, 0))
+
+
+def test_ctrl_shift_shift_does_not_fix() -> None:
+    """Holding Ctrl while tapping Shift twice is a chord, not a double tap."""
+    daemon = make_daemon()
+    press(daemon, "ghbdtn")
+    hold(daemon, "KEY_LEFTCTRL")
+    tap(daemon, "KEY_LEFTSHIFT")
+    time.sleep(0.02)
+    tap(daemon, "KEY_LEFTSHIFT")
+    release(daemon, "KEY_LEFTCTRL")
+    assert _injector(daemon).replacements == []
+
+
+def test_alt_shift_shift_does_not_fix() -> None:
+    daemon = make_daemon()
+    press(daemon, "ghbdtn")
+    hold(daemon, "KEY_LEFTALT")
+    tap(daemon, "KEY_LEFTSHIFT")
+    time.sleep(0.02)
+    tap(daemon, "KEY_LEFTSHIFT")
+    release(daemon, "KEY_LEFTALT")
+    assert _injector(daemon).replacements == []
+
+
+def test_shift_ctrl_ctrl_does_not_fix() -> None:
+    """The same rule holds for the other double-tap families."""
+    daemon = make_daemon(hotkey_fix_last_word="CTRL+CTRL")
+    press(daemon, "ghbdtn")
+    hold(daemon, "KEY_LEFTSHIFT")
+    tap(daemon, "KEY_LEFTCTRL")
+    time.sleep(0.02)
+    tap(daemon, "KEY_LEFTCTRL")
+    release(daemon, "KEY_LEFTSHIFT")
+    assert _injector(daemon).replacements == []
+
+
+def test_other_modifier_between_shifts_cancels() -> None:
+    """A different modifier between two Shift taps cancels the double tap."""
+    daemon = make_daemon()
+    press(daemon, "ghbdtn")
+    tap(daemon, "KEY_LEFTSHIFT")
+    time.sleep(0.02)
+    tap(daemon, "KEY_LEFTCTRL")
+    time.sleep(0.02)
+    tap(daemon, "KEY_LEFTSHIFT")
+    assert _injector(daemon).replacements == []
+
+
+def test_super_between_shifts_cancels() -> None:
+    daemon = make_daemon()
+    press(daemon, "ghbdtn")
+    tap(daemon, "KEY_LEFTSHIFT")
+    time.sleep(0.02)
+    tap(daemon, "KEY_LEFTMETA")
+    time.sleep(0.02)
+    tap(daemon, "KEY_LEFTSHIFT")
+    assert _injector(daemon).replacements == []

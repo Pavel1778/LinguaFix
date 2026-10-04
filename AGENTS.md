@@ -50,6 +50,13 @@ SMOKE_IMAGE=ubuntu:22.04 make smoke-test    # Python 3.10 path (tomli)
   `backspace_settle_ms`, then flushes the replacement with a second `syn`.
   Chromium/Electron apply Backspace asynchronously, so a single batch races the
   deletion. Keep the two flushes; a test asserts the order and the pause.
+- A boundary-triggered flush (Space/Enter/Tab/punctuation) sleeps
+  `trigger_settle_ms` **before** deleting, so the boundary key is processed
+  first; otherwise Chromium/Electron coalesce the fast Backspaces and the first
+  character survives (`руддщ ` -> `рhello`). Only boundary flushes pass
+  `boundary=True`; the idle fallback and hotkey must not pay this pause.
+- A double-tap modifier hotkey fires only when no *other* modifier family is
+  held, so `Ctrl+Shift+Shift` is treated as a chord, not a fix.
 - Word-boundary triggers (`on_space`, `on_enter`, `on_tab`, `on_punctuation`)
   live in `Config`; Space/Enter are on by default. A token with an internal
   separator (`.` `@` `/` `\` `:` `_` `-`) is never rewritten (URLs, e-mails,

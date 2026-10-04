@@ -109,6 +109,14 @@ class AdvancedPage(BoundPreferencesPage):
             upper=200,
             step=5,
         )
+        self.add_spin(
+            group,
+            "Пауза после триггера (пробел/Enter), мс",
+            "trigger_settle_ms",
+            lower=0,
+            upper=200,
+            step=5,
+        )
         self.add(group)
 
     # --- injection --------------------------------------------------------

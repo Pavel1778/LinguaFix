@@ -36,7 +36,14 @@ APP_NAME: Final[str] = "linguafix"
 DEFAULT_ANALYSIS_TIMEOUT: Final[float] = 0.8
 DEFAULT_MIN_WORD_LENGTH: Final[int] = 3
 DEFAULT_MAX_BUFFER_SIZE: Final[int] = 200
-DEFAULT_BACKSPACE_SETTLE_MS: Final[int] = 30
+DEFAULT_BACKSPACE_SETTLE_MS: Final[int] = 50
+# Pause after a word-boundary key (Space/Enter/Tab) before the deletion is sent.
+# The boundary key that triggered the flush is still being processed by the
+# compositor when the daemon starts erasing; without this pause Chromium and
+# Electron coalesce the fast synthetic Backspaces and the first character
+# survives (``руддщ `` -> ``рhello``). Only applies to a boundary flush, never
+# to the idle fallback or an explicit hotkey.
+DEFAULT_TRIGGER_SETTLE_MS: Final[int] = 50
 DEFAULT_PUNCTUATION_CHARS: Final[str] = ".!?,;:"
 DEFAULT_CONFIDENCE_THRESHOLD: Final[float] = 0.6
 DEFAULT_CONTEXT_WEIGHT: Final[float] = 0.3
@@ -217,6 +224,9 @@ class Config:
             before typing the replacement. Chromium/Electron applications
             process Backspace asynchronously, so a small pause avoids the race
             that otherwise leaves the first character behind (``рhello``).
+        trigger_settle_ms: Milliseconds to wait after a word-boundary flush
+            (Space/Enter/Tab) before the deletion is sent, so the boundary key
+            itself is processed by the application first.
     """
 
     analysis_timeout: float = DEFAULT_ANALYSIS_TIMEOUT
@@ -240,6 +250,7 @@ class Config:
     on_punctuation: bool = False
     punctuation_chars: str = DEFAULT_PUNCTUATION_CHARS
     backspace_settle_ms: int = DEFAULT_BACKSPACE_SETTLE_MS
+    trigger_settle_ms: int = DEFAULT_TRIGGER_SETTLE_MS
 
     # --- Task D: modes and hotkeys -----------------------------------------
     mode: str = "auto"
@@ -329,6 +340,10 @@ class Config:
         self.backspace_settle_ms = int(self.backspace_settle_ms)
         if not 0 <= self.backspace_settle_ms <= 200:
             raise ValueError("backspace_settle_ms must be between 0 and 200")
+
+        self.trigger_settle_ms = int(self.trigger_settle_ms)
+        if not 0 <= self.trigger_settle_ms <= 200:
+            raise ValueError("trigger_settle_ms must be between 0 and 200")
 
         # --- modes and hotkeys ---------------------------------------------
         self.mode = str(self.mode).lower()

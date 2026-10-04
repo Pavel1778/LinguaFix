@@ -8,7 +8,9 @@
 
 ## Key invariants (easy to regress)
 - The daemon tracks the current word as **scancodes** (`daemon._scancodes`), not just characters. `TextInjector.replace_text(backspace_count: int, new: str, layout: str)`. The daemon passes `len(self._scancodes)`. A string-based backspace count reintroduces the `рhello` truncation bug (first char left behind).
-- `uinput` replace = two flushes: backspaces (one `syn`), sleep `backspace_settle_ms` (default 30), then replacement (second `syn`). Single-batch raced Chromium/Electron async Backspace.
+- `uinput` replace = two flushes: backspaces (one `syn`), sleep `backspace_settle_ms` (default **50**), then replacement (second `syn`). Single-batch raced Chromium/Electron async Backspace.
+- Boundary-triggered flushes (Space/Enter/Tab/punctuation) sleep `trigger_settle_ms` (default 50) **before** deleting, because the boundary key is still being processed; without it Chromium/Electron coalesce the fast Backspaces and the first char survives (`руддщ ` → `рhello`). Only boundary flushes pass `boundary=True`; idle fallback and hotkey do not.
+- Double-tap modifier hotkey fires only when no *other* modifier family is held (`_held_modifiers - {family}` check) — `Ctrl+Shift+Shift` is a chord, not a fix.
 - Word-boundary triggers (`on_space`/`on_enter` on by default, `on_tab`/`on_punctuation` off) flush+fix inside the same keystroke. `analysis_timeout` default 0.8 is only the idle fallback for unseparated words.
 - Token with an internal separator (`.` `@` `/` `\` `:` `_` `-`) is never rewritten (URLs, e-mails, paths, versions, hyphenated ids). Guard sits AFTER conversion in `_process_buffer_inner` — the privacy test's secret contains `_` and needs the convert path to run.
 - Config TOML is **flat** (no `[sections]`), despite the task prompt suggesting `[trigger]`/`[timing]`. `Config.to_dict` has a fixed key set asserted by tests.

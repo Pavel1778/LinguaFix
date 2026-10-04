@@ -26,7 +26,8 @@ def test_defaults() -> None:
     assert config.on_tab is False
     assert config.on_punctuation is False
     assert config.punctuation_chars == ".!?,;:"
-    assert config.backspace_settle_ms == 30
+    assert config.backspace_settle_ms == 50
+    assert config.trigger_settle_ms == 50
     assert isinstance(config.stop_words, list)
     assert "password" in config.stop_words
 
@@ -99,6 +100,7 @@ def test_validation_normalises_values() -> None:
         {"switch_method": "bogus"},
         {"log_level": "bogus"},
         {"backspace_settle_ms": -1},
+        {"trigger_settle_ms": -1},
     ],
 )
 def test_validation_rejects_bad_values(kwargs: dict[str, object]) -> None:
@@ -145,6 +147,7 @@ def test_new_field_defaults() -> None:
         {"log_rotation_mb": 0},
         {"log_rotation_mb": 100},
         {"backspace_settle_ms": 500},
+        {"trigger_settle_ms": 500},
         {"custom_skip_regex": "([unclosed"},
         {"hotkey_fix_last_word": "ENTER"},
         {"hotkey_fix_last_word": "CTRL+SPACE"},

@@ -193,6 +193,9 @@ if [ -f "${REPO_DIR}/data/${APP_NAME}.desktop" ]; then
     sed "s|@BIN@|${BIN}|g" "${REPO_DIR}/data/${APP_NAME}.desktop" \
         > "${APPS_DIR}/${APP_NAME}.desktop"
     chmod 0644 "${APPS_DIR}/${APP_NAME}.desktop"
+    # Refresh the desktop database so the entry appears in the application menu
+    # without a re-login.
+    update-desktop-database -q "${APPS_DIR}" >/dev/null 2>&1 || true
     log "Установлен пункт меню: ${APPS_DIR}/${APP_NAME}.desktop"
 fi
 
