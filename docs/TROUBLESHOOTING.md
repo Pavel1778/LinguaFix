@@ -40,6 +40,45 @@ The exit code is non-zero when a check fails, so it is safe to use in scripts.
    file paths, version numbers or hyphenated identifiers (a token with `.`, `@`,
    `/`, `\`, `:`, `_` or `-` inside it). `github.com` and `3.14` are left alone.
 
+## A string I typed is "corrected" wrongly (false positive)
+
+Symptom: a plausible-looking sequence such as `сb cj,jq?ye;yjn/g/` is rewritten
+into the other layout even though you meant to type it that way.
+
+Three guards prevent this and are on by default:
+
+```toml
+plausibility_check = true      # don't touch text that already reads as a word
+structural_boundaries = true   # skip URLs, e-mails, paths, versions
+identifier_guard = true        # skip snake_case, camelCase, x86_64, ...
+```
+
+- If the text already looks like a real word **in the layout you typed it in**,
+  it is not rewritten. This is what stops `сb cj,jq?ye;yjn/g/`.
+- Tokens with structural markers (a dot, `@`, `/`, `_`, `-`, digits inside) are
+  treated as identifiers and skipped.
+- The guards run after the user dictionary, so a word you taught
+  (`linguafix dict add vercel`) is still fixed even if the source looks plausible.
+
+If a specific string still misfires, add it to `custom_skip_regex`:
+
+```toml
+custom_skip_regex = ["^сb cj"]
+```
+
+Set `mode = "manual"` if you want to decide each correction yourself.
+
+## The fix went the wrong way and I want it back
+
+Undo the last correction in either of two ways:
+
+- Press the undo hotkey (`CTRL+Z` by default), or
+- Open the GUI and click **«Отменить последнее исправление»** on the main page.
+
+The GUI button asks the running daemon to reverse its own last fix, so it works
+even when the application you typed in groups undo history differently. It
+requires the daemon to be running.
+
 ## doctor complains about /dev/input or /dev/uinput permissions
 
 Symptom in the log:

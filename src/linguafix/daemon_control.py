@@ -1,0 +1,253 @@
+"""Control a LinguaFix daemon however it was launched.
+
+A daemon can be started two ways: as a ``systemd --user`` service, or as a plain
+detached process from ``linguafix start``. The GUI must see and control both;
+otherwise a daemon started from a terminal is invisible to the big toggle and
+cannot be stopped from the app. This module presents one interface over the two:
+it prefers the systemd unit when it is enabled, and falls back to the PID lock
+file that *every* daemon writes (the systemd unit writes it too, because it runs
+the same ``linguafix start --foreground`` command).
+
+The lock file is the single source of truth for "is a daemon alive": it is
+created under ``XDG_CACHE_HOME`` and released on exit, and it works without
+systemd at all (containers, minimal installs, manual runs).
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+import shutil
+import signal
+import subprocess
+import sys
+import time
+from collections.abc import Callable
+from pathlib import Path
+from typing import Final
+
+from .config import cache_dir
+
+logger = logging.getLogger(__name__)
+
+LOCK_FILE_NAME: Final[str] = "daemon.lock"
+SERVICE: Final[str] = "linguafix.service"
+START_TIMEOUT: Final[float] = 5.0
+STOP_GRACE: Final[float] = 3.0
+POLL_INTERVAL: Final[float] = 0.1
+SYSTEMCTL_TIMEOUT: Final[float] = 5.0
+
+
+def lock_path() -> Path:
+    """Return the path of the daemon PID lock file."""
+    return cache_dir() / LOCK_FILE_NAME
+
+
+def pid_alive(pid: int) -> bool:
+    """Return ``True`` when a process with ``pid`` exists."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def read_pid() -> int | None:
+    """Return the PID in the lock file when that process is still alive."""
+    try:
+        raw = lock_path().read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not raw.isdigit():
+        return None
+    pid = int(raw)
+    return pid if pid_alive(pid) else None
+
+
+def systemctl_available() -> bool:
+    """Return ``True`` when ``systemctl`` is on PATH."""
+    return shutil.which("systemctl") is not None
+
+
+def _systemctl(
+    args: list[str], timeout: float = SYSTEMCTL_TIMEOUT
+) -> subprocess.CompletedProcess[str] | None:
+    """Run ``systemctl --user <args>`` returning ``None`` on any failure."""
+    if not systemctl_available():
+        return None
+    try:
+        return subprocess.run(
+            ["systemctl", "--user", *args],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        logger.debug("systemctl %s failed: %s", args, exc)
+        return None
+
+
+def systemd_active() -> bool:
+    """Return ``True`` when the systemd user unit is active."""
+    result = _systemctl(["is-active", SERVICE])
+    return result is not None and result.stdout.strip() == "active"
+
+
+def systemd_enabled() -> bool:
+    """Return ``True`` when the systemd user unit is enabled for login."""
+    result = _systemctl(["is-enabled", SERVICE])
+    return result is not None and result.stdout.strip() == "enabled"
+
+
+def is_running() -> bool:
+    """Return ``True`` when a daemon is running, however it was started."""
+    return read_pid() is not None or systemd_active()
+
+
+def _wait_until(predicate: Callable[[], bool], timeout: float) -> bool:
+    """Poll ``predicate`` every :data:`POLL_INTERVAL` until it holds or times out."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if predicate():
+            return True
+        time.sleep(POLL_INTERVAL)
+    return predicate()
+
+
+def spawn_detached(dry_run: bool = False) -> None:
+    """Start a detached daemon process, logging any failure.
+
+    Prefers the installed ``linguafix`` launcher over ``sys.executable -m``
+    because the launcher sets ``PYTHONPATH`` for the packaged layout; spawning
+    ``python3 -m linguafix`` directly would fail to import the package in a
+    ``.deb`` install when the GUI was not itself started through the launcher.
+    """
+    launcher = shutil.which("linguafix")
+    command = (
+        [launcher, "start", "--foreground"]
+        if launcher
+        else [sys.executable, "-m", "linguafix", "start", "--foreground"]
+    )
+    if dry_run:
+        command.append("--dry-run")
+    try:
+        subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError:
+        logger.error("Could not spawn the daemon", exc_info=True)
+
+
+def start(dry_run: bool = False) -> bool:
+    """Start the daemon and return whether it came up.
+
+    Prefers the systemd unit when it is enabled so the service keeps its
+    restart-on-failure semantics; otherwise spawns a detached process. Either
+    way the daemon writes the PID lock file, which is what the GUI polls.
+    """
+    if is_running():
+        return True
+    if systemd_enabled():
+        _systemctl(["start", SERVICE])
+        if _wait_until(lambda: read_pid() is not None or systemd_active(), START_TIMEOUT):
+            return True
+    spawn_detached(dry_run=dry_run)
+    return _wait_until(lambda: read_pid() is not None, START_TIMEOUT)
+
+
+def _kill_pid(pid: int, sig: int) -> bool:
+    """Send ``sig`` to ``pid``; return ``True`` when it was delivered or gone."""
+    try:
+        os.kill(pid, sig)
+    except ProcessLookupError:
+        return True
+    except OSError:
+        logger.debug("kill(%d, %s) failed", pid, sig, exc_info=True)
+        return False
+    return True
+
+
+def stop() -> bool:
+    """Stop the daemon, however it was started."""
+    # Stop the unit first when it is the manager: systemd would otherwise
+    # restart a process killed out from under it (``Restart=always``).
+    if systemd_active():
+        _systemctl(["stop", SERVICE])
+    pid = read_pid()
+    if pid is not None:
+        _kill_pid(pid, signal.SIGTERM)
+        if not _wait_until(lambda: not pid_alive(pid), STOP_GRACE):
+            logger.warning("Daemon %d ignored SIGTERM; escalating to SIGKILL", pid)
+            _kill_pid(pid, signal.SIGKILL)
+            _wait_until(lambda: not pid_alive(pid), STOP_GRACE)
+    return not is_running()
+
+
+def restart() -> bool:
+    """Restart the daemon (used after a configuration change)."""
+    if not is_running():
+        return start()
+    was_service = systemd_enabled()
+    stop()
+    if was_service:
+        _systemctl(["start", SERVICE])
+        return _wait_until(lambda: read_pid() is not None or systemd_active(), START_TIMEOUT)
+    spawn_detached()
+    return _wait_until(lambda: read_pid() is not None, START_TIMEOUT)
+
+
+def reload_config() -> bool:
+    """Ask the daemon to reload its configuration.
+
+    Prefers ``SIGHUP`` to the running process (works for a manual or service
+    daemon alike); falls back to ``systemctl reload-or-restart``.
+    """
+    pid = read_pid()
+    if pid is not None:
+        return _kill_pid(pid, signal.SIGHUP)
+    result = _systemctl(["reload-or-restart", SERVICE])
+    return result is not None and result.returncode == 0
+
+
+def undo_last_fix() -> bool:
+    """Ask the running daemon to undo its most recent correction.
+
+    Returns ``False`` when no daemon is running. This is the reliable undo path
+    the GUI button uses: it does not depend on the application's own undo
+    history, which groups a correction differently from one app to the next.
+    """
+    pid = read_pid()
+    if pid is None:
+        return False
+    return _kill_pid(pid, signal.SIGUSR1)
+
+
+def enable_autostart() -> bool:
+    """Enable the systemd unit for login."""
+    result = _systemctl(["enable", SERVICE])
+    return result is not None and result.returncode == 0
+
+
+def disable_autostart() -> bool:
+    """Disable the systemd unit for login."""
+    result = _systemctl(["disable", SERVICE])
+    return result is not None and result.returncode == 0
+
+
+def autostart_enabled() -> bool:
+    """Return ``True`` when the daemon will start at login.
+
+    Either the systemd unit is enabled or the XDG autostart entry exists, so the
+    GUI reflects both install paths.
+    """
+    if systemd_enabled():
+        return True
+    base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return (base / "autostart" / "linguafix.desktop").exists()

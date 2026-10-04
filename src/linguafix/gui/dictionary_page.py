@@ -22,7 +22,6 @@ from ..dictionary import (  # noqa: E402
     save_user_dictionary,
     user_dictionary_path,
 )
-from . import systemd_bridge  # noqa: E402
 from .prefs_base import BoundPreferencesPage  # noqa: E402
 from .state import GuiState  # noqa: E402
 from .widgets.dictionary_list import DictionaryList  # noqa: E402
@@ -65,7 +64,7 @@ class DictionaryPage(BoundPreferencesPage):
         self._status.set_label(f"Слов: {len(words)} · Файл: {self._path}")
 
     def _on_apply(self, _button: Gtk.Button) -> None:
-        if systemd_bridge.reload_service():
+        if self._state.reload_config():
             if self._on_saved is not None:
                 self._on_saved("Словарь применён")
         elif self._on_saved is not None:

@@ -9,7 +9,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 from .state import MODE_LABELS, GuiState  # noqa: E402
-from .widgets.big_toggle import STATE_BUSY, STATE_OFF, STATE_ON, BigToggle, BusyPoller  # noqa: E402
+from .widgets.big_toggle import STATE_BUSY, STATE_OFF, STATE_ON, BigToggle  # noqa: E402
 from .widgets.mode_switcher import ModeSwitcher  # noqa: E402
 from .widgets.status_row import StatusRow  # noqa: E402
 
@@ -39,6 +39,12 @@ class HomePage(Gtk.Box):
         self._mode.set_mode(state.config.mode)
         self.append(self._mode)
 
+        self._undo_button = Gtk.Button(label="Отменить последнее исправление")
+        self._undo_button.add_css_class("pill")
+        self._undo_button.set_halign(Gtk.Align.CENTER)
+        self._undo_button.connect("clicked", self._on_undo_clicked)
+        self.append(self._undo_button)
+
         self.append(Gtk.Separator())
         self._autostart = Adw.SwitchRow(
             title="Запускать при входе в систему",
@@ -60,18 +66,36 @@ class HomePage(Gtk.Box):
 
     # --- actions ----------------------------------------------------------
     def _on_toggle_clicked(self) -> None:
-        if self._state.is_active():
-            self._toggle.set_busy()
-            self._state.stop()
-            BusyPoller(lambda: not self._state.is_active(), self.refresh).start()
-        else:
-            self._toggle.set_busy()
-            self._state.start()
-            BusyPoller(self._state.is_active, self.refresh).start()
+        want_active = not self._state.is_active()
+        self._toggle.set_busy()
+        # Perform the (blocking) start/stop, then poll until the daemon state
+        # matches the request. Polling rather than trusting the return value is
+        # what makes the button reliable: systemd start/stop can return before
+        # ``is-active`` flips, which previously left the UI showing a stale
+        # state (the "works every other time" bug).
+        ok = self._state.start() if want_active else self._state.stop()
+        if not ok:
+            self._toast("Не удалось переключить демон", ok=False)
+        self._reconcile(want_active, attempt=0)
+
+    def _reconcile(self, want_active: bool, attempt: int) -> bool:
+        """Poll the daemon state until it matches ``want_active``, then redraw."""
+        if self._state.is_active() == want_active or attempt >= 12:
+            self.refresh()
+            return False
+        GLib.timeout_add(150, self._reconcile, want_active, attempt + 1)
+        return False
 
     def _on_mode_changed(self, mode: str) -> None:
         self._state.set_mode(mode)
         self._toast(f"Режим изменён на {MODE_LABELS.get(mode, mode)}")
+
+    def _on_undo_clicked(self, _button: Gtk.Button) -> None:
+        """Ask the daemon to undo its last fix without touching app history."""
+        if self._state.undo_last_fix():
+            self._toast("Последнее исправление отменено")
+        else:
+            self._toast("Демон не запущен", ok=False)
 
     def _on_autostart_toggled(self, row: Adw.SwitchRow, _param: object) -> None:
         enabled = row.get_active()

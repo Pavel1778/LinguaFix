@@ -44,6 +44,14 @@ DEFAULT_UNDO_WINDOW_SECONDS: Final[int] = 10
 DEFAULT_UNDO_HISTORY_DEPTH: Final[int] = 3
 DEFAULT_DICTIONARY_SIZE: Final[int] = 5000
 DEFAULT_LOG_ROTATION_MB: Final[int] = 5
+# Plausibility guard: when the text typed in the *current* layout already looks
+# like real words, it is left alone even if another layout scores higher. The
+# floor is an average bigram log-probability; below it a word looks like noise
+# (``руддщ`` scores ~-11, a real but rare word such as ``нот`` ~-4.6).
+DEFAULT_PLAUSIBILITY_FLOOR: Final[float] = -7.0
+# A run of consonants longer than this is a strong "not a word" signal.
+DEFAULT_MAX_CONSECUTIVE_CONSONANTS: Final[int] = 6
+DEFAULT_MIN_VOWEL_RATIO: Final[float] = 0.15
 # The manual-fix hotkey default. A double tap of the same modifier works on
 # every keyboard, unlike the previous ``PAUSE`` default (many laptops have no
 # Pause key). ``SHIFT+SHIFT`` is the double-tap of the shift family.
@@ -252,6 +260,12 @@ class Config:
     ignore_all_caps: bool = False
     ignore_with_digits: bool = False
     ignore_emails_urls: bool = True
+    plausibility_check: bool = True
+    structural_boundaries: bool = True
+    identifier_guard: bool = True
+    plausibility_floor: float = DEFAULT_PLAUSIBILITY_FLOOR
+    max_consecutive_consonants: int = DEFAULT_MAX_CONSECUTIVE_CONSONANTS
+    min_vowel_ratio: float = DEFAULT_MIN_VOWEL_RATIO
     custom_skip_regex: str = ""
     exceptions_apps: list[str] = field(default_factory=list)
     exceptions_force_in_manual: list[str] = field(default_factory=list)
@@ -370,6 +384,16 @@ class Config:
         self.ignore_all_caps = bool(self.ignore_all_caps)
         self.ignore_with_digits = bool(self.ignore_with_digits)
         self.ignore_emails_urls = bool(self.ignore_emails_urls)
+        self.plausibility_check = bool(self.plausibility_check)
+        self.structural_boundaries = bool(self.structural_boundaries)
+        self.identifier_guard = bool(self.identifier_guard)
+        self.plausibility_floor = float(self.plausibility_floor)
+        self.max_consecutive_consonants = int(self.max_consecutive_consonants)
+        if self.max_consecutive_consonants < 2:
+            raise ValueError("max_consecutive_consonants must be >= 2")
+        self.min_vowel_ratio = float(self.min_vowel_ratio)
+        if not 0.0 <= self.min_vowel_ratio < 1.0:
+            raise ValueError("min_vowel_ratio must be between 0 and 1")
         self.custom_skip_regex = str(self.custom_skip_regex)
         if self.custom_skip_regex:
             try:

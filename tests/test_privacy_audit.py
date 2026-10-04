@@ -68,6 +68,12 @@ _ALLOWED_CONFIG_KEYS = {
     "ignore_all_caps",
     "ignore_with_digits",
     "ignore_emails_urls",
+    "plausibility_check",
+    "structural_boundaries",
+    "identifier_guard",
+    "plausibility_floor",
+    "max_consecutive_consonants",
+    "min_vowel_ratio",
     "custom_skip_regex",
     "exceptions_apps",
     "exceptions_force_in_manual",
@@ -150,7 +156,14 @@ def _run_secret_session(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Ling
     injector = _RecordingInjector()
     daemon = LinguaFixDaemon(
         config,
-        detector=LanguageDetector(converter=None, stop_words=[], min_word_length=1),
+        detector=LanguageDetector(
+            converter=None,
+            stop_words=[],
+            min_word_length=1,
+            plausibility_check=False,
+            structural_boundaries=False,
+            identifier_guard=False,
+        ),
         switcher=_Switcher("us"),
         injector=injector,
     )
@@ -222,7 +235,14 @@ def test_no_secret_in_subprocess_argv(tmp_path: Path, monkeypatch: pytest.Monkey
     save_config(config)
     daemon = LinguaFixDaemon(
         config,
-        detector=LanguageDetector(converter=None, stop_words=[], min_word_length=1),
+        detector=LanguageDetector(
+            converter=None,
+            stop_words=[],
+            min_word_length=1,
+            plausibility_check=False,
+            structural_boundaries=False,
+            identifier_guard=False,
+        ),
         switcher=_Switcher("us"),
         injector=_RecordingInjector(),
     )
@@ -247,7 +267,14 @@ def test_traceback_does_not_contain_buffer(
     config = Config(analysis_timeout=0.1, min_word_length=1, stop_words=[])
     daemon = LinguaFixDaemon(
         config,
-        detector=LanguageDetector(converter=None, stop_words=[], min_word_length=1),
+        detector=LanguageDetector(
+            converter=None,
+            stop_words=[],
+            min_word_length=1,
+            plausibility_check=False,
+            structural_boundaries=False,
+            identifier_guard=False,
+        ),
         switcher=_Switcher("us"),
         injector=_RecordingInjector(),
     )
@@ -301,7 +328,14 @@ def test_daemon_survives_injector_exception(
     injector = _RecordingInjector()
     daemon = LinguaFixDaemon(
         config,
-        detector=LanguageDetector(converter=None, stop_words=[], min_word_length=1),
+        detector=LanguageDetector(
+            converter=None,
+            stop_words=[],
+            min_word_length=1,
+            plausibility_check=False,
+            structural_boundaries=False,
+            identifier_guard=False,
+        ),
         switcher=_Switcher("us"),
         injector=injector,
     )

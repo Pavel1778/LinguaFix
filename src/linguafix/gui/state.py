@@ -14,7 +14,17 @@ from dataclasses import dataclass, field
 from typing import Final
 
 from ..config import Config, load_config, save_config
-from . import systemd_bridge
+from ..daemon_control import (
+    autostart_enabled as daemon_autostart_enabled,
+    disable_autostart as daemon_disable_autostart,
+    enable_autostart as daemon_enable_autostart,
+    is_running as daemon_is_running,
+    reload_config as daemon_reload_config,
+    restart as daemon_restart,
+    start as daemon_start,
+    stop as daemon_stop,
+    undo_last_fix as daemon_undo_last_fix,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,24 +79,36 @@ class GuiState:
 
     # --- daemon status ----------------------------------------------------
     def is_active(self) -> bool:
-        """Return ``True`` when the daemon unit is running."""
-        return systemd_bridge.is_service_active()
+        """Return ``True`` when a daemon is running, however it was started."""
+        return daemon_is_running()
 
     def is_autostart_enabled(self) -> bool:
-        """Return ``True`` when the daemon unit is enabled for login."""
-        return systemd_bridge.is_service_enabled()
+        """Return ``True`` when the daemon will start at login."""
+        return daemon_autostart_enabled()
 
     def start(self) -> bool:
         """Start the daemon."""
-        return systemd_bridge.start_service()
+        return daemon_start()
 
     def stop(self) -> bool:
         """Stop the daemon."""
-        return systemd_bridge.stop_service()
+        return daemon_stop()
+
+    def restart(self) -> bool:
+        """Restart the daemon."""
+        return daemon_restart()
+
+    def reload_config(self) -> bool:
+        """Ask the running daemon to reload its configuration."""
+        return daemon_reload_config()
+
+    def undo_last_fix(self) -> bool:
+        """Ask the running daemon to undo its most recent correction."""
+        return daemon_undo_last_fix()
 
     def set_autostart(self, enabled: bool) -> bool:
         """Enable or disable autostart and return whether it succeeded."""
-        return systemd_bridge.enable_autostart() if enabled else systemd_bridge.disable_autostart()
+        return daemon_enable_autostart() if enabled else daemon_disable_autostart()
 
     def current_layout(self) -> str:
         """Return the active keyboard layout, or an empty string."""

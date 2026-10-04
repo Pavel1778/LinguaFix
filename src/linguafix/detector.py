@@ -30,6 +30,24 @@ LATIN_RE: Final[re.Pattern[str]] = re.compile(r"[A-Za-z]")
 WORD_RE: Final[re.Pattern[str]] = re.compile(r"[\w']+", re.UNICODE)
 TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"[a-z0-9_]+", re.IGNORECASE)
 
+# Vowels of the shipped languages (en/ru/uk/de/fr). A consonant run longer than
+# ``max_consecutive_consonants`` is treated as "not a real word".
+_VOWELS: Final[frozenset[str]] = frozenset(
+    "aeiouy"  # Latin
+    "аеёиоуыэюя"  # Russian
+    "іїє"  # Ukrainian
+)
+_LETTER_RE: Final[re.Pattern[str]] = re.compile(r"[^\W\d_]", re.UNICODE)
+# A structural separator that joins sub-tokens (URL, e-mail, path, version).
+# Leading/trailing punctuation is not included: a sentence-ending "." is fine.
+_STRUCTURAL_SEPARATOR_RE: Final[re.Pattern[str]] = re.compile(r"\w[.@/\\=#&~|<>\[\]{}()]\w")
+# A camelCase hump, a snake_case/kebab-case join or a letter/digit mix marks a
+# code identifier. Case-sensitive on purpose: ``A1`` is an identifier, ``ab`` is
+# a word.
+_IDENTIFIER_RE: Final[re.Pattern[str]] = re.compile(
+    r"[a-z][A-Z]|_|[^\W_]-[^\W_]|[A-Za-z]\d|\d[A-Za-z]"
+)
+
 # Which language each known layout types. Latin layouts share the same physical
 # positions, so their corpora are interchangeable; the mapping keeps detection
 # honest for Cyrillic layouts (``ru`` and ``uk`` share an alphabet family but
@@ -107,12 +125,25 @@ class LanguageDetector:
         languages: tuple[str, ...] | None = None,
         dictionary_size: int = 0,
         user_words: list[str] | None = None,
+        plausibility_check: bool = True,
+        structural_boundaries: bool = True,
+        identifier_guard: bool = True,
+        plausibility_floor: float = -7.0,
+        max_consecutive_consonants: int = 6,
+        min_vowel_ratio: float = 0.15,
     ) -> None:
         self.converter = converter or LayoutConverter()
         self.min_word_length = min_word_length
         self.confidence_threshold = confidence_threshold
         # How much a neighbouring word may nudge the verdict (0 disables it).
         self.context_weight = 0.0
+        # False-positive guards (see :meth:`_looks_like_real_words`).
+        self.plausibility_check = plausibility_check
+        self.structural_boundaries = structural_boundaries
+        self.identifier_guard = identifier_guard
+        self.plausibility_floor = plausibility_floor
+        self.max_consecutive_consonants = max_consecutive_consonants
+        self.min_vowel_ratio = min_vowel_ratio
         self._languages = languages
         self._dictionary_size = dictionary_size
         self._user_words = {word.lower() for word in (user_words or []) if word.strip()}
@@ -356,6 +387,75 @@ class LanguageDetector:
                 total += bigram
         return total
 
+    def _word_is_plausible(self, word: str, language: str) -> bool:
+        """Return ``True`` when ``word`` already looks like a real ``language`` word.
+
+        Used to protect real but rare words (``нот``, a surname, a technical
+        term) that another layout would happily "correct" into noise. A word is
+        plausible when it is in the vocabulary, or its bigram score clears
+        ``plausibility_floor`` and it has a human-looking vowel/consonant shape.
+        """
+        lowered = word.lower()
+        if lowered in self._vocabularies.get(language, set()):
+            return True
+        if lowered in self._user_words:
+            return True
+        if len(lowered) < self.min_word_length:
+            # Too short to judge: treat as plausible so a stray fragment is kept.
+            return True
+        if not _LETTER_RE.search(lowered):
+            return True
+        bigram = self._bigram_score(lowered, language)
+        if bigram == float("-inf"):
+            return True
+        if bigram < self.plausibility_floor:
+            return False
+        letters = [char for char in lowered if _LETTER_RE.match(char)]
+        vowels = sum(1 for char in letters if char in _VOWELS)
+        if vowels == 0:
+            return False
+        if vowels / len(letters) < self.min_vowel_ratio:
+            return False
+        run = 0
+        for char in letters:
+            run = 0 if char in _VOWELS else run + 1
+            if run > self.max_consecutive_consonants:
+                return False
+        return True
+
+    def _looks_like_real_words(self, text: str, current_layout: str) -> bool:
+        """Return ``True`` when ``text`` already reads as real current-layout words.
+
+        This is the false-positive guard: text that is plausible in the layout
+        it was typed in is never converted, even when another layout scores
+        higher. It is what stops ``cj,jq?ye;yjn/g/`` and other symbol-heavy or
+        mixed-looking text from being rewritten.
+        """
+        language = self._layout_language(current_layout)
+        if language is None:
+            return False
+        words = [w for w in WORD_RE.findall(text) if len(w) >= self.min_word_length]
+        if not words:
+            return False
+        return all(self._word_is_plausible(word, language) for word in words)
+
+    def _has_structural_marker(self, text: str) -> bool:
+        """Return ``True`` for a token with a URL/path/e-mail structure."""
+        return bool(_STRUCTURAL_SEPARATOR_RE.search(text))
+
+    def _should_guard(self, text: str, current_layout: str) -> bool:
+        """Return ``True`` when a guard vetoes converting ``text``.
+
+        Applies the structural-boundary and identifier guards (always safe) and
+        the plausibility guard (only when enabled). The guards only ever prevent
+        a conversion; a word the user taught is handled before they run.
+        """
+        if self.structural_boundaries and self._has_structural_marker(text):
+            return True
+        if self.identifier_guard and _IDENTIFIER_RE.search(text):
+            return True
+        return bool(self.plausibility_check and self._looks_like_real_words(text, current_layout))
+
     def target_layout(
         self, buffer: str, current_layout: str, neighbor: str | None = None
     ) -> str | None:
@@ -387,6 +487,12 @@ class LanguageDetector:
             logger.debug(
                 "detect(len=%d): typed word is in the user dictionary; skipping", len(stripped)
             )
+            return None
+
+        # False-positive guards. They only ever prevent a conversion; a taught
+        # word was already handled above, so this cannot suppress an intended fix.
+        if self._should_guard(stripped, current_layout):
+            logger.debug("detect(len=%d): guard vetoed the conversion; skipping", len(stripped))
             return None
 
         words = [w for w in WORD_RE.findall(stripped) if len(w) >= self.min_word_length]
@@ -515,12 +621,27 @@ class LanguageDetector:
         if not stripped or self.is_stop_word(stripped):
             return False
 
+        # Structural/identifier tokens are never corrected, in any mode.
+        if self._should_guard_structure_only(stripped):
+            return False
+
         if _has_cyrillic(stripped) and _has_latin(stripped):
             return True
 
         if current_layout is None:
             return self.detect(stripped) is not None
         return self.target_layout(stripped, current_layout) is not None
+
+    def _should_guard_structure_only(self, text: str) -> bool:
+        """Return ``True`` when the structural/identifier guard applies to ``text``.
+
+        The plausibility guard is intentionally excluded: ``should_fix`` has no
+        current layout to score against, so only the layout-independent guards
+        run here. ``target_layout`` applies the full guard set.
+        """
+        if self.structural_boundaries and self._has_structural_marker(text):
+            return True
+        return bool(self.identifier_guard and _IDENTIFIER_RE.search(text))
 
     def convert_buffer(self, buffer: str, from_layout: str, to_layout: str) -> str:
         """Convert ``buffer`` preserving layout via the internal converter."""

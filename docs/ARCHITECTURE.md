@@ -253,6 +253,18 @@ word is scored against the corpora whose *layout could have produced it*.
   `custom_skip_regex`). These short-circuit a buffer before detection. Digital
   tokens, `ALL CAPS` and e-mail/URL/path-like tokens (an internal separator such
   as `. @ / \ : _ -`) are left untouched.
+- **False-positive guards** (`plausibility_check`, `structural_boundaries`,
+  `identifier_guard`, all on by default). Three layers keep the detector from
+  rewriting text that already reads as real words:
+  - *Plausibility*: the typed text is scored in the layout it was typed in; if it
+    already looks like a real word there, no correction is made. This suppresses
+    the `сb cj,jq?ye;yjn/g/` class of false positives.
+  - *Structural boundaries*: URLs, e-mail addresses, paths and version numbers
+    are recognised and skipped before scoring.
+  - *Identifier guard*: `snake_case`, `camelCase`, `x86_64` and similar code
+    tokens are treated as identifiers, not prose.
+  The guards run **after** the user-dictionary check, so a taught word
+  (`муксуд` → `vercel`) is still fixed even when the source looks plausible.
 - **User dictionary** (`dictionary_size`, `dictionary_custom_path`). A
   newline-separated list of words the user taught the daemon. It is a deliberate,
   explicit file (`~/.local/share/linguafix/dictionary.txt` by default) — the
@@ -308,5 +320,6 @@ fix, so normal capitalisation is unaffected. Hotkeys are re-parsed on
 | `switcher.py` | `g3kb-switch` / `setxkbmap` layout control |
 | `injector.py` | Text replacement via `uinput` / `wtype` / `xdotool` |
 | `daemon.py` | `LinguaFixDaemon`: event loop, buffering, orchestration |
+| `daemon_control.py` | Start/stop/reload/undo a daemon however it was launched |
 | `tray.py` | Optional AppIndicator icon |
 | `cli.py` | `argparse` command-line interface |

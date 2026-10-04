@@ -227,6 +227,12 @@ class LinguaFixDaemon:
             min_word_length=config.min_word_length,
             confidence_threshold=config.confidence_threshold,
             languages=tuple(config.languages),
+            plausibility_check=config.plausibility_check,
+            structural_boundaries=config.structural_boundaries,
+            identifier_guard=config.identifier_guard,
+            plausibility_floor=config.plausibility_floor,
+            max_consecutive_consonants=config.max_consecutive_consonants,
+            min_vowel_ratio=config.min_vowel_ratio,
         )
         self.switcher = switcher or LayoutSwitcher(
             layouts=config.layouts,
@@ -890,6 +896,12 @@ class LinguaFixDaemon:
         self.detector.min_word_length = new_config.min_word_length
         self.detector.set_confidence_threshold(new_config.confidence_threshold)
         self.detector.set_languages(tuple(new_config.languages))
+        self.detector.plausibility_check = new_config.plausibility_check
+        self.detector.structural_boundaries = new_config.structural_boundaries
+        self.detector.identifier_guard = new_config.identifier_guard
+        self.detector.plausibility_floor = new_config.plausibility_floor
+        self.detector.max_consecutive_consonants = new_config.max_consecutive_consonants
+        self.detector.min_vowel_ratio = new_config.min_vowel_ratio
         self.detector.set_context_weight(
             new_config.context_weight if new_config.context_analysis else 0.0
         )

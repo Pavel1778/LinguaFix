@@ -74,14 +74,10 @@ def test_big_toggle_start_and_stop(gui_state: Any, monkeypatch: pytest.MonkeyPat
     active = {"value": False}
     calls: list[str] = []
 
-    monkeypatch.setattr(state_module.systemd_bridge, "is_service_active", lambda: active["value"])
-    monkeypatch.setattr(
-        state_module.systemd_bridge, "start_service", lambda: calls.append("start") or True
-    )
-    monkeypatch.setattr(
-        state_module.systemd_bridge, "stop_service", lambda: calls.append("stop") or True
-    )
-    monkeypatch.setattr(state_module.systemd_bridge, "is_service_enabled", lambda: False)
+    monkeypatch.setattr(state_module, "daemon_is_running", lambda: active["value"])
+    monkeypatch.setattr(state_module, "daemon_start", lambda: calls.append("start") or True)
+    monkeypatch.setattr(state_module, "daemon_stop", lambda: calls.append("stop") or True)
+    monkeypatch.setattr(state_module, "daemon_autostart_enabled", lambda: False)
     monkeypatch.setattr(state_module, "subprocess", _NoLayout())
 
     import gi
@@ -109,6 +105,26 @@ def test_big_toggle_start_and_stop(gui_state: Any, monkeypatch: pytest.MonkeyPat
     assert page.toggle.state == STATE_BUSY
 
 
+def test_undo_button_asks_daemon(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    from linguafix.gui import state as state_module
+
+    calls: list[str] = []
+    monkeypatch.setattr(state_module, "daemon_is_running", lambda: True)
+    monkeypatch.setattr(state_module, "daemon_undo_last_fix", lambda: calls.append("undo") or True)
+    monkeypatch.setattr(state_module, "subprocess", _NoLayout())
+
+    import gi
+
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw
+
+    from linguafix.gui.home_page import HomePage
+
+    page = HomePage(gui_state, Adw.ToastOverlay())
+    page._on_undo_clicked(None)
+    assert calls == ["undo"]
+
+
 def test_mode_switcher_persists(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     saved: list[str] = []
     monkeypatch.setattr(gui_state, "save", lambda: saved.append(gui_state.config.mode))
@@ -128,15 +144,15 @@ def test_autostart_switch_enables_and_disables(
 
     enabled = {"value": False}
     calls: list[bool] = []
-    monkeypatch.setattr(state_module.systemd_bridge, "is_service_enabled", lambda: enabled["value"])
+    monkeypatch.setattr(state_module, "daemon_autostart_enabled", lambda: enabled["value"])
     monkeypatch.setattr(
-        state_module.systemd_bridge,
-        "enable_autostart",
+        state_module,
+        "daemon_enable_autostart",
         lambda: calls.append(True) or True,
     )
     monkeypatch.setattr(
-        state_module.systemd_bridge,
-        "disable_autostart",
+        state_module,
+        "daemon_disable_autostart",
         lambda: calls.append(False) or True,
     )
     monkeypatch.setattr(state_module, "subprocess", _NoLayout())
@@ -283,7 +299,6 @@ def test_dictionary_page_persists_words(tmp_path: Path, monkeypatch: pytest.Monk
     gi.require_version("Adw", "1")
 
     from linguafix.config import Config
-    from linguafix.gui import dictionary_page as dictionary_page_module
     from linguafix.gui.dictionary_page import DictionaryPage
     from linguafix.gui.state import GuiState
 
@@ -296,7 +311,7 @@ def test_dictionary_page_persists_words(tmp_path: Path, monkeypatch: pytest.Monk
     assert (tmp_path / "dictionary.txt").read_text(encoding="utf-8") == "vercel\n"
 
     # The apply button asks the daemon to reload its configuration.
-    monkeypatch.setattr(dictionary_page_module.systemd_bridge, "reload_service", lambda: True)
+    monkeypatch.setattr(state, "reload_config", lambda: True)
     page._on_apply(None)
     assert saved == ["Словарь применён"]
 
@@ -530,8 +545,7 @@ def test_gui_module_availability() -> None:
 
 
 def test_gui_main_runs_and_quits(monkeypatch: pytest.MonkeyPatch) -> None:
-    from linguafix.gui import app as app_module
-    from linguafix.gui import main
+    from linguafix.gui import app as app_module, main
 
     class _App:
         def run(self, _argv: list[str]) -> int:

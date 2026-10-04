@@ -219,6 +219,8 @@ kill -HUP "$(cat ~/.cache/linguafix/daemon.lock)"
 | `Permission denied: /dev/input/...` | Перезагрузите udev-правило: `sudo udevadm control --reload-rules && sudo udevadm trigger`; проверьте `getfacl /dev/input/event3` — подробнее [TROUBLESHOOTING: ACL после .deb](docs/TROUBLESHOOTING.md#после-установки-deb-doctor-жалуется-на-права-devinput-или-devuinput) |
 | `doctor` из TTY или ssh | Это ожидаемо: тип сессии `unknown` — см. [TROUBLESHOOTING: doctor из TTY/ssh](docs/TROUBLESHOOTING.md#doctor-запущен-из-tty-или-ssh) |
 | Переключает, но не заменяет текст | Смените `backend` на `uinput` |
+| Исправляет то, что не нужно | Включены проверки `plausibility_check`, `structural_boundaries`, `identifier_guard`; добавьте строку в `custom_skip_regex` — подробнее [TROUBLESHOOTING: ложные срабатывания](docs/TROUBLESHOOTING.md#a-string-i-typed-is-corrected-wrongly-false-positive) |
+| Нужно вернуть последнее исправление | Хоткей undo (`CTRL+Z`) или кнопка **«Отменить последнее исправление»** в GUI |
 | Не работает в терминале | Попробуйте `backend = "uinput"` |
 | Нет иконки в трее | Установите `python3-gi gir1.2-appindicator3-0.1` |
 | Сообщаете о баге | Приложите `linguafix collect-logs` — в архиве нет набранного текста |
