@@ -62,12 +62,20 @@ rewrites the text and switches the active layout.
   keys the user pressed regardless of the current layout or the toolkit the
   focused application uses. This is what makes detection possible at all: the
   application only ever sees the *translated* characters.
-- `uinput` creates a virtual keyboard that lets the daemon synthesise
-  Backspace and the corrected characters. Because the input goes through the
-  same kernel path as a real keyboard it works in almost every application,
-  including those that ignore synthetic X11/Wayland events.
+- A virtual keyboard (created with `evdev.UInput`, which speaks the kernel
+  `uinput` interface) lets the daemon synthesise Backspace and the corrected
+  characters. Because the input goes through the same kernel path as a real
+  keyboard it works in almost every application, including those that ignore
+  synthetic X11/Wayland events.
 - The combination works identically on X11 and Wayland, which is why it was
   chosen over toolkit-specific hooks.
+
+The device is created with `evdev.UInput`, not with the `python-uinput`
+package. `python-uinput` changed its public API between Debian releases
+(`Device`/`emit` versus `UInput`/`write`) and its `KEY_*` constants are
+`(event_type, code)` tuples, so `int(uinput.KEY_A)` raises `TypeError` on
+Debian 13. Key codes come from `evdev.ecodes` (plain ints), which removes the
+dependency and the version skew in one move.
 
 ## Device access: uaccess instead of the input group
 
@@ -89,12 +97,21 @@ process belonging to a logged-out user does not keep keyboard access. The
 packaged rule is:
 
 ```
-KERNEL=="event*", TAG+="uaccess"
-KERNEL=="uinput", TAG+="uaccess", OPTIONS+="static_node=uinput"
+ACTION!="remove", KERNEL=="event*", TAG+="uaccess"
+ACTION!="remove", KERNEL=="uinput", TAG+="uaccess", OPTIONS+="static_node=uinput"
 ```
 
 `OPTIONS+="static_node=uinput"` makes udev create `/dev/uinput` at boot once the
 module is loaded, so the node exists before the daemon starts.
+
+Two details are easy to get wrong and both are load-bearing:
+
+- The file is named `71-linguafix.rules`, not `99-*`. On systemd 257+ (Debian 13)
+  the rule that turns `uaccess` into an ACL is `73-seat-late.rules`. udev applies
+  a tag in filename order, so a `99-*` rule runs after `73-seat-late.rules` and
+  the ACL is never applied. Installing the rule before 73 makes it effective.
+- Every rule carries `ACTION!="remove"`. `73-seat-late.rules` only processes
+  rules that guard against the `remove` event, so a rule without it is skipped.
 
 `linguafix doctor` accepts either mechanism so the developer path (which may
 still use the `input` group) is not reported as broken, but the packaged path

@@ -74,12 +74,12 @@ def test_check_device_access_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(doctor, "_input_group_membership", lambda: False)
     result = doctor.check_device_access()
     assert result.status == doctor.FAIL
-    assert "99-linguafix.rules" in result.hint
+    assert "71-linguafix.rules" in result.hint
     assert ".deb" in result.hint
 
 
 def test_uaccess_rule_present_true(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    rule = tmp_path / "99-linguafix.rules"
+    rule = tmp_path / "71-linguafix.rules"
     rule.write_text('KERNEL=="event*", TAG+="uaccess"\n', encoding="utf-8")
     monkeypatch.setattr(doctor, "_UDEV_RULE_DIRS", (tmp_path,))
     assert doctor._uaccess_rule_present() is True
@@ -88,7 +88,7 @@ def test_uaccess_rule_present_true(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
 def test_uaccess_rule_present_false_for_group_rule(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    rule = tmp_path / "99-linguafix.rules"
+    rule = tmp_path / "71-linguafix.rules"
     rule.write_text('KERNEL=="event*", GROUP="input", MODE="0660"\n', encoding="utf-8")
     monkeypatch.setattr(doctor, "_UDEV_RULE_DIRS", (tmp_path,))
     assert doctor._uaccess_rule_present() is False

@@ -13,7 +13,7 @@ ICON_DIR="${HOME}/.local/share/icons/hicolor/scalable/apps"
 CONFIG_DIR="${HOME}/.config/${APP_NAME}"
 STATE_DIR="${HOME}/.local/state/${APP_NAME}"
 CACHE_DIR="${HOME}/.cache/${APP_NAME}"
-UDEV_RULE="/etc/udev/rules.d/99-${APP_NAME}.rules"
+UDEV_RULE="/etc/udev/rules.d/71-${APP_NAME}.rules"
 
 have() { command -v "$1" >/dev/null 2>&1; }
 

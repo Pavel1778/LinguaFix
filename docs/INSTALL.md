@@ -13,7 +13,7 @@ sudo apt install ./linguafix_0.1.0_all.deb
 
 That is the whole procedure. The package:
 
-- installs `/usr/lib/udev/rules.d/99-linguafix.rules`, which grants access to
+- installs `/usr/lib/udev/rules.d/71-linguafix.rules`, which grants access to
   `/dev/input/event*` and `/dev/uinput` to the active session user with
   `TAG+="uaccess"` — no `usermod`, no group membership, no relogin;
 - loads the `uinput` module so `/dev/uinput` exists;
@@ -78,13 +78,13 @@ bash install.sh --yes
 1. Checks that the host looks like Debian/Ubuntu (warns, but continues, if not).
 2. Verifies Python 3.10+.
 3. Installs system packages with `apt`:
-   `python3-evdev python3-uinput python3-gi gir1.2-appindicator3-0.1 wtype
+   `python3-evdev python3-gi gir1.2-appindicator3-0.1 wtype
    xdotool libnotify-bin`.
 4. Optionally helps you install `g3kb-switch` for GNOME Wayland layout
    switching.
 5. Creates a virtual environment in `~/.local/share/linguafix/venv/` and
    installs the package with `pip install -e .`.
-6. Installs the udev rule `/etc/udev/rules.d/99-linguafix.rules` (asks for sudo).
+6. Installs the udev rule `/etc/udev/rules.d/71-linguafix.rules` (asks for sudo).
    The rule grants access with `TAG+="uaccess"`, so no group change is needed.
 7. Loads the `uinput` module.
 8. Installs the systemd user service `~/.config/systemd/user/linguafix.service`.
@@ -135,10 +135,10 @@ Some package names differ between Debian and Ubuntu. `install.sh` installs the
 APT packages one by one and skips any name that is not available in the current
 repository, so a missing package never aborts the install:
 
-- `python3-uinput` is present in Debian; on some Ubuntu releases it is not
-  packaged. In that case the `python-uinput` dependency is installed into the
-  bundled virtualenv instead (`pip install -e .` pulls it from PyPI), so the
-  `uinput` backend still works.
+- The `uinput` backend uses `evdev.UInput` from `python3-evdev`, so the
+  `python-uinput` package is not required. `python3-evdev` ships in Debian and
+  Ubuntu; `install.sh` reuses it through `--system-site-packages`, so no
+  compiler is needed.
 - `wtype` and `g3kb-switch` may need a third-party repository on older Ubuntu
   releases. Without `wtype`, LinguaFix falls back to `xdotool` (X11) or
   `uinput`.
@@ -160,7 +160,7 @@ Then install the udev rule manually (it uses `uaccess`, so no group change is
 needed):
 
 ```bash
-sudo cp data/99-linguafix.rules /etc/udev/rules.d/
+sudo cp data/71-linguafix.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 

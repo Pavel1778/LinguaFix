@@ -160,7 +160,7 @@ def check_device_access() -> CheckResult:
         FAIL,
         "нет udev-правила с uaccess и нет группы input",
         "установите пакет .deb (udev-правило ставится автоматически) "
-        "или на dev-пути скопируйте data/99-linguafix.rules в "
+        "или на dev-пути скопируйте data/71-linguafix.rules в "
         "/etc/udev/rules.d/ и перелогиньтесь; подробнее — docs/TROUBLESHOOTING.md",
     )
 
@@ -278,7 +278,7 @@ def check_backends(config: Config) -> list[CheckResult]:
         "Замена текста",
         OK if injector.backend != "none" else FAIL,
         injector.describe(),
-        "установите wtype (Wayland), xdotool (X11) или python3-uinput",
+        "установите wtype (Wayland), xdotool (X11) или python3-evdev",
     )
     if session == "unknown":
         session_result = CheckResult(

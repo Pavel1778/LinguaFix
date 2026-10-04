@@ -74,7 +74,7 @@ Caramba Switcher for Windows.
   GNOME Shell — вне этого диапазона переключение раскладки может не работать)
 - X11 или Wayland
 - Python 3.10+
-- Пакеты: `python3-evdev`, `python3-uinput`, `wtype` (Wayland) или `xdotool` (X11)
+- Пакеты: `python3-evdev`, `wtype` (Wayland) или `xdotool` (X11)
 - Для переключения раскладки в Wayland: `g3kb-switch`
 - Для трея (опционально): `python3-gi`, `gir1.2-appindicator3-0.1`
 
@@ -250,6 +250,6 @@ MIT — см. [LICENSE](LICENSE).
 - [gswitch](https://github.com/skroll/gswitch) — исполнитель исправлений.
 - [g3kb-switch](https://github.com/dvorka/g3kb-switch) — переключение раскладки
   в GNOME Wayland.
-- [python-evdev](https://python-evdev.readthedocs.io/) и
-  [python-uinput](https://github.com/tuomasjjrasanen/python-uinput).
+- [python-evdev](https://python-evdev.readthedocs.io/) — чтение клавиатуры
+  (`evdev`) и ввод текста (`evdev.UInput`).
 - Идея вдохновлена Caramba Switcher для Windows.

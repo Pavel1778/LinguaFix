@@ -282,11 +282,15 @@ def test_bundled_unit_and_desktop_are_templates() -> None:
 
 def test_udev_rule_uses_uaccess() -> None:
     """The shipped udev rule must grant access via uaccess, not the input group."""
-    rule = Path(__file__).resolve().parent.parent / "data" / "99-linguafix.rules"
+    rule = Path(__file__).resolve().parent.parent / "data" / "71-linguafix.rules"
     text = rule.read_text(encoding="utf-8")
     active = [line for line in text.splitlines() if line.strip() and not line.startswith("#")]
     assert any('TAG+="uaccess"' in line for line in active)
     assert not any("GROUP=" in line for line in active)
+    # Every active rule needs ACTION!="remove": on systemd 257+ (Debian 13) the
+    # uaccess ACL is applied by 73-seat-late.rules, which only processes rules
+    # that guard against the "remove" event.
+    assert all('ACTION!="remove"' in line for line in active)
 
 
 def test_repo_and_packaged_data_files_match() -> None:

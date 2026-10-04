@@ -14,7 +14,7 @@ BIN="${VENV_DIR}/bin/${APP_NAME}"
 UNIT_DIR="${HOME}/.config/systemd/user"
 AUTOSTART_DIR="${HOME}/.config/autostart"
 ICON_DIR="${HOME}/.local/share/icons/hicolor/scalable/apps"
-UDEV_RULE="/etc/udev/rules.d/99-${APP_NAME}.rules"
+UDEV_RULE="/etc/udev/rules.d/71-${APP_NAME}.rules"
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -83,14 +83,14 @@ log "Использую интерпретатор: ${PYTHON} ($(${PYTHON} --ver
 # ---------------------------------------------------------------------------
 # 3. System dependencies
 # ---------------------------------------------------------------------------
-APT_PACKAGES="python3-venv python3-pip python3-evdev python3-uinput python3-gi gir1.2-appindicator3-0.1 wtype xdotool libnotify-bin"
+APT_PACKAGES="python3-venv python3-pip python3-evdev python3-gi gir1.2-appindicator3-0.1 wtype xdotool libnotify-bin kmod"
 if have apt-get; then
     if confirm "Установить системные зависимости через apt (нужен sudo)?"; then
         sudo apt-get update
-        # Install packages individually: some (for example python3-uinput on
-        # Ubuntu) may not exist in every release, and one missing name must not
-        # abort the whole install. Missing optional packages fall back to the
-        # virtualenv-provided equivalents.
+        # Install packages individually: some (for example python3-gi on a
+        # minimal image) may not exist in every release, and one missing name
+        # must not abort the whole install. Missing optional packages fall back
+        # to the virtualenv-provided equivalents.
         for pkg in ${APT_PACKAGES}; do
             if apt-cache show "${pkg}" >/dev/null 2>&1; then
                 sudo apt-get install -y "${pkg}" || warn "Не удалось установить ${pkg}."
@@ -135,9 +135,8 @@ fi
 log "Создаю виртуальное окружение: ${VENV_DIR}"
 mkdir -p "$(dirname "${VENV_DIR}")"
 if [ ! -x "${VENV_DIR}/bin/python" ]; then
-    # Reuse apt-installed python3-evdev/python3-uinput via the system site
-    # packages; otherwise pip rebuilds python-uinput from source, which fails
-    # on a clean Debian without build tools.
+    # Reuse the apt-installed python3-evdev via the system site packages so pip
+    # does not need a compiler; evdev is the only native dependency.
     "${PYTHON}" -m venv --system-site-packages "${VENV_DIR}"
 fi
 "${VENV_DIR}/bin/pip" install --upgrade pip >/dev/null
@@ -147,10 +146,10 @@ log "Устанавливаю пакет (editable) из ${REPO_DIR}"
 # ---------------------------------------------------------------------------
 # 6. udev rule
 # ---------------------------------------------------------------------------
-if [ -f "${REPO_DIR}/data/99-${APP_NAME}.rules" ]; then
+if [ -f "${REPO_DIR}/data/71-${APP_NAME}.rules" ]; then
     if confirm "Установить udev-правило в ${UDEV_RULE} (нужен sudo)?"; then
         sudo mkdir -p "$(dirname "${UDEV_RULE}")"
-        sudo install -m 0644 "${REPO_DIR}/data/99-${APP_NAME}.rules" "${UDEV_RULE}"
+        sudo install -m 0644 "${REPO_DIR}/data/71-${APP_NAME}.rules" "${UDEV_RULE}"
         if have udevadm; then
             sudo udevadm control --reload-rules || true
             sudo udevadm trigger || true

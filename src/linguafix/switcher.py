@@ -162,6 +162,13 @@ class LayoutSwitcher:
         self._cache_time = now
         return value
 
+    def _g3kb_set(self, target: str) -> subprocess.CompletedProcess[str]:
+        """Invoke ``g3kb-switch -s`` with ``target`` (name or index)."""
+        argv = [BACKEND_G3KB, "-s", target]
+        # Log the exact argv at DEBUG so a failing switch can be reproduced.
+        logger.debug("Switching layout: %s", argv)
+        return _run(argv)
+
     def switch_to(self, layout: str) -> bool:
         """Switch to ``layout``.
 
@@ -176,12 +183,11 @@ class LayoutSwitcher:
             logger.warning("Layout %s is not configured", layout)
             return False
 
-        index = self.layouts.index(layout)
         success = False
         if self._backend == BACKEND_G3KB:
-            result = _run([BACKEND_G3KB, "-s", str(index)])
-            success = result.returncode == 0
+            success = self._switch_g3kb(layout)
         elif self._backend == BACKEND_SETXKBMAP:
+            logger.debug("Switching layout: %s", [BACKEND_SETXKBMAP, layout])
             result = _run([BACKEND_SETXKBMAP, layout])
             success = result.returncode == 0
         else:
@@ -194,6 +200,29 @@ class LayoutSwitcher:
         else:
             logger.error("Failed to switch layout to %s via %s", layout, self._backend)
         return success
+
+    def _switch_g3kb(self, layout: str) -> bool:
+        """Switch to ``layout`` through ``g3kb-switch``.
+
+        ``g3kb-switch -s`` accepts either the layout name (for example ``ru``)
+        or its numeric group index. The name is tried first and the index is
+        used as a fallback, because some builds match the D-Bus layout id
+        exactly while others only resolve the index. A zero exit status is
+        authoritative: ``g3kb-switch`` prints diagnostics to stderr on a
+        non-fatal path, so stderr is deliberately not inspected.
+        """
+        result = self._g3kb_set(layout)
+        if result.returncode == 0:
+            return True
+        logger.debug(
+            "g3kb-switch -s %s failed (rc=%s): %s",
+            layout,
+            result.returncode,
+            (result.stderr or "").strip(),
+        )
+        index = str(self.layouts.index(layout))
+        fallback = self._g3kb_set(index)
+        return fallback.returncode == 0
 
     def describe(self) -> str:
         """Return a human readable description of the switcher state."""

@@ -20,7 +20,7 @@ import logging
 import shutil
 import subprocess
 import time
-from typing import Final
+from typing import Any, Final
 
 from .converter import LayoutConverter
 
@@ -267,9 +267,8 @@ class TextInjector:
         """Tap ``key_name`` ``count`` times through a virtual keyboard."""
         try:
             import evdev
-            import uinput
         except ImportError:
-            logger.error("uinput backend requested but evdev/uinput are missing")
+            logger.error("uinput backend requested but evdev is missing")
             return False
 
         key_code = getattr(evdev.ecodes, key_name, None)
@@ -278,34 +277,39 @@ class TextInjector:
             return False
 
         shift_code = evdev.ecodes.KEY_LEFTSHIFT
+        ev_key = evdev.ecodes.EV_KEY
         try:
-            with uinput.UInput(events={key_code: uinput.KEY_A, shift_code: uinput.KEY_A}) as device:
+            device = self._open_uinput(evdev, {key_code, shift_code})
+            try:
                 for _ in range(count):
-                    device.write(evdev.ecodes.EV_KEY, key_code, 1)
-                    device.write(evdev.ecodes.EV_KEY, key_code, 0)
+                    device.write(ev_key, key_code, 1)
+                    device.write(ev_key, key_code, 0)
                     device.syn()
                     if delay:
                         time.sleep(delay)
-        except (OSError, PermissionError):
+            finally:
+                self._close_uinput(device)
+        except (OSError, PermissionError, ValueError):
             logger.error("Could not create uinput device", exc_info=True)
             return False
         return True
 
     def _resolve_uinput_keys(
         self, text: str, layout: str
-    ) -> tuple[list[tuple[int, bool]], dict[int, int]] | None:
-        """Resolve ``text`` into ``(keycode, shift)`` pairs and an event set.
+    ) -> tuple[list[tuple[int, bool]], set[int]] | None:
+        """Resolve ``text`` into ``(keycode, shift)`` pairs and a key set.
 
         Returns ``None`` when a character cannot be produced in ``layout``.
+
+        The second element is the set of *key codes* (plain integers from
+        ``evdev.ecodes``) that the virtual keyboard must be able to emit. Key
+        codes are never taken from ``uinput.KEY_*``: on Debian 13 those
+        constants are ``(event_type, code)`` tuples, and older releases expose
+        them under a different module layout altogether.
         """
         import evdev
-        import uinput
 
-        events: dict[int, int] = {}
-        shift_code = int(evdev.ecodes.KEY_LEFTSHIFT)
-        events[shift_code] = int(uinput.KEY_A)
-        events[int(evdev.ecodes.KEY_BACKSPACE)] = int(uinput.KEY_A)
-
+        codes: set[int] = {int(evdev.ecodes.KEY_LEFTSHIFT), int(evdev.ecodes.KEY_BACKSPACE)}
         resolved: list[tuple[int, bool]] = []
         for char in text:
             key = self._char_to_key(char, layout)
@@ -317,28 +321,51 @@ class TextInjector:
             code = getattr(evdev.ecodes, name, None)
             if code is None:
                 return None
-            events[int(code)] = int(uinput.KEY_A)
+            codes.add(int(code))
             resolved.append((int(code), shift))
-        return resolved, events
+        return resolved, codes
+
+    @staticmethod
+    def _open_uinput(evdev: Any, key_codes: set[int]) -> Any:
+        """Open a virtual keyboard able to emit ``key_codes``.
+
+        Uses ``evdev.UInput`` (a hard dependency, available in Debian 12 and
+        13) rather than ``uinput.UInput``: the ``uinput`` package changed its
+        API between releases (``Device``/``emit`` versus ``UInput``/``write``)
+        and its ``KEY_*`` constants are tuples, which makes it an unreliable
+        dependency here.
+        """
+        capabilities = {int(evdev.ecodes.EV_KEY): sorted(int(code) for code in key_codes)}
+        return evdev.UInput(capabilities, name="linguafix")
+
+    @staticmethod
+    def _close_uinput(device: Any) -> None:
+        """Close ``device``, tolerating backends that only implement ``close``."""
+        try:
+            device.close()
+        except AttributeError:
+            destroy = getattr(device, "destroy", None)
+            if destroy is not None:
+                destroy()
 
     def _type_uinput(self, text: str, layout: str) -> bool:
         """Type ``text`` through a virtual kernel keyboard."""
         try:
             import evdev
-            import uinput
         except ImportError:
-            logger.error("uinput backend requested but evdev/uinput are missing")
+            logger.error("uinput backend requested but evdev is missing")
             return False
 
         resolved_bundle = self._resolve_uinput_keys(text, layout)
         if resolved_bundle is None:
             return False
-        resolved, events = resolved_bundle
+        resolved, codes = resolved_bundle
         shift_code = int(evdev.ecodes.KEY_LEFTSHIFT)
         ev_key = evdev.ecodes.EV_KEY
 
         try:
-            with uinput.UInput(events=events) as device:
+            device = self._open_uinput(evdev, codes)
+            try:
                 for code, shift in resolved:
                     if shift:
                         device.write(ev_key, shift_code, 1)
@@ -347,7 +374,9 @@ class TextInjector:
                     if shift:
                         device.write(ev_key, shift_code, 0)
                     device.syn()
-        except (OSError, PermissionError):
+            finally:
+                self._close_uinput(device)
+        except (OSError, PermissionError, ValueError):
             logger.error("Could not create uinput device", exc_info=True)
             return False
         return True
@@ -361,22 +390,22 @@ class TextInjector:
         """
         try:
             import evdev
-            import uinput
         except ImportError:
-            logger.error("uinput backend requested but evdev/uinput are missing")
+            logger.error("uinput backend requested but evdev is missing")
             return False
 
         resolved_bundle = self._resolve_uinput_keys(text, layout)
         if resolved_bundle is None:
             return False
-        resolved, events = resolved_bundle
+        resolved, codes = resolved_bundle
 
         shift_code = int(evdev.ecodes.KEY_LEFTSHIFT)
         backspace_code = int(evdev.ecodes.KEY_BACKSPACE)
         ev_key = evdev.ecodes.EV_KEY
 
         try:
-            with uinput.UInput(events=events) as device:
+            device = self._open_uinput(evdev, codes)
+            try:
                 for _ in range(backspace_count):
                     device.write(ev_key, backspace_code, 1)
                     device.write(ev_key, backspace_code, 0)
@@ -388,7 +417,9 @@ class TextInjector:
                     if shift:
                         device.write(ev_key, shift_code, 0)
                 device.syn()
-        except (OSError, PermissionError):
+            finally:
+                self._close_uinput(device)
+        except (OSError, PermissionError, ValueError):
             logger.error("Could not create uinput device", exc_info=True)
             return False
         return True

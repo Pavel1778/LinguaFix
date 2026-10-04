@@ -45,7 +45,7 @@ always to make udev re-apply the rule, not to change group membership.
 1. Check that the rule is installed and uses `uaccess`:
 
    ```bash
-   cat /usr/lib/udev/rules.d/99-linguafix.rules      # or /etc/udev/rules.d/
+   cat /usr/lib/udev/rules.d/71-linguafix.rules      # or /etc/udev/rules.d/
    # expected: KERNEL=="event*", TAG+="uaccess"
    #           KERNEL=="uinput", TAG+="uaccess", OPTIONS+="static_node=uinput"
    ```
@@ -71,7 +71,7 @@ always to make udev re-apply the rule, not to change group membership.
    `sudo apt install --reinstall linguafix`.
 
 On the developer path (`install.sh`) the rule lives in
-`/etc/udev/rules.d/99-linguafix.rules` and the same steps apply. `linguafix
+`/etc/udev/rules.d/71-linguafix.rules` and the same steps apply. `linguafix
 doctor` accepts either mechanism — a `uaccess` rule or membership of the
 `input` group — and only fails when neither is present.
 
@@ -87,8 +87,8 @@ doctor` accepts either mechanism — a `uaccess` rule or membership of the
 ```bash
 getfacl /dev/input/event3    # ожидается строка  user:$USER:rw-
 getfacl /dev/uinput          # ожидается строка  user:$USER:rw-
-ls -l /usr/lib/udev/rules.d/99-linguafix.rules
-grep uaccess /usr/lib/udev/rules.d/99-linguafix.rules
+ls -l /usr/lib/udev/rules.d/71-linguafix.rules
+grep uaccess /usr/lib/udev/rules.d/71-linguafix.rules
 ```
 
 Если строки `user:$USER:rw-` нет — это и есть причина, применяем решение ниже.
@@ -147,7 +147,7 @@ linguafix status
 ```
 
 - If it says `backend=none`, install `wtype` (Wayland) or `xdotool` (X11), or
-  make sure `python3-uinput` is available and `/dev/uinput` is writable.
+  make sure `python3-evdev` is available and `/dev/uinput` is writable.
 - If it says `backend=wtype` but nothing happens, the focused application may
   ignore synthetic Wayland input. This affects some games and Java/Swing apps.
 
@@ -232,7 +232,7 @@ The `uinput` backend needs write access to `/dev/uinput`. Check and fix:
 ```bash
 ls -l /dev/uinput
 sudo modprobe uinput                      # load the module if missing
-ls -l /etc/udev/rules.d/99-linguafix.rules # udev rule installed?
+ls -l /etc/udev/rules.d/71-linguafix.rules # udev rule installed?
 sudo udevadm control --reload-rules && sudo udevadm trigger
 ```
 

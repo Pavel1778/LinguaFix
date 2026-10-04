@@ -65,11 +65,13 @@ apt-get install -y -qq systemd >/dev/null 2>&1 || true
 apt-get install -y -qq "/pkg/'"${DEB_NAME}"'" >/dev/null
 
 say "1. udev rule installed and uses uaccess (not the input group)"
-RULES=/usr/lib/udev/rules.d/99-linguafix.rules
+RULES=/usr/lib/udev/rules.d/71-linguafix.rules
 test -f "${RULES}" || { echo "FAIL - udev rule not installed at ${RULES}"; exit 1; }
 grep -q "TAG+=\"uaccess\"" "${RULES}" || { echo "FAIL - rule has no uaccess"; exit 1; }
 ! grep -q "GROUP=\"input\"" "${RULES}" || { echo "FAIL - rule still uses GROUP=input"; exit 1; }
-echo "ok   - uaccess rule present, no GROUP=input"
+grep -E '^[^#]*KERNEL==' "${RULES}" | grep -q 'ACTION!="remove"' \
+    || { echo "FAIL - rule is missing ACTION!=\"remove\""; exit 1; }
+echo "ok   - uaccess rule present, no GROUP=input, ACTION!=remove"
 
 say "2. systemd user unit installed and points at /usr/bin/linguafix"
 UNIT=/usr/lib/systemd/user/linguafix.service

@@ -105,8 +105,50 @@ def test_switch_to_g3kb(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(switcher_module, "_run", record)
     switcher = LayoutSwitcher(["us", "ru"], "g3kb-switch")
     assert switcher.switch_to("ru") is True
-    assert recorded[-1] == ["g3kb-switch", "-s", "1"]
+    # The layout name is tried first (it is what g3kb-switch -s accepts).
+    assert recorded[-1] == ["g3kb-switch", "-s", "ru"]
     assert switcher.get_current_layout() == "ru"
+
+
+def test_switch_to_g3kb_falls_back_to_index(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If ``-s ru`` fails, the numeric group index must be tried."""
+    monkeypatch.setattr(switcher_module, "_which", lambda name: "/usr/bin/" + name)
+    recorded: list[list[str]] = []
+
+    def record(cmd: list[str], timeout: float = 2.0) -> subprocess.CompletedProcess[str]:
+        recorded.append(cmd)
+        return fake_completed("", 0 if cmd[-1] == "1" else 1)
+
+    monkeypatch.setattr(switcher_module, "_run", record)
+    switcher = LayoutSwitcher(["us", "ru"], "g3kb-switch")
+    assert switcher.switch_to("ru") is True
+    assert recorded == [["g3kb-switch", "-s", "ru"], ["g3kb-switch", "-s", "1"]]
+
+
+def test_switch_to_g3kb_succeeds_with_stderr_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A zero exit status is authoritative even when stderr is non-empty."""
+    monkeypatch.setattr(switcher_module, "_which", lambda name: "/usr/bin/" + name)
+
+    def record(cmd: list[str], timeout: float = 2.0) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(cmd, 0, "", "G3kbSwitch extension warning\n")
+
+    monkeypatch.setattr(switcher_module, "_run", record)
+    switcher = LayoutSwitcher(["us", "ru"], "g3kb-switch")
+    assert switcher.switch_to("ru") is True
+
+
+def test_switch_to_g3kb_logs_argv_at_debug(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setattr(switcher_module, "_which", lambda name: "/usr/bin/" + name)
+    monkeypatch.setattr(switcher_module, "_run", lambda cmd, timeout=2.0: fake_completed(""))
+    switcher = LayoutSwitcher(["us", "ru"], "g3kb-switch")
+    with caplog.at_level("DEBUG", logger="linguafix.switcher"):
+        switcher.switch_to("ru")
+    assert any(
+        "g3kb-switch" in record.getMessage() and "-s" in record.getMessage()
+        for record in caplog.records
+    )
 
 
 def test_switch_to_setxkbmap(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -46,7 +46,7 @@ sudo apt install ./linguafix_0.1.0_all.deb
 
 # 2. Verify that nothing else is required.
 systemctl --user is-enabled linguafix.service   # -> enabled
-cat /usr/lib/udev/rules.d/99-linguafix.rules    # -> TAG+="uaccess", no GROUP="input"
+cat /usr/lib/udev/rules.d/71-linguafix.rules    # -> TAG+="uaccess", no GROUP="input"
 
 # 3. If a session was already open during install, log out and back in once.
 #    uaccess is granted when the user logs in at the seat.
@@ -90,7 +90,7 @@ GDM).
 `.deb` path (primary):
 
 1. `sudo apt install ./linguafix_0.1.0_all.deb` — note every prompt and any failure.
-2. Confirm the udev rule: `cat /usr/lib/udev/rules.d/99-linguafix.rules` — uses
+2. Confirm the udev rule: `cat /usr/lib/udev/rules.d/71-linguafix.rules` — uses
    `TAG+="uaccess"`, no `GROUP="input"`.
 3. `systemctl --user is-enabled linguafix.service` — prints `enabled`, without
    you running `systemctl --user enable` by hand.
@@ -103,7 +103,7 @@ Developer path:
 
 1. Run `bash install.sh` interactively. Note every prompt and any failure.
 2. Confirm the apt packages: `dpkg -l | grep -E 'evdev|uinput|wtype|xdotool|appindicator'`.
-3. Confirm the udev rule: `cat /etc/udev/rules.d/99-linguafix.rules` — `uaccess`.
+3. Confirm the udev rule: `cat /etc/udev/rules.d/71-linguafix.rules` — `uaccess`.
 4. `sudo udevadm control --reload-rules && sudo udevadm trigger`.
 5. `linguafix doctor` — no ❌.
 

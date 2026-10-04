@@ -8,7 +8,7 @@
 #   /usr/share/applications/linguafix.desktop       desktop entry
 #   /usr/share/icons/hicolor/scalable/apps/*.svg    icon
 #   /usr/lib/systemd/user/linguafix.service         systemd user unit
-#   /usr/lib/udev/rules.d/99-linguafix.rules        udev rule
+#   /usr/lib/udev/rules.d/71-linguafix.rules        udev rule
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -65,8 +65,8 @@ render_unit "${REPO_DIR}/data/${PKG}.desktop" \
     "${BUILD_DIR}/usr/share/applications/${PKG}.desktop" "/usr/bin/${PKG}"
 render_unit "${REPO_DIR}/data/${PKG}.service" \
     "${BUILD_DIR}/usr/lib/systemd/user/${PKG}.service" "/usr/bin/${PKG}"
-install -m 0644 "${REPO_DIR}/data/99-${PKG}.rules" \
-    "${BUILD_DIR}/usr/lib/udev/rules.d/99-${PKG}.rules"
+install -m 0644 "${REPO_DIR}/data/71-${PKG}.rules" \
+    "${BUILD_DIR}/usr/lib/udev/rules.d/71-${PKG}.rules"
 
 # --- DEBIAN/control ---------------------------------------------------------
 INSTALLED_SIZE="$(du -sk "${BUILD_DIR}" | cut -f1)"
@@ -77,7 +77,7 @@ Section: utils
 Priority: optional
 Architecture: ${ARCH}
 Depends: python3 (>= 3.10), python3-tomli | python3 (>= 3.11), python3-tomli-w, python3-evdev, libnotify-bin, wtype
-Recommends: python3-uinput, g3kb-switch, xdotool, python3-gi, gir1.2-appindicator3-0.1
+Recommends: g3kb-switch, xdotool, python3-gi, gir1.2-appindicator3-0.1
 Installed-Size: ${INSTALLED_SIZE}
 Maintainer: Pavel1778 <noreply@github.com>
 Homepage: https://github.com/Pavel1778/LinguaFix
@@ -92,7 +92,7 @@ EOF
 # usermod, to relogin or to enable anything by hand.
 #
 #   * device access is granted by the udev rule via TAG+="uaccess" (see
-#     data/99-linguafix.rules), so no group membership is touched;
+#     data/71-linguafix.rules), so no group membership is touched;
 #   * the uinput module is loaded so /dev/uinput appears;
 #   * the user unit is enabled globally so it starts at the next login. It is
 #     deliberately not started here: the package may be installed without a

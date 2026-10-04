@@ -196,14 +196,15 @@ class _FakeUInputDevice:
 
 @pytest.fixture
 def fake_uinput(monkeypatch: pytest.MonkeyPatch) -> type[_FakeUInputDevice]:
-    """Install fake ``evdev`` and ``uinput`` modules for the uinput backend."""
+    """Install a fake ``evdev`` module exposing ``UInput`` and ``ecodes``.
+
+    The injector uses ``evdev.UInput`` (not ``uinput.UInput``), so the fake
+    ``uinput`` module is intentionally left out to prove it is not required.
+    """
     fake_evdev = types.ModuleType("evdev")
     fake_evdev.ecodes = _FakeEcodes()
-    fake_uinput_mod = types.ModuleType("uinput")
-    fake_uinput_mod.UInput = _FakeUInputDevice
-    fake_uinput_mod.KEY_A = 30
+    fake_evdev.UInput = _FakeUInputDevice
     monkeypatch.setitem(sys.modules, "evdev", fake_evdev)
-    monkeypatch.setitem(sys.modules, "uinput", fake_uinput_mod)
     return _FakeUInputDevice
 
 
@@ -254,6 +255,32 @@ def test_uinput_missing_modules(monkeypatch: pytest.MonkeyPatch) -> None:
     assert injector._uinput_tap("KEY_A") is False
 
 
+def test_uinput_does_not_require_uinput_package(
+    monkeypatch: pytest.MonkeyPatch, fake_uinput: type[_FakeUInputDevice]
+) -> None:
+    """The backend must not import the ``uinput`` package at all.
+
+    Debian 13 ships python-uinput 1.0.1, whose ``KEY_*`` constants are
+    ``(event_type, code)`` tuples and whose API is ``Device``/``emit``; the
+    injector therefore relies on ``evdev.UInput`` only.
+    """
+    monkeypatch.setattr(TextInjector, "_uinput_available", lambda self: True)
+    # A poisoned ``uinput`` module: any attribute access raises, so a stray
+    # ``import uinput`` or ``uinput.KEY_*`` use would fail loudly.
+    poisoned = types.ModuleType("uinput")
+
+    def boom(_name: str) -> None:
+        raise AssertionError("the uinput package must not be used")
+
+    poisoned.__getattr__ = boom  # type: ignore[method-assign]
+    monkeypatch.setitem(sys.modules, "uinput", poisoned)
+
+    injector = TextInjector(backend="uinput")
+    assert injector._type_uinput("Qq ", "us") is True
+    assert injector._uinput_batch(2, "gh", "ru") is True
+    assert injector._uinput_tap("KEY_BACKSPACE", count=1) is True
+
+
 def test_uinput_batch_is_atomic(
     monkeypatch: pytest.MonkeyPatch, fake_uinput: type[_FakeUInputDevice]
 ) -> None:
@@ -270,8 +297,8 @@ def test_uinput_batch_is_atomic(
             created.append(self)
 
     monkeypatch.setattr(TextInjector, "_uinput_available", lambda self: True)
-    fake_uinput_mod = sys.modules["uinput"]
-    monkeypatch.setattr(fake_uinput_mod, "UInput", RecordingUInput)
+    fake_evdev_mod = sys.modules["evdev"]
+    monkeypatch.setattr(fake_evdev_mod, "UInput", RecordingUInput)
 
     injector = TextInjector(backend="uinput")
     assert injector.replace_text("ghbdtn", "привет", "ru") is True
@@ -297,8 +324,8 @@ def test_uinput_batch_no_syn_means_nothing_applied(
                 raise OSError("simulated crash mid-batch")
 
     monkeypatch.setattr(TextInjector, "_uinput_available", lambda self: True)
-    fake_uinput_mod = sys.modules["uinput"]
-    monkeypatch.setattr(fake_uinput_mod, "UInput", FailingUInput)
+    fake_evdev_mod = sys.modules["evdev"]
+    monkeypatch.setattr(fake_evdev_mod, "UInput", FailingUInput)
 
     injector = TextInjector(backend="uinput")
     assert injector.replace_text("ghbdtn", "привет", "ru") is False

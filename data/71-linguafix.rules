@@ -5,13 +5,20 @@
 # in at the seat (the active session), dynamically and only for that user. It
 # needs no usermod and no relogin, and it is revoked when the session ends.
 #
+# The file is named 71-* on purpose. The systemd/udev shipped rule that applies
+# uaccess ACLs for input devices is 73-seat-late.rules on systemd 257+ (Debian
+# 13); a 99-* rule runs after it, so the ACL is never applied. Installing the
+# rule earlier (71) lets 73-seat-late.rules pick up the tag. ACTION!="remove"
+# keeps the tag on the "remove" event from being (re)applied while the device
+# is going away.
+#
 # Installed to /usr/lib/udev/rules.d/ by the package; run
 #   sudo udevadm control --reload-rules && sudo udevadm trigger
 # after editing.
 
 # Read access to keyboard event devices for the active session user.
-KERNEL=="event*", TAG+="uaccess"
+ACTION!="remove", KERNEL=="event*", TAG+="uaccess"
 
 # Write access to the virtual keyboard used to rewrite text. static_node creates
 # /dev/uinput on boot when the uinput module is already loaded.
-KERNEL=="uinput", TAG+="uaccess", OPTIONS+="static_node=uinput"
+ACTION!="remove", KERNEL=="uinput", TAG+="uaccess", OPTIONS+="static_node=uinput"
