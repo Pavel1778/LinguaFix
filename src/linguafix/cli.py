@@ -180,6 +180,17 @@ def cmd_kill(_args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_restart(_args: argparse.Namespace) -> int:
+    """Restart the daemon, preserving whether it runs as a user service."""
+    from .daemon_control import restart
+
+    if restart():
+        print(MSG_STARTED)
+        return 0
+    print("Не удалось перезапустить LinguaFix.")
+    return 1
+
+
 def cmd_status(_args: argparse.Namespace) -> int:
     """Print the daemon status and runtime environment."""
     config = load_config()
@@ -297,8 +308,39 @@ def cmd_config(args: argparse.Namespace) -> int:
         save_config(Config())
         print(MSG_CONFIG_RESET)
         return 0
-    print("Использование: linguafix config show|edit|reset")
+    if args.config_action == "path":
+        print(config_path())
+        return 0
+    print("Использование: linguafix config show|edit|reset|path")
     return 2
+
+
+def cmd_export(args: argparse.Namespace) -> int:
+    """Write a JSON backup of the user settings."""
+    from .backup import write_backup
+
+    try:
+        path = write_backup(Path(args.output).expanduser())
+    except OSError as exc:
+        print(f"Не удалось сохранить бэкап: {exc}")
+        return 1
+    print(f"Настройки сохранены в {path}.")
+    return 0
+
+
+def cmd_import(args: argparse.Namespace) -> int:
+    """Restore user settings from a JSON backup."""
+    from .backup import apply_backup, read_backup
+
+    try:
+        data = read_backup(Path(args.source).expanduser())
+    except (OSError, ValueError) as exc:
+        print(f"Не удалось прочитать бэкап: {exc}")
+        return 1
+    result = apply_backup(data)
+    summary = ", ".join(f"{key}={value}" for key, value in result.items() if value)
+    print(f"Восстановлено: {summary or 'ничего'}.")
+    return 0
 
 
 def cmd_fix(args: argparse.Namespace) -> int:
@@ -486,8 +528,21 @@ def build_parser() -> argparse.ArgumentParser:
     dict_parser.set_defaults(func=cmd_dict)
 
     config = subparsers.add_parser("config", help="работа с конфигурацией")
-    config.add_argument("config_action", choices=["show", "edit", "reset"])
+    config.add_argument("config_action", choices=["show", "edit", "reset", "path"])
     config.set_defaults(func=cmd_config)
+
+    export = subparsers.add_parser("export", help="сохранить настройки в файл (JSON)")
+    export.add_argument(
+        "output", nargs="?", default="linguafix-backup.json", help="файл для бэкапа"
+    )
+    export.set_defaults(func=cmd_export)
+
+    imp = subparsers.add_parser("import", help="восстановить настройки из файла (JSON)")
+    imp.add_argument("source", help="файл бэкапа")
+    imp.set_defaults(func=cmd_import)
+
+    restart = subparsers.add_parser("restart", help="перезапустить демон")
+    restart.set_defaults(func=cmd_restart)
 
     fix = subparsers.add_parser("fix", help="исправить текст вручную")
     fix.add_argument("--text", help="текст для исправления (иначе читается из stdin)")

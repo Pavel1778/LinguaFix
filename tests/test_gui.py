@@ -583,6 +583,69 @@ def test_advanced_page_app_layouts_changed(gui_state: Any, monkeypatch: pytest.M
     assert gui_state.config.app_layouts == {"kitty": "ru"}
 
 
+def test_backup_group_export_import(gui_state: Any) -> None:
+    from linguafix.gui.widgets.backup_group import BackupGroup
+
+    exported: list[str] = []
+    imported: list[str] = []
+    notes: list[str] = []
+    widget = BackupGroup(
+        on_export=lambda p: exported.append(p) or True,
+        on_import=lambda p: imported.append(p) or True,
+        on_notify=notes.append,
+    )
+
+    class _File:
+        def get_path(self) -> str:
+            return "/tmp/x.json"
+
+    class _Dialog:
+        def save_finish(self, _result: object) -> _File:
+            return _File()
+
+        def open_finish(self, _result: object) -> _File:
+            return _File()
+
+    widget._on_export_done(_Dialog(), None)
+    assert exported == ["/tmp/x.json"]
+    assert notes[-1] == "Настройки сохранены"
+
+    widget._on_import_done(_Dialog(), None)
+    assert imported == ["/tmp/x.json"]
+    assert notes[-1] == "Настройки восстановлены"
+
+
+def test_backup_group_cancel_is_silent(gui_state: Any) -> None:
+    from linguafix.gui.widgets.backup_group import BackupGroup
+
+    notes: list[str] = []
+    widget = BackupGroup(
+        on_export=lambda _p: True,
+        on_import=lambda _p: True,
+        on_notify=notes.append,
+    )
+
+    class _Dialog:
+        def save_finish(self, _result: object) -> None:
+            raise RuntimeError("cancelled")
+
+    widget._on_export_done(_Dialog(), None)
+    assert notes == []
+
+
+def test_advanced_page_settings_roundtrip(
+    gui_state: Any, tmp_path: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gui_state, "save", lambda: None)
+    from linguafix.gui.advanced_page import AdvancedPage
+
+    page = AdvancedPage(gui_state)
+    out = tmp_path / "backup.json"
+    assert page._export_settings(str(out)) is True
+    assert page._import_settings(str(out)) is True
+    assert page._import_settings(str(tmp_path / "missing.json")) is False
+
+
 def test_advanced_page_regex_validation(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(gui_state, "save", lambda: None)
     from linguafix.gui.advanced_page import AdvancedPage

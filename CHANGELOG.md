@@ -34,6 +34,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (copy, convert, paste, restore) and can be rebound in the GUI.
 - Per-app default layout. `app_layouts` maps an application name to a layout
   that is switched to when that application gains focus (`app_layout_switch`).
+- Settings export/import. `linguafix export` / `linguafix import` (and the GUI
+  **Backup** group) bundle the config, user dictionary and snippets into one
+  JSON file. `linguafix restart` restarts the daemon preserving whether it runs
+  as a user service; `linguafix config path` prints the config location.
 
 ### Changed
 

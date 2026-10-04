@@ -60,7 +60,8 @@ Caramba Switcher for Windows.
 - 🔔 Уведомления (`notify-send`) и иконка в трее (AppIndicator)
 - 🛡️ Стоп-слова для защиты паролей и логинов
 - ⚙️ Настраиваемые таймауты, языки и backend'ы
-- 🧩 CLI: `start`, `stop`, `kill`, `status`, `config`, `fix`, `doctor`, `collect-logs`
+- 🧩 CLI: `start`, `stop`, `restart`, `kill`, `status`, `config`, `fix`, `dict`,
+  `export`, `import`, `doctor`, `collect-logs`
 - 🩺 `linguafix doctor` — самодиагностика окружения с таблицей ✅/❌ и подсказками
 - 📦 `linguafix collect-logs` — один tarball со всей диагностикой для баг-репорта
 - 🔁 Горячая перезагрузка конфига по `SIGHUP`
@@ -136,6 +137,10 @@ linguafix fix --text ghbdtn --apply --dry-run   # показать, но не п
 linguafix start --foreground --dry-run # демон-наблюдатель: только логирует
 linguafix dict add vercel              # научить слово, которое нельзя исправлять
 linguafix config show                  # показать конфигурацию
+linguafix config path                  # путь к config.toml
+linguafix export ~/lf-backup.json      # бэкап настроек, словаря и сниппетов
+linguafix import ~/lf-backup.json      # восстановить из бэкапа
+linguafix restart                      # перезапустить демон
 linguafix collect-logs                 # собрать архив для баг-репорта
 systemctl --user status linguafix.service
 ```

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
+from pathlib import Path
 
 import gi
 
@@ -16,6 +17,7 @@ from .prefs_base import BoundPreferencesPage  # noqa: E402
 from .state import GuiState  # noqa: E402
 from .widgets.app_exceptions_list import AppExceptionsList  # noqa: E402
 from .widgets.app_layout_map import AppLayoutMap  # noqa: E402
+from .widgets.backup_group import BackupGroup  # noqa: E402
 from .widgets.hotkey_row import HotkeyRow  # noqa: E402
 
 DICTIONARY_OPTIONS = ("1000", "5000", "10000")
@@ -36,6 +38,7 @@ class AdvancedPage(BoundPreferencesPage):
         self._build_expander_group()
         self._build_hotkeys_group()
         self._build_notifications_group()
+        self._build_backup_group()
         self._build_logs_group()
 
     # --- detector ---------------------------------------------------------
@@ -308,7 +311,37 @@ class AdvancedPage(BoundPreferencesPage):
         self.add_switch(group, "Иконка в трее", "tray_enabled")
         self.add(group)
 
-    # --- logs -------------------------------------------------------------
+    # --- backup -----------------------------------------------------------
+    def _build_backup_group(self) -> None:
+        self._backup_group = BackupGroup(
+            on_export=self._export_settings,
+            on_import=self._import_settings,
+            on_notify=self._on_saved,
+        )
+        self.add(self._backup_group)
+
+    @staticmethod
+    def _export_settings(path: str) -> bool:
+        from ..backup import write_backup
+
+        try:
+            write_backup(Path(path))
+        except OSError:
+            return False
+        return True
+
+    def _import_settings(self, path: str) -> bool:
+        from ..backup import apply_backup, read_backup
+
+        try:
+            data = read_backup(Path(path))
+        except (OSError, ValueError):
+            return False
+        apply_backup(data)
+        self._state.reload()
+        self._config = self._state.config
+        return True
+
     def _build_logs_group(self) -> None:
         group = Adw.PreferencesGroup(title="Логи")
         self.add_combo(

@@ -40,6 +40,9 @@ def test_build_parser_has_all_commands() -> None:
         "install-autostart",
         "uninstall-autostart",
         "version",
+        "export",
+        "import",
+        "restart",
     ):
         assert command in actions
 
