@@ -320,6 +320,10 @@ class Config:
     app_layouts: dict[str, str] = field(default_factory=dict)
     app_layout_switch: bool = False
 
+    # --- Stage 13: opt-in update check -------------------------------------
+    # The only feature that uses the network; off by default.
+    update_check_enabled: bool = False
+
     def __post_init__(self) -> None:
         self.validate()
 

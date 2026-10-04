@@ -299,6 +299,10 @@ class LinguaFixDaemon:
             probe=get_active_app,
             enabled=config.app_layout_switch,
         )
+        # Stage 13: the loop checks for updates at most once a day. The deadline
+        # is kept in memory so the poll loop never touches the disk or network
+        # until it is actually due.
+        self._next_update_check: float = 0.0
 
         # The characters currently on screen for the word being typed. Derived
         # from ``_scancodes`` and kept in step with it (one char per printable
@@ -1154,6 +1158,8 @@ class LinguaFixDaemon:
             enabled=new_config.app_layout_switch,
             switch_layout=self.switcher.switch_to,
         )
+        if not new_config.update_check_enabled:
+            self._next_update_check = 0.0
         logger.info("Configuration reloaded")
 
     # ------------------------------------------------------------------
@@ -1301,6 +1307,51 @@ class LinguaFixDaemon:
                         device.close()
 
             self._flush_if_idle()
+            self._maybe_check_update()
+
+    def _maybe_check_update(self) -> None:
+        """Run the opt-in update check at most once a day (Stage 13)."""
+        if not self.config.update_check_enabled:
+            return
+        now = time.time()
+        if now < self._next_update_check:
+            return
+        from .update_check import CHECK_INTERVAL_SECONDS, check_for_update
+
+        # Throttle in memory; the loop runs every ``SELECT_TIMEOUT`` and must
+        # not read the stamp file (or the network) on each iteration.
+        self._next_update_check = now + CHECK_INTERVAL_SECONDS
+        info = check_for_update()
+        if info is None or not info.update_available:
+            return
+        logger.info(
+            "LinguaFix %s is available (running %s): %s",
+            info.latest,
+            info.current,
+            info.url,
+        )
+        self._notify_update(info.latest)
+
+    def _notify_update(self, latest: str) -> None:
+        """Show a desktop notification about an available update.
+
+        The text is built from the remote version tag only; no typed text or
+        local configuration is involved.
+        """
+        try:
+            subprocess.run(
+                [
+                    "notify-send",
+                    "--app-name=LinguaFix",
+                    "LinguaFix",
+                    f"Доступна версия {latest}",
+                ],
+                check=False,
+                capture_output=True,
+                timeout=NOTIFY_TIMEOUT,
+            )
+        except (OSError, subprocess.SubprocessError):
+            logger.debug("notify-send failed", exc_info=True)
 
     def _flush_if_idle(self) -> None:
         """Flush the buffer when it has been idle past the fallback timeout.

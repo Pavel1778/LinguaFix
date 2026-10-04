@@ -90,6 +90,7 @@ _ALLOWED_CONFIG_KEYS = {
     "selection_fix_hotkey",
     "app_layouts",
     "app_layout_switch",
+    "update_check_enabled",
 }
 
 

@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Backup** group) bundle the config, user dictionary and snippets into one
   JSON file. `linguafix restart` restarts the daemon preserving whether it runs
   as a user service; `linguafix config path` prints the config location.
+- Opt-in update check. Once a day, when `update_check_enabled` is set, the
+  daemon asks the GitHub releases API for the latest tag and logs (and
+  notifies) when a newer version exists. Off by default — it is the only
+  feature that uses the network. The GUI job now runs under xvfb and includes
+  the GUI package in coverage (`.github/workflows/ci.yml`, `coverage-gui.rc`).
 
 ### Changed
 

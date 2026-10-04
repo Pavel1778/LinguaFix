@@ -309,6 +309,12 @@ class AdvancedPage(BoundPreferencesPage):
         self.add_switch(group, "Уведомлять об ошибке", "notify_on_error")
         self.add_switch(group, "Звук при исправлении", "sound_on_fix")
         self.add_switch(group, "Иконка в трее", "tray_enabled")
+        self.add_switch(
+            group,
+            "Проверять обновления",
+            "update_check_enabled",
+            subtitle="Раз в сутки запрашивает номер последней версии на GitHub",
+        )
         self.add(group)
 
     # --- backup -----------------------------------------------------------
