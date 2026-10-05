@@ -26,7 +26,7 @@ def test_defaults() -> None:
     assert config.on_tab is False
     assert config.on_punctuation is False
     assert config.punctuation_chars == ".!?,;:"
-    assert config.backspace_settle_ms == 50
+    assert config.backspace_settle_ms == 80
     assert config.trigger_settle_ms == 50
     assert isinstance(config.stop_words, list)
     assert "password" in config.stop_words

@@ -179,6 +179,9 @@ _WORD_BREAKERS: Final[frozenset[str]] = frozenset(
         "KEY_ESC",
     }
 )
+# Upper bound on keys queued while a replacement runs. Generous enough for a
+# fast burst, small enough that a stuck key cannot grow the queue without bound.
+_MAX_DEFERRED_EVENTS: Final[int] = 50
 
 
 def _compile_skip_regex(pattern: str) -> re.Pattern[str] | None:
@@ -323,6 +326,15 @@ class LinguaFixDaemon:
         self._shutdown_requested = False
         self._undo_requested = False
         self._lock_handle: object | None = None
+        # Key events that arrive while a replacement is in flight. The fix runs
+        # on the event-loop thread, so keys typed during the settle pause would
+        # otherwise be lost; instead they are queued and replayed once the
+        # replacement finishes (see ``_process_buffer``).
+        self._deferred_events: list[object] = []
+        self._replaying_events = False
+        # Set while ``_process_buffer_inner`` runs, so ``_handle_event`` defers
+        # keys instead of processing them against a half-deleted screen.
+        self._processing_buffer = False
         self._tray: TrayIcon | None = None
         # Guards ``buffer``/``last_key_time``/``_shift`` against the tray thread,
         # which may call ``_process_buffer`` (via ``_tray_fix``) concurrently with
@@ -459,12 +471,37 @@ class LinguaFixDaemon:
         Args:
             event: An object exposing ``type``, ``code`` and ``value`` attributes.
         """
+        # A replacement is running on this thread (it sleeps between the
+        # Backspace batch and the new text). Queue the key instead of dropping
+        # it; ``_process_buffer`` replays the queue once the fix is done.
+        with self._lock:
+            if self._processing_buffer and not self._replaying_events:
+                if len(self._deferred_events) < _MAX_DEFERRED_EVENTS:
+                    self._deferred_events.append(event)
+                else:
+                    logger.warning("Deferred key queue full; dropping an event")
+                return
         try:
             self._handle_event_inner(event)
         except Exception as exc:  # the daemon must survive any per-event failure
             with self._lock:
                 sensitive = self.buffer.strip()
             self._log_sanitized("Failed to handle a key event", exc, sensitive)
+
+    def _replay_deferred_events(self) -> None:
+        """Replay the keys that arrived while a replacement was in flight."""
+        with self._lock:
+            pending, self._deferred_events = self._deferred_events, []
+            previous = self._replaying_events
+            self._replaying_events = True
+        try:
+            for event in pending:
+                self._handle_event(event)
+        finally:
+            # Restore rather than clear: a replayed key can itself trigger a fix,
+            # whose own replay would otherwise drop the guard for the outer loop.
+            with self._lock:
+                self._replaying_events = previous
 
     def _handle_event_inner(self, event: object) -> None:
         """Inner implementation of :meth:`_handle_event`."""
@@ -946,10 +983,18 @@ class LinguaFixDaemon:
         # Capture the text so a traceback can be scrubbed of it before logging.
         with self._lock:
             sensitive = self.buffer.strip()
+        with self._lock:
+            self._processing_buffer = True
         try:
             self._process_buffer_inner(force=force, boundary=boundary, boundary_char=boundary_char)
         except Exception as exc:  # the daemon must survive any failure
             self._log_sanitized("Failed to process the buffer", exc, sensitive)
+        finally:
+            with self._lock:
+                self._processing_buffer = False
+            # Keys that arrived during the (slow) replacement were queued; apply
+            # them now, against the corrected screen.
+            self._replay_deferred_events()
 
     @staticmethod
     def _log_sanitized(message: str, exc: BaseException, sensitive: str) -> None:

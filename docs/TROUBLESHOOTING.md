@@ -262,12 +262,17 @@ Cause: the deletion and the new text raced. The compositor (Chromium and
 Electron applications in particular) processes Backspace asynchronously, so the
 replacement was typed before the leading Backspace had been applied.
 
-LinguaFix avoids this in two ways, both on by default:
+LinguaFix avoids this in three ways, all on by default:
 
 - The daemon counts *physical keys*, not characters, so the number of
   Backspaces always equals the number of keys pressed.
+- When the trigger is a Space, the Space is already on screen: the daemon
+  deletes it too and retypes it after the corrected word, so it is never
+  stranded in front of the text. (Enter and Tab keep their place after the
+  corrected word instead, so a newline or tab is never dropped.)
 - The `uinput` backend flushes the backspaces, waits `backspace_settle_ms`, then
-  types the replacement.
+  types the replacement. Keys you press during that pause are queued and
+  replayed afterwards, so nothing is lost.
 
 If you still see a stray character, the application needs a longer pause. Two
 windows are involved: `trigger_settle_ms` (the pause after the Space/Enter that
@@ -275,8 +280,8 @@ triggered the fix) and `backspace_settle_ms` (the pause between deleting and
 typing). Raise them:
 
 ```toml
-trigger_settle_ms = 80     # 50 by default; pause after the boundary key
-backspace_settle_ms = 80   # 50 by default; try 50-80 for slow Electron apps
+trigger_settle_ms = 100     # 50 by default; pause after the boundary key
+backspace_settle_ms = 100   # 80 by default; try 100-120 for slow Electron apps
 ```
 
 A very large value only adds latency; it cannot corrupt the text, because the

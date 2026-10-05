@@ -36,7 +36,7 @@ APP_NAME: Final[str] = "linguafix"
 DEFAULT_ANALYSIS_TIMEOUT: Final[float] = 0.8
 DEFAULT_MIN_WORD_LENGTH: Final[int] = 3
 DEFAULT_MAX_BUFFER_SIZE: Final[int] = 200
-DEFAULT_BACKSPACE_SETTLE_MS: Final[int] = 50
+DEFAULT_BACKSPACE_SETTLE_MS: Final[int] = 80
 # Pause after a word-boundary key (Space/Enter/Tab) before the deletion is sent.
 # The boundary key that triggered the flush is still being processed by the
 # compositor when the daemon starts erasing; without this pause Chromium and
