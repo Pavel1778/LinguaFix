@@ -396,6 +396,25 @@ except a few applications while in `mode = "manual"`, use
 best-effort; when it cannot be determined the daemon falls back to automatic
 behaviour.
 
+The list is pre-filled with terminals, IDEs and games. If a word you type on
+purpose in one of them should still be correctable with the manual hotkey, that
+already works: the manual fix (`SHIFT+SHIFT`) ignores the exception list.
+
+## Automatic correction is silent for a while (quiet hours)
+
+If automatic correction stops working at a regular time of day, check
+`quiet_hours_enabled` and the `quiet_hours_start` / `quiet_hours_end` window
+(`ЧЧ:ММ`, may wrap midnight). Inside it the daemon skips automatic fixes; the
+manual fix still works. The GUI home tab shows a line explaining the pause.
+
+## The "История" tab is empty
+
+The history is refreshed on demand: the GUI asks the daemon (SIGUSR2) to write
+`~/.cache/linguafix/history.json` and then reads it. An empty tab means no fix
+has been made yet, or the daemon is not running (the last snapshot is shown
+otherwise). The file holds metadata only — word length, layouts, timestamp —
+never the typed text.
+
 ## Backspace does not delete in the terminal (or deletes too much)
 
 Some terminals handle synthetic Backspace differently from real Backspace.
@@ -544,6 +563,8 @@ Two consequences worth knowing:
   corrected text, so it never appears in the notification history.
 - If a fix fails, the exception traceback is redacted of the buffer before it is
   logged.
+- The correction history (`~/.cache/linguafix/history.json`) stores only the word
+  length, the layouts, a timestamp and an `undone` flag — never the typed text.
 
 ## Collecting diagnostics
 

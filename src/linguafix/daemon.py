@@ -24,6 +24,7 @@ from __future__ import annotations
 import contextlib
 import errno
 import fcntl
+import json
 import logging
 import os
 import re
@@ -38,7 +39,7 @@ from typing import TYPE_CHECKING, Final
 
 from .app_focus import get_active_app, get_focused_role
 from .app_layouts import AppLayoutManager
-from .config import Config, cache_dir, snippets_path
+from .config import Config, cache_dir, in_quiet_hours, snippets_path
 from .converter import LayoutConverter
 from .detector import LanguageDetector
 from .dictionary import load_user_dictionary
@@ -55,6 +56,8 @@ if TYPE_CHECKING:  # pragma: no cover - import used only for typing
 logger = logging.getLogger(__name__)
 
 LOCK_FILE_NAME: Final[str] = "daemon.lock"
+# Metadata-only correction history written on SIGUSR2 for the GUI to read.
+HISTORY_FILE_NAME: Final[str] = "history.json"
 SELECT_TIMEOUT: Final[float] = 0.25
 NOTIFY_TIMEOUT: Final[float] = 3.0
 # Pause between keyboard re-discovery attempts after the last device vanished.
@@ -276,8 +279,17 @@ class LinguaFixDaemon:
         # Time of the last tap of each modifier family, for double-tap detection.
         self._last_modifier_tap: dict[str, float] = {}
         # Successful fixes eligible for undo: (monotonic time, original text,
-        # original layout, backspace count).
-        self._undo_history: list[tuple[float, str, str, int]] = []
+        # original layout, backspace count, history id).
+        self._undo_history: list[tuple[float, str, str, int, int]] = []
+        # Recent corrections for the GUI "История" tab: metadata only, newest
+        # last. ``id`` is an opaque handle the GUI passes back to undo; the
+        # typed text is never stored here.
+        self._fix_history: list[dict[str, object]] = []
+        self._history_seq: int = 0
+        # A once-a-minute cache of the quiet-hours verdict, so the check does not
+        # call the clock on every keystroke.
+        self._quiet_minute: int = -1
+        self._quiet_now: bool = False
         # Task E: skip rules and the user dictionary.
         self._skip_regex = _compile_skip_regex(config.custom_skip_regex)
         self._excepted_apps = {app.lower() for app in config.exceptions_apps}
@@ -325,6 +337,7 @@ class LinguaFixDaemon:
         self._reload_requested = False
         self._shutdown_requested = False
         self._undo_requested = False
+        self._history_requested = False
         self._lock_handle: object | None = None
         # Key events that arrive while a replacement is in flight. The fix runs
         # on the event-loop thread, so keys typed during the settle pause would
@@ -444,6 +457,8 @@ class LinguaFixDaemon:
         signal.signal(signal.SIGHUP, self._handle_reload)
         if hasattr(signal, "SIGUSR1"):
             signal.signal(signal.SIGUSR1, self._handle_undo)
+        if hasattr(signal, "SIGUSR2"):
+            signal.signal(signal.SIGUSR2, self._handle_history)
 
     def _handle_stop(self, signum: int, _frame: object) -> None:
         # Only set flags here: the handler may run between any two bytecodes, so
@@ -461,6 +476,29 @@ class LinguaFixDaemon:
         # event-loop thread, never inside the signal handler.
         logger.info("Received SIGUSR1; scheduling undo")
         self._undo_requested = True
+
+    def _handle_history(self, _signum: int, _frame: object) -> None:
+        # Only set a flag: writing the snapshot allocates and must run on the
+        # event-loop thread, never inside the signal handler.
+        logger.info("Received SIGUSR2; scheduling history snapshot")
+        self._history_requested = True
+
+    def _write_history_snapshot(self) -> None:
+        """Write the metadata-only history snapshot for the GUI to read.
+
+        The file holds only word *lengths*, layouts and timestamps; the typed
+        text is never included. It is written atomically so the GUI never reads
+        a half-written file.
+        """
+        path = cache_dir() / HISTORY_FILE_NAME
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {"history": self.history_snapshot()}
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(payload), encoding="utf-8")
+            os.replace(tmp, path)
+        except OSError:
+            logger.debug("Could not write the history snapshot", exc_info=True)
 
     # ------------------------------------------------------------------
     # Event handling
@@ -747,8 +785,30 @@ class LinguaFixDaemon:
                 return action
         return None
 
+    def _is_quiet_now(self) -> bool:
+        """Return whether the quiet-hours window currently applies.
+
+        The verdict is cached per wall-clock minute so the keystroke path does
+        not read the clock (or parse the window) on every key.
+        """
+        if not self.config.quiet_hours_enabled:
+            return False
+        minute = int(time.time() // 60)
+        if minute != self._quiet_minute:
+            self._quiet_minute = minute
+            now_minutes = time.localtime().tm_hour * 60 + time.localtime().tm_min
+            self._quiet_now = in_quiet_hours(
+                self.config.quiet_hours_start, self.config.quiet_hours_end, now_minutes
+            )
+        return self._quiet_now
+
     def _should_fix_buffer(self) -> bool:
         """Return whether the current mode and per-app rules allow a fix."""
+        if self._is_quiet_now():
+            # Quiet hours silence *automatic* correction only; an explicit fix
+            # (double Shift) still goes through, because the user asked for it.
+            logger.debug("Quiet hours active; skipping automatic correction")
+            return False
         manual = self.config.mode == "manual"
         if not manual and not self._excepted_apps:
             return True
@@ -826,7 +886,7 @@ class LinguaFixDaemon:
         if self._shutdown_requested:
             return False
         if self.injector.replace_text(backspace_count, expansion, current):
-            self._record_undo(buffer, current, backspace_count)
+            self._record_undo(buffer, current, backspace_count, source=current, target=current)
             if self.config.notify_on_fix:
                 self._notify()
         return True
@@ -865,17 +925,67 @@ class LinguaFixDaemon:
             suggestion = suggestion[:1].upper() + suggestion[1:]
         return suggestion
 
-    def _record_undo(self, original: str, layout: str, backspace_count: int) -> None:
-        """Remember a successful fix so it can be undone shortly afterwards."""
-        now = time.monotonic()
-        self._undo_history.append((now, original, layout, backspace_count))
-        self._undo_history = self._undo_history[-self.config.undo_history_depth :]
+    def _record_undo(
+        self,
+        original: str,
+        layout: str,
+        backspace_count: int,
+        *,
+        source: str = "",
+        target: str = "",
+    ) -> int:
+        """Remember a successful fix and return its history id.
 
-    def _undo_last_fix(self) -> None:
-        """Re-apply the text of the most recent fix within the undo window."""
+        The undo tuple carries the history id so a later undo can mark exactly
+        the row it restored. Only metadata (word length, layouts, timestamp) is
+        kept for the GUI; the typed text lives solely in the in-memory undo
+        tuple, never in the history list and never on disk.
+        """
+        now = time.monotonic()
+        self._history_seq += 1
+        entry_id = self._history_seq
+        self._undo_history.append((now, original, layout, backspace_count, entry_id))
+        self._undo_history = self._undo_history[-self.config.undo_history_depth :]
+        self._fix_history.append(
+            {
+                "id": entry_id,
+                "at": time.time(),
+                "length": len(original.rstrip()),
+                "source": source,
+                "target": target,
+                "undone": False,
+            }
+        )
+        self._fix_history = self._fix_history[-self.config.history_size :]
+        return entry_id
+
+    def history_snapshot(self) -> list[dict[str, object]]:
+        """Return the recent corrections as metadata-only dicts (newest first)."""
+        return [dict(entry) for entry in reversed(self._fix_history)]
+
+    def _mark_history_undone(self, entry_id: int | None) -> None:
+        """Flag the history row linked to a restored fix."""
+        if entry_id is None:
+            return
+        for entry in self._fix_history:
+            if entry["id"] == entry_id:
+                entry["undone"] = True
+                return
+
+    def _undo_last_fix(self, entry_id: int | None = None) -> bool:
+        """Re-apply the text of the most recent fix within the undo window.
+
+        Args:
+            entry_id: When given, the history id the caller wants undone. Only
+                the newest fix can be restored reliably, so a stale id is
+                refused instead of silently undoing a different correction.
+
+        Returns:
+            ``True`` when a fix was restored (or the dry run would have).
+        """
         if not self._undo_history:
             logger.info("Undo requested but nothing to undo")
-            return
+            return False
         now = time.monotonic()
         # Drop entries that have aged out of the undo window.
         self._undo_history = [
@@ -885,11 +995,15 @@ class LinguaFixDaemon:
         ]
         if not self._undo_history:
             logger.info("Undo requested but the window has expired")
-            return
-        _time, original, layout, backspace_count = self._undo_history.pop()
+            return False
+        if entry_id is not None and self._undo_history[-1][4] != entry_id:
+            logger.info("Undo requested for a stale history entry")
+            return False
+        _time, original, layout, backspace_count, linked_id = self._undo_history.pop()
+        self._mark_history_undone(linked_id)
         if self.dry_run:
             logger.info("Dry run: skipping undo")
-            return
+            return True
         current = self.switcher.get_current_layout()
         target = layout if layout else current
         self.switcher.switch_to(target)
@@ -898,10 +1012,11 @@ class LinguaFixDaemon:
         # many characters and retyping the original restores the screen exactly.
         if not self.injector.replace_text(backspace_count, original, target):
             logger.warning("Undo failed to replace text")
-            return
+            return False
         logger.info("Undid the last fix")
         if self.config.notify_on_fix:
             self._notify()
+        return True
 
     def _key_to_char(self, code: int) -> str | None:
         """Translate a keycode into the character for the active layout."""
@@ -1163,7 +1278,9 @@ class LinguaFixDaemon:
         if self.injector.replace_text(backspace_total, replacement, target):
             # Record the *pre-fix* on-screen text so a later undo restores it
             # exactly, including the boundary that was consumed and retyped.
-            self._record_undo(buffer + boundary_char, current, backspace_total)
+            self._record_undo(
+                buffer + boundary_char, current, backspace_total, source=current, target=target
+            )
             logger.debug("Flush complete, buffer cleared")
             if self.config.notify_on_fix:
                 self._notify()
@@ -1338,6 +1455,10 @@ class LinguaFixDaemon:
             if self._undo_requested:
                 self._undo_requested = False
                 self._undo_last_fix()
+
+            if self._history_requested:
+                self._history_requested = False
+                self._write_history_snapshot()
 
             if registered == 0:
                 # Every keyboard disappeared (for example a USB keyboard was

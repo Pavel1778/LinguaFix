@@ -62,10 +62,10 @@ def test_window_creates_with_expected_pages(gui_state: Any) -> None:
 
     app = Adw.Application(application_id="io.github.pavel1778.LinguaFixTest")
     window = LinguaFixWindow(gui_state, app)
-    assert len(window.stack.get_pages()) == 3
+    assert len(window.stack.get_pages()) == 4
     assert window.home.toggle.state == "off"
     window._on_show_advanced(None, None)
-    assert len(window.stack.get_pages()) == 4
+    assert len(window.stack.get_pages()) == 5
 
 
 def test_big_toggle_start_and_stop(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -728,3 +728,98 @@ def test_gui_main_runs_and_quits(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(app_module, "LinguaFixApplication", _App)
     assert main([]) == 0
+
+
+# --- history page -----------------------------------------------------------
+
+
+def test_history_page_formats_metadata_rows(
+    gui_state: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import time
+
+    monkeypatch.setattr(
+        gui_state,
+        "read_history",
+        lambda: [
+            {
+                "id": 2,
+                "at": time.time() - 5,
+                "length": 6,
+                "source": "us",
+                "target": "ru",
+                "undone": False,
+            },
+            {
+                "id": 1,
+                "at": time.time() - 90,
+                "length": 9,
+                "source": "ru",
+                "target": "us",
+                "undone": True,
+            },
+        ],
+    )
+    from linguafix.gui.history_page import HistoryPage
+
+    class _Toasts:
+        def add_toast(self, _t: object) -> None:
+            pass
+
+    page = HistoryPage(gui_state, _Toasts())
+    assert page is not None
+
+
+def test_history_page_undo_asks_daemon(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    import time
+
+    calls: list[str] = []
+    monkeypatch.setattr(
+        gui_state, "undo_last_fix", lambda entry_id=None: calls.append("undo") or True
+    )
+    monkeypatch.setattr(
+        gui_state,
+        "read_history",
+        lambda: [
+            {
+                "id": 7,
+                "at": time.time(),
+                "length": 6,
+                "source": "us",
+                "target": "ru",
+                "undone": False,
+            }
+        ],
+    )
+    from linguafix.gui.history_page import HistoryPage
+
+    class _Toasts:
+        def add_toast(self, _t: object) -> None:
+            pass
+
+    page = HistoryPage(gui_state, _Toasts())
+    page._on_undo_clicked(None, 7)
+    assert calls == ["undo"]
+
+
+def test_home_page_quiet_hours_indicator(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gui_state, "in_quiet_hours", lambda: True)
+    from linguafix.gui.home_page import HomePage
+
+    class _Toasts:
+        def add_toast(self, _t: object) -> None:
+            pass
+
+    page = HomePage(gui_state, _Toasts())
+    page.refresh()
+    assert page._pause.get_visible() is True
+    assert "тихие часы" in page._pause.get_label()
+
+
+def test_gui_state_in_quiet_hours() -> None:
+    from linguafix.config import Config
+    from linguafix.gui.state import GuiState
+
+    config = Config(quiet_hours_enabled=True, quiet_hours_start="00:00", quiet_hours_end="23:59")
+    state = GuiState(config=config)
+    assert state.in_quiet_hours() is True

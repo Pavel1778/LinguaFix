@@ -34,6 +34,14 @@ class HomePage(Gtk.Box):
         self._status = StatusRow()
         self.append(self._status)
 
+        # A single line that explains why automatic correction is currently
+        # paused (an excepted app or quiet hours). Hidden when nothing pauses it.
+        self._pause = Gtk.Label(label="", xalign=0.5)
+        self._pause.add_css_class("dim-label")
+        self._pause.set_wrap(True)
+        self._pause.set_visible(False)
+        self.append(self._pause)
+
         self.append(self._section_label("Режим работы"))
         self._mode = ModeSwitcher(on_change=self._on_mode_changed)
         self._mode.set_mode(state.config.mode)
@@ -127,11 +135,36 @@ class HomePage(Gtk.Box):
             mode=MODE_LABELS.get(self._state.config.mode, self._state.config.mode),
             seconds_since_fix=self._state.seconds_since_last_fix(),
         )
+        self._refresh_pause()
         self._mode.set_mode(self._state.config.mode)
         # Update the autostart switch without re-triggering the handler.
         self._autostart.handler_block_by_func(self._on_autostart_toggled)
         self._autostart.set_active(self._state.is_autostart_enabled())
         self._autostart.handler_unblock_by_func(self._on_autostart_toggled)
+
+    def _refresh_pause(self) -> None:
+        """Show why automatic correction is paused, if it is.
+
+        Quiet hours win over an app exception: it is the reason the user is more
+        likely to be surprised by. The active-app probe is best-effort; when it
+        cannot tell, no exception line is shown.
+        """
+        reason = ""
+        if self._state.in_quiet_hours():
+            reason = (
+                f"Автопереключение приостановлено: тихие часы "
+                f"({self._state.config.quiet_hours_start}–{self._state.config.quiet_hours_end})"
+            )
+        else:
+            try:
+                from ..app_focus import get_active_app
+            except ImportError:  # pragma: no cover - defensive
+                get_active_app = None  # type: ignore[assignment]
+            app = get_active_app() if get_active_app is not None else None
+            if self._state.is_app_excepted(app):
+                reason = f"Автопереключение приостановлено (приложение «{app}»)"
+        self._pause.set_label(reason)
+        self._pause.set_visible(bool(reason))
 
     @property
     def toggle(self) -> BigToggle:

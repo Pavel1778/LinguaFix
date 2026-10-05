@@ -32,6 +32,7 @@ class AdvancedPage(BoundPreferencesPage):
         self._build_detector_group()
         self._build_triggers_group()
         self._build_injection_group()
+        self._build_quiet_hours_group()
         self._build_exceptions_group()
         self._build_dictionary_group()
         self._build_typo_group()
@@ -141,6 +142,19 @@ class AdvancedPage(BoundPreferencesPage):
             group, "Глубина истории отмены", "undo_history_depth", lower=1, upper=10, step=1
         )
         self.add_spin(group, "Окно отмены, с", "undo_window_seconds", lower=3, upper=60, step=1)
+        self.add_spin(group, "Записей в истории", "history_size", lower=5, upper=50, step=5)
+        self.add(group)
+
+    # --- quiet hours ------------------------------------------------------
+    def _build_quiet_hours_group(self) -> None:
+        group = Adw.PreferencesGroup(
+            title="Тихие часы",
+            description="В это время автоматическая коррекция приостановлена; "
+            "ручной fix (двойной Shift) продолжает работать.",
+        )
+        self.add_switch(group, "Включить тихие часы", "quiet_hours_enabled")
+        self.add_entry(group, "Начало (ЧЧ:ММ)", "quiet_hours_start")
+        self.add_entry(group, "Конец (ЧЧ:ММ)", "quiet_hours_end")
         self.add(group)
 
     # --- exceptions -------------------------------------------------------

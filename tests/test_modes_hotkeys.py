@@ -133,8 +133,8 @@ def test_manual_mode_skips_automatic_fix() -> None:
 
 
 def test_manual_mode_forces_fix_for_listed_app(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("linguafix.daemon.get_active_app", lambda: "kitty")
-    daemon = make_daemon(mode="manual", exceptions_force_in_manual=["kitty"])
+    monkeypatch.setattr("linguafix.daemon.get_active_app", lambda: "myeditor")
+    daemon = make_daemon(mode="manual", exceptions_force_in_manual=["myeditor"])
     press(daemon, "ghbdtn")
     tap(daemon, "KEY_SPACE")
     assert _injector(daemon).replacements == [(7, "привет ", "ru")]
@@ -238,7 +238,8 @@ def test_undo_window_expiry(monkeypatch: pytest.MonkeyPatch) -> None:
     tap(daemon, "KEY_SPACE")
     # Age the recorded entry beyond the undo window.
     daemon._undo_history = [
-        (time.monotonic() - 100, entry[1], entry[2], entry[3]) for entry in daemon._undo_history
+        (time.monotonic() - 100, entry[1], entry[2], entry[3], entry[4])
+        for entry in daemon._undo_history
     ]
     daemon._undo_last_fix()
     assert len(_injector(daemon).replacements) == 1

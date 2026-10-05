@@ -253,10 +253,23 @@ word is scored against the corpora whose *layout could have produced it*.
   borderline word but can never talk the detector out of a clear correction.
   Disable it with `context_analysis = false` or a weight of `0.0`.
 - **Per-app exceptions** (`exceptions_apps`). A focused application on this list
-  is never touched, in any mode. `exceptions_force_in_manual` lists the
-  applications that stay automatic while `mode = "manual"`. The focused
-  application is resolved best-effort; the daemon degrades to auto behaviour when
-  it cannot tell, and never reads window contents.
+  is never touched, in any mode. The list ships pre-filled with terminals, IDEs,
+  editors and games (`DEFAULT_EXCEPTION_APPS` in `config.py`) because there the
+  other layout is not more plausible — the text is a command or an identifier.
+  `exceptions_force_in_manual` lists the applications that stay automatic while
+  `mode = "manual"`. The focused application is resolved best-effort; the daemon
+  degrades to auto behaviour when it cannot tell, and never reads window contents.
+  A manual fix (`SHIFT+SHIFT`) bypasses the exception list, so it still works
+  inside a terminal.
+- **Quiet hours** (`quiet_hours_enabled`, `quiet_hours_start`, `quiet_hours_end`).
+  Inside the daily window the daemon skips *automatic* correction but keeps the
+  manual fix. The window may wrap midnight (`22:00`–`08:00`). The check is
+  cached per wall-clock minute and consulted in `_should_fix_buffer`.
+- **Correction history** (`history_size`). A bounded ring of recent fixes backs
+  the GUI "История" tab. An entry stores only the word *length*, the source and
+  target layouts, a monotonic timestamp and an `undone` flag — never the typed
+  text. The GUI reads it through `daemon_control.request_history` (SIGUSR2) and
+  `read_history` (the atomically-written `history.json`).
 - **Skip rules** (`ignore_all_caps`, `ignore_with_digits`, `ignore_emails_urls`,
   `custom_skip_regex`). These short-circuit a buffer before detection. Digital
   tokens, `ALL CAPS` and e-mail/URL/path-like tokens (an internal separator such

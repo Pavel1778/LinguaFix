@@ -19,7 +19,9 @@ from ..daemon_control import (
     disable_autostart as daemon_disable_autostart,
     enable_autostart as daemon_enable_autostart,
     is_running as daemon_is_running,
+    read_history as daemon_read_history,
     reload_config as daemon_reload_config,
+    request_history as daemon_request_history,
     restart as daemon_restart,
     start as daemon_start,
     stop as daemon_stop,
@@ -109,9 +111,41 @@ class GuiState:
         """Ask the running daemon to reload its configuration."""
         return daemon_reload_config()
 
-    def undo_last_fix(self) -> bool:
-        """Ask the running daemon to undo its most recent correction."""
+    def undo_last_fix(self, entry_id: int | None = None) -> bool:
+        """Ask the running daemon to undo its most recent correction.
+
+        ``entry_id`` is accepted for API symmetry with the history tab; the
+        daemon only ever undoes the newest fix, so a stale id is refused there.
+        """
         return daemon_undo_last_fix()
+
+    def read_history(self) -> list[dict[str, object]]:
+        """Ask the daemon to refresh its history and return the snapshot.
+
+        Falls back to the last snapshot when no daemon is running. Every entry
+        is metadata only (word length, layouts, timestamp, undone flag).
+        """
+        daemon_request_history()
+        return daemon_read_history()
+
+    def in_quiet_hours(self) -> bool:
+        """Return whether the quiet-hours window currently applies."""
+        if not self.config.quiet_hours_enabled:
+            return False
+        from ..config import in_quiet_hours
+
+        now = time.localtime()
+        return in_quiet_hours(
+            self.config.quiet_hours_start,
+            self.config.quiet_hours_end,
+            now.tm_hour * 60 + now.tm_min,
+        )
+
+    def is_app_excepted(self, app: str | None) -> bool:
+        """Return whether ``app`` is on the never-touch exception list."""
+        if not app:
+            return False
+        return app.lower() in {name.lower() for name in self.config.exceptions_apps}
 
     def set_autostart(self, enabled: bool) -> bool:
         """Enable or disable autostart and return whether it succeeded."""

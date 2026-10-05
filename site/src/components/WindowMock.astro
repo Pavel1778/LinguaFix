@@ -1,0 +1,56 @@
+---
+// Rendered inline (not as an <img>) so the SVG text inherits the page's
+// self-hosted Inter font. An <img> SVG cannot load the page webfont, so its
+// text fell back to a system font with different metrics and looked shifted.
+interface Props {
+  class?: string;
+}
+const { class: className = "" } = Astro.props;
+---
+
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 900 600"
+  preserveAspectRatio="xMidYMid meet"
+  role="img"
+  aria-label="Главное окно LinguaFix: большая кнопка включения и режимы Ручной / Авто / Гибрид"
+  class={`block font-sans ${className}`}
+>
+  <defs>
+    <linearGradient id="lf-btn-on" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#41d98a" />
+      <stop offset="1" stop-color="#26a269" />
+    </linearGradient>
+    <linearGradient id="lf-header" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#323232" />
+      <stop offset="1" stop-color="#282828" />
+    </linearGradient>
+  </defs>
+
+  <rect width="900" height="600" rx="18" fill="#1e1e1e" />
+  <rect x="0.5" y="0.5" width="899" height="599" rx="18" fill="none" stroke="#3d3d3d" />
+
+  <rect x="1" y="1" width="898" height="62" rx="17" fill="url(#lf-header)" />
+  <rect x="1" y="46" width="898" height="17" fill="#282828" />
+  <text x="28" y="40" font-size="22" font-weight="700" fill="#fafafa">LinguaFix</text>
+  <text x="150" y="40" font-size="16" fill="#9a9a9a">Главное окно · включено</text>
+  <circle cx="862" cy="32" r="7" fill="#4a4a4a" />
+  <circle cx="838" cy="32" r="7" fill="#4a4a4a" />
+
+  <circle cx="450" cy="250" r="126" fill="none" stroke="#33d17a" stroke-opacity="0.12" stroke-width="14" />
+  <circle cx="450" cy="250" r="100" fill="url(#lf-btn-on)" />
+  <circle cx="450" cy="250" r="100" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="2" />
+  <path d="M432 218.8 A36 36 0 1 1 468 218.8" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round" />
+  <line x1="450" y1="213" x2="450" y2="250" stroke="#ffffff" stroke-width="9" stroke-linecap="round" />
+
+  <text x="450" y="390" text-anchor="middle" font-size="26" font-weight="700" fill="#fafafa">Включено</text>
+  <text x="450" y="420" text-anchor="middle" font-size="16" fill="#9a9a9a">Активен · Auto</text>
+
+  <rect x="150" y="455" width="600" height="62" rx="31" fill="#262626" stroke="#3d3d3d" />
+  <rect x="355" y="460" width="196" height="52" rx="26" fill="#3584e4" />
+  <text x="253" y="493" text-anchor="middle" font-size="17" font-weight="600" fill="#9a9a9a">Ручной</text>
+  <text x="450" y="493" text-anchor="middle" font-size="17" font-weight="600" fill="#ffffff">Авто</text>
+  <text x="647" y="493" text-anchor="middle" font-size="17" font-weight="600" fill="#9a9a9a">Гибрид</text>
+
+  <text x="450" y="553" text-anchor="middle" font-size="15" fill="#9a9a9a">Нажмите, чтобы приостановить исправления</text>
+</svg>

@@ -173,8 +173,8 @@ def test_unlisted_app_still_fixes(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_force_in_manual_list_applies_to_manual_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("linguafix.daemon.get_active_app", lambda: "kitty")
-    daemon = make_daemon(monkeypatch, mode="manual", exceptions_force_in_manual=["kitty"])
+    monkeypatch.setattr("linguafix.daemon.get_active_app", lambda: "myeditor")
+    daemon = make_daemon(monkeypatch, mode="manual", exceptions_force_in_manual=["myeditor"])
     press(daemon, "ghbdtn")
     tap(daemon, "KEY_SPACE")
     assert _injector(daemon).replacements == [(7, "привет ", "ru")]

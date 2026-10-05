@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from linguafix import config as config_module
-from linguafix.config import Config, load_config, save_config
+from linguafix.config import DEFAULT_EXCEPTION_APPS, Config, load_config, save_config
 
 
 def test_defaults() -> None:
@@ -125,7 +125,11 @@ def test_new_field_defaults() -> None:
     assert config.context_weight == 0.3
     assert config.ignore_emails_urls is True
     assert config.dictionary_size == 5000
-    assert config.exceptions_apps == []
+    assert config.exceptions_apps == list(DEFAULT_EXCEPTION_APPS)
+    assert "gnome-terminal" in config.exceptions_apps
+    assert "code" in config.exceptions_apps
+    assert config.history_size == 20
+    assert config.quiet_hours_enabled is False
     assert config.log_rotation_mb == 5
     assert config.notify_on_error is False
     assert config.sound_on_fix is False

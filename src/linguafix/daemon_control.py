@@ -15,6 +15,7 @@ systemd at all (containers, minimal installs, manual runs).
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -27,6 +28,7 @@ from pathlib import Path
 from typing import Final
 
 from .config import cache_dir
+from .daemon import HISTORY_FILE_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -272,6 +274,43 @@ def undo_last_fix() -> bool:
     if pid is None:
         return False
     return _kill_pid(pid, signal.SIGUSR1)
+
+
+def request_history() -> bool:
+    """Ask the running daemon to refresh its metadata-only history snapshot.
+
+    The daemon answers asynchronously by writing ``history.json`` into the cache
+    directory (see :func:`read_history`). Returns ``False`` when no daemon is
+    running.
+    """
+    pid = read_pid()
+    if pid is None:
+        return False
+    if not hasattr(signal, "SIGUSR2"):  # pragma: no cover - POSIX always has it
+        return False
+    return _kill_pid(pid, signal.SIGUSR2)
+
+
+def read_history() -> list[dict[str, object]]:
+    """Return the daemon's recent corrections as metadata-only dicts.
+
+    Reads the snapshot the daemon wrote on :func:`request_history`. The file
+    contains word *lengths*, layouts and timestamps only; the typed text is
+    never present. A missing or malformed file yields an empty list.
+    """
+    path = cache_dir() / HISTORY_FILE_NAME
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return []
+    history = payload.get("history") if isinstance(payload, dict) else None
+    if not isinstance(history, list):
+        return []
+    return [entry for entry in history if isinstance(entry, dict)]
 
 
 def enable_autostart() -> bool:

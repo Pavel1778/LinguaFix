@@ -51,6 +51,34 @@ DEFAULT_UNDO_WINDOW_SECONDS: Final[int] = 10
 DEFAULT_UNDO_HISTORY_DEPTH: Final[int] = 3
 DEFAULT_DICTIONARY_SIZE: Final[int] = 5000
 DEFAULT_LOG_ROTATION_MB: Final[int] = 5
+# Terminals and code editors are exactly the applications where "the other
+# layout is more plausible" is wrong: what is typed there are commands and
+# identifiers, not words. Pre-filling the list keeps the daemon quiet where a
+# correction would annoy. Edit it in the GUI (Продвинутые → Исключения).
+DEFAULT_EXCEPTION_APPS: Final[tuple[str, ...]] = (
+    "gnome-terminal",
+    "kgx",
+    "konsole",
+    "kitty",
+    "alacritty",
+    "xterm",
+    "code",
+    "codium",
+    "sublime_text",
+    "gedit",
+    "jetbrains-idea",
+    "idea",
+    "pycharm",
+    "webstorm",
+    "clion",
+    "goland",
+    "steam",
+    "lutris",
+    "wine",
+)
+# Number of recent corrections kept for the GUI "История" tab. Metadata only,
+# never the typed text, and never written to disk.
+DEFAULT_HISTORY_SIZE: Final[int] = 20
 # Plausibility guard: when the text typed in the *current* layout already looks
 # like real words, it is left alone even if another layout scores higher. The
 # floor is an average bigram log-probability; below it a word looks like noise
@@ -90,6 +118,36 @@ FORBIDDEN_HOTKEY_KEYS: Final[frozenset[str]] = frozenset(
     {"ESC", "ESCAPE", "ENTER", "RETURN", "KPENTER", "SPACE", "TAB"}
 )
 _HOTKEY_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z0-9+_]+$")
+_HHMM_RE: Final[re.Pattern[str]] = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+
+
+def _validate_hhmm(value: str, field: str) -> str:
+    """Return ``value`` when it is a valid ``HH:MM`` 24-hour time, else raise."""
+    text = str(value).strip()
+    if not _HHMM_RE.match(text):
+        raise ValueError(f"{field} must be a HH:MM time, got {value!r}")
+    return text
+
+
+def _minutes(hhmm: str) -> int:
+    """Return the minutes-since-midnight for a validated ``HH:MM`` string."""
+    hour, minute = hhmm.split(":")
+    return int(hour) * 60 + int(minute)
+
+
+def in_quiet_hours(start: str, end: str, now_minutes: int) -> bool:
+    """Return whether ``now_minutes`` falls in the ``[start, end)`` quiet window.
+
+    The window may wrap past midnight (``22:00`` → ``08:00``), which is the
+    common case; equal start and end means "never quiet".
+    """
+    start_m = _minutes(start)
+    end_m = _minutes(end)
+    if start_m == end_m:
+        return False
+    if start_m < end_m:
+        return start_m <= now_minutes < end_m
+    return now_minutes >= start_m or now_minutes < end_m
 
 
 def normalise_hotkey(value: str) -> str:
@@ -296,10 +354,14 @@ class Config:
     max_consecutive_consonants: int = DEFAULT_MAX_CONSECUTIVE_CONSONANTS
     min_vowel_ratio: float = DEFAULT_MIN_VOWEL_RATIO
     custom_skip_regex: str = ""
-    exceptions_apps: list[str] = field(default_factory=list)
+    exceptions_apps: list[str] = field(default_factory=lambda: list(DEFAULT_EXCEPTION_APPS))
     exceptions_force_in_manual: list[str] = field(default_factory=list)
     dictionary_size: int = DEFAULT_DICTIONARY_SIZE
     dictionary_custom_path: str = ""
+    history_size: int = DEFAULT_HISTORY_SIZE
+    quiet_hours_enabled: bool = False
+    quiet_hours_start: str = "22:00"
+    quiet_hours_end: str = "08:00"
 
     # --- Task F: T9 typo correction ----------------------------------------
     typo_correction: bool = False
@@ -469,6 +531,13 @@ class Config:
         if self.dictionary_size not in VALID_DICTIONARY_SIZES:
             raise ValueError(f"dictionary_size must be one of {VALID_DICTIONARY_SIZES}")
         self.dictionary_custom_path = str(self.dictionary_custom_path)
+
+        self.history_size = int(self.history_size)
+        if not 1 <= self.history_size <= 100:
+            raise ValueError("history_size must be between 1 and 100")
+        self.quiet_hours_enabled = bool(self.quiet_hours_enabled)
+        self.quiet_hours_start = _validate_hhmm(self.quiet_hours_start, "quiet_hours_start")
+        self.quiet_hours_end = _validate_hhmm(self.quiet_hours_end, "quiet_hours_end")
 
         # --- T9 typo correction --------------------------------------------
         self.typo_correction = bool(self.typo_correction)

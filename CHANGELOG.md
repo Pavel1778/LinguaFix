@@ -43,6 +43,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   notifies) when a newer version exists. Off by default — it is the only
   feature that uses the network. The GUI job now runs under xvfb and includes
   the GUI package in coverage (`.github/workflows/ci.yml`, `coverage-gui.rc`).
+- Pre-filled exception list. `exceptions_apps` now ships with terminals, IDEs,
+  editors and games (`gnome-terminal`, `code`, `vim`, `steam`, ...), where the
+  text typed is a command or an identifier rather than a word. A manual fix
+  (`SHIFT+SHIFT`) bypasses the list, so it still works inside a terminal.
+- Quiet hours (`quiet_hours_enabled`, `quiet_hours_start`, `quiet_hours_end`).
+  Inside the daily window (may wrap midnight) automatic correction is paused;
+  the manual fix keeps working. The GUI home tab explains the pause.
+- A correction-history tab in the GUI, backed by a bounded ring of recent fixes
+  (`history_size`). Entries hold metadata only — word length, layouts, time and
+  an `undone` flag — and the newest can be undone from the tab.
 
 ### Changed
 
