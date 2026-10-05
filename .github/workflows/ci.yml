@@ -84,3 +84,24 @@ jobs:
           PYTHONPATH=/usr/lib/python3/dist-packages xvfb-run -a python -m pytest tests/ -q \
             --cov=linguafix --cov-config=coverage-gui.rc \
             --cov-report=term-missing --cov-fail-under=85
+
+  site:
+    name: Landing page build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      - name: Install dependencies
+        working-directory: site
+        run: npm ci
+
+      - name: Build
+        working-directory: site
+        run: npm run build
