@@ -1,0 +1,37 @@
+---
+import { LATEST_RELEASE, REPO } from "../consts";
+
+const links = [
+  { href: "#features", label: "Возможности" },
+  { href: "#how", label: "Как работает" },
+  { href: "#install", label: "Установка" },
+  { href: "#faq", label: "FAQ" },
+];
+---
+
+<header
+  class="sticky top-0 z-50 border-b border-[#e5e5e5]/80 bg-[#fafafa]/80 backdrop-blur-md dark:border-[#3d3d3d]/80 dark:bg-[#1e1e1e]/80"
+>
+  <div class="container-page flex h-16 items-center justify-between gap-4">
+    <a href="#top" class="flex items-center gap-2.5 font-bold" aria-label="LinguaFix">
+      <img src="/logo.svg" alt="" width="32" height="32" class="h-8 w-8 rounded-lg" />
+      <span class="text-lg tracking-tight">LinguaFix</span>
+    </a>
+
+    <nav class="hidden items-center gap-6 text-sm md:flex" aria-label="Основная навигация">
+      {links.map((l) => (
+        <a href={l.href} class="text-[#0a0a0a]/70 transition-colors hover:text-[#0a0a0a] dark:text-[#fafafa]/70 dark:hover:text-[#fafafa]">
+          {l.label}
+        </a>
+      ))}
+      <a
+        href={REPO}
+        class="text-[#0a0a0a]/70 transition-colors hover:text-[#0a0a0a] dark:text-[#fafafa]/70 dark:hover:text-[#fafafa]"
+        rel="noopener"
+        >GitHub</a
+      >
+    </nav>
+
+    <a href={LATEST_RELEASE} class="btn btn-primary !px-4 !py-2" rel="noopener">Скачать</a>
+  </div>
+</header>

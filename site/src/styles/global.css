@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+  }
+
+  body {
+    @apply bg-[#fafafa] text-[#0a0a0a] antialiased dark:bg-[#1e1e1e] dark:text-[#fafafa];
+  }
+
+  ::selection {
+    @apply bg-[#1c71d8] text-white dark:bg-[#3584e4];
+  }
+}
+
+@layer components {
+  .container-page {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-6 py-3 text-sm font-medium
+      transition-colors duration-150 focus-visible:outline focus-visible:outline-2
+      focus-visible:outline-offset-2 focus-visible:outline-[#1c71d8] dark:focus-visible:outline-[#3584e4];
+  }
+
+  .btn-primary {
+    @apply bg-[#1c71d8] text-white hover:bg-[#1a65c2] dark:bg-[#3584e4] dark:hover:bg-[#2f77cd];
+  }
+
+  .btn-secondary {
+    @apply border border-[#e5e5e5] bg-white text-[#0a0a0a] hover:bg-[#f0f0f0]
+      dark:border-[#3d3d3d] dark:bg-[#2d2d2d] dark:text-[#fafafa] dark:hover:bg-[#383838];
+  }
+
+  .btn-ghost {
+    @apply px-2 py-2 text-[#1c71d8] hover:underline dark:text-[#3584e4];
+  }
+
+  .card {
+    @apply rounded-xl border border-[#e5e5e5] bg-white p-6 shadow-sm
+      dark:border-[#3d3d3d] dark:bg-[#2d2d2d];
+  }
+
+  .code-block {
+    @apply relative overflow-x-auto rounded-xl bg-[#1e1e1e] p-4 font-mono text-sm text-[#fafafa];
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-[#e5e5e5] bg-white px-3 py-1
+      text-xs font-medium text-[#0a0a0a] dark:border-[#3d3d3d] dark:bg-[#2d2d2d] dark:text-[#fafafa];
+  }
+}

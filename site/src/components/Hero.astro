@@ -1,0 +1,37 @@
+---
+import { DEB_URL, LATEST_RELEASE, REPO, VERSION } from "../consts";
+---
+
+<section id="top" class="container-page grid items-center gap-12 py-16 sm:py-20 lg:grid-cols-2 lg:py-28">
+  <div>
+    <h1 class="text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
+      Печатаете не в той раскладке?<br class="hidden sm:block" />
+      <span class="text-[#1c71d8] dark:text-[#3584e4]">LinguaFix исправит за 30&nbsp;мс</span>
+    </h1>
+
+    <p class="mt-6 max-w-xl text-lg text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
+      Автоматический корректор раскладки для Linux. Работает в фоне, не мешает вводу,
+      поддерживает Wayland и X11.
+    </p>
+
+    <div class="mt-8 flex flex-wrap items-center gap-3">
+      <a href={DEB_URL} class="btn btn-primary" rel="noopener">Скачать .deb</a>
+      <a href={LATEST_RELEASE} class="btn btn-secondary" rel="noopener">Последний релиз</a>
+      <a href={REPO} class="btn btn-ghost" rel="noopener">Смотреть на GitHub →</a>
+    </div>
+
+    <p class="mt-6 text-sm text-[#0a0a0a]/60 dark:text-[#fafafa]/60">
+      Debian 13+ · GNOME 48+ · MIT License · v{VERSION}
+    </p>
+  </div>
+
+  <div>
+    <img
+      src="/screenshots/main-active.svg"
+      alt="Главное окно LinguaFix: большая кнопка включения и режимы Auto / Manual / Hybrid"
+      width="900"
+      height="600"
+      class="w-full rounded-2xl border border-[#e5e5e5] shadow-lg dark:border-[#3d3d3d]"
+    />
+  </div>
+</section>

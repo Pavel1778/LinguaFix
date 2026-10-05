@@ -1,0 +1,78 @@
+---
+import CodeBlock from "./CodeBlock.astro";
+import { DEB_URL, INSTALL_DOC, ISSUES, REPO, RELEASES, VERSION } from "../consts";
+
+const debCode = `wget ${DEB_URL}
+sudo apt install ./linguafix_${VERSION}_all.deb`;
+
+const srcCode = `git clone ${REPO}.git
+cd LinguaFix
+bash install.sh`;
+---
+
+<section id="install" class="border-y border-[#e5e5e5] bg-white py-16 sm:py-20 dark:border-[#3d3d3d] dark:bg-[#242424]">
+  <div class="container-page">
+    <h2 class="text-center text-3xl font-bold tracking-tight sm:text-4xl">Установка</h2>
+    <p class="mx-auto mt-4 max-w-2xl text-center text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
+      Одна команда — и LinguaFix работает в фоне.
+    </p>
+
+    <div class="mx-auto mt-10 max-w-3xl">
+      <div class="flex gap-1 rounded-lg border border-[#e5e5e5] bg-[#fafafa] p-1 dark:border-[#3d3d3d] dark:bg-[#2d2d2d]" role="tablist">
+        <button type="button" class="install-tab flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors" data-tab="deb" role="tab" aria-selected="true">Debian / Ubuntu / Mint</button>
+        <button type="button" class="install-tab flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors" data-tab="src" role="tab" aria-selected="false">Из исходников</button>
+        <button type="button" class="install-tab flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors" data-tab="other" role="tab" aria-selected="false">Другие</button>
+      </div>
+
+      <div class="mt-6" data-panel="deb">
+        <CodeBlock code={debCode} label="Установка .deb" />
+        <div class="mt-4 flex flex-wrap gap-3">
+          <a href={DEB_URL} class="btn btn-primary" rel="noopener">Скачать .deb</a>
+        </div>
+      </div>
+
+      <div class="mt-6 hidden" data-panel="src">
+        <CodeBlock code={srcCode} label="Сборка из исходников" />
+      </div>
+
+      <div class="mt-6 hidden" data-panel="other">
+        <p class="text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
+          Arch, Fedora и другие дистрибутивы пока не поддерживаются. Следите за
+          релизами на GitHub или напишите о своём дистрибутиве в
+          <a href={ISSUES} class="text-[#1c71d8] underline dark:text-[#3584e4]" rel="noopener">Issues</a>.
+        </p>
+      </div>
+
+      <div class="mt-8 flex flex-wrap gap-3">
+        <a href={RELEASES} class="btn btn-secondary" rel="noopener">Все релизы</a>
+        <a href={INSTALL_DOC} class="btn btn-secondary" rel="noopener">Документация</a>
+        <a href={REPO} class="btn btn-secondary" rel="noopener">GitHub</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  const tabs = document.querySelectorAll<HTMLButtonElement>(".install-tab");
+  const panels = document.querySelectorAll<HTMLElement>("[data-panel]");
+
+  function activate(name: string) {
+    tabs.forEach((tab) => {
+      const on = tab.dataset.tab === name;
+      tab.setAttribute("aria-selected", String(on));
+      tab.classList.toggle("bg-white", on);
+      tab.classList.toggle("text-[#1c71d8]", on);
+      tab.classList.toggle("shadow-sm", on);
+      tab.classList.toggle("dark:bg-[#383838]", on);
+      tab.classList.toggle("dark:text-[#3584e4]", on);
+      tab.classList.toggle("text-[#0a0a0a]/70", !on);
+      tab.classList.toggle("dark:text-[#fafafa]/70", !on);
+    });
+    panels.forEach((panel) => {
+      panel.classList.toggle("hidden", panel.dataset.panel !== name);
+    });
+  }
+
+  tabs.forEach((tab) => tab.addEventListener("click", () => activate(tab.dataset.tab ?? "deb")));
+  activate("deb");
+</script>

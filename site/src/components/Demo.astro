@@ -1,0 +1,85 @@
+---
+---
+
+<section id="demo" class="container-page py-16 sm:py-20">
+  <h2 class="text-center text-3xl font-bold tracking-tight sm:text-4xl">Попробуйте сами</h2>
+  <p class="mx-auto mt-4 max-w-2xl text-center text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
+    Наберите текст не в той раскладке — демо покажет, что вы имели в виду.
+  </p>
+
+  <div class="mx-auto mt-10 max-w-2xl">
+    <label for="demo-input" class="mb-2 block text-sm font-medium">Наберите здесь</label>
+    <input
+      id="demo-input"
+      type="text"
+      autocomplete="off"
+      autocapitalize="off"
+      spellcheck="false"
+      placeholder="ghbdtn"
+      class="w-full rounded-xl border border-[#e5e5e5] bg-white px-4 py-3 font-mono text-lg outline-none
+        transition-colors focus:border-[#1c71d8] dark:border-[#3d3d3d] dark:bg-[#2d2d2d]
+        dark:focus:border-[#3584e4]"
+    />
+
+    <div class="mt-4 rounded-xl border border-[#e5e5e5] bg-white p-4 dark:border-[#3d3d3d] dark:bg-[#2d2d2d]">
+      <p class="text-sm text-[#0a0a0a]/50 dark:text-[#fafafa]/50">LinguaFix исправит на:</p>
+      <p
+        id="demo-output"
+        class="mt-1 min-h-[1.75rem] font-mono text-lg text-[#1c71d8] dark:text-[#3584e4]"
+      >
+        <span class="text-[#0a0a0a]/30 dark:text-[#fafafa]/30">…</span>
+      </p>
+    </div>
+
+    <div class="mt-5 flex flex-wrap items-center gap-2">
+      <span class="text-sm text-[#0a0a0a]/60 dark:text-[#fafafa]/60">Попробуйте:</span>
+      <button type="button" class="badge demo-chip" data-fill="ghbdtn">ghbdtn</button>
+      <button type="button" class="badge demo-chip" data-fill="руддщ">руддщ</button>
+      <button type="button" class="badge demo-chip" data-fill="Rfr ltkf">Rfr ltkf</button>
+    </div>
+  </div>
+</section>
+
+<script>
+  const US = "qwertyuiop[]asdfghjkl;'zxcvbnm,./`QWERTYUIOP{}ASDFGHJKL:\"ZXCVBNM<>?~";
+  const RU = "йцукенгшщзхъфывапролджэячсмитьбю.ёЙЦУКЕНГШЩЗХЪФЫВАПРОЛДЖЭЯЧСМИТЬБЮ,Ё";
+  const toRu: Record<string, string> = {};
+  const toEn: Record<string, string> = {};
+  for (let i = 0; i < US.length; i++) {
+    toRu[US[i]] = RU[i];
+    toEn[RU[i]] = US[i];
+  }
+
+  // Convert each run of letters to the opposite layout, keeping other characters.
+  function convert(text: string): string {
+    return text.replace(/[A-Za-zА-Яа-яЁё]+/g, (word) => {
+      const map = /[А-Яа-яЁё]/.test(word) ? toEn : toRu;
+      return [...word].map((ch) => map[ch] ?? ch).join("");
+    });
+  }
+
+  const input = document.getElementById("demo-input") as HTMLInputElement | null;
+  const output = document.getElementById("demo-output");
+
+  function render() {
+    if (!input || !output) return;
+    const value = input.value;
+    if (!value.trim()) {
+      output.innerHTML =
+        '<span class="text-[#0a0a0a]/30 dark:text-[#fafafa]/30">…</span>';
+      return;
+    }
+    output.textContent = convert(value);
+  }
+
+  input?.addEventListener("input", render);
+
+  document.querySelectorAll<HTMLButtonElement>(".demo-chip").forEach((chip) => {
+    chip.addEventListener("click", () => {
+      if (!input) return;
+      input.value = (chip.dataset.fill ?? "") + " ";
+      input.focus();
+      render();
+    });
+  });
+</script>

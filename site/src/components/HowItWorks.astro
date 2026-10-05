@@ -1,0 +1,38 @@
+---
+const steps = [
+  {
+    n: "01",
+    title: "Слушает ввод",
+    text: "Читает нажатия через evdev. Не захватывает клавиатуру — система работает как обычно.",
+  },
+  {
+    n: "02",
+    title: "Замечает ошибку",
+    text: "Словарь top-30k + n-граммы + контекст. Видит бессмыслицу вроде «руддщ» и понимает: это «hello».",
+  },
+  {
+    n: "03",
+    title: "Исправляет за 30 мс",
+    text: "Удаляет и вводит правильный текст через uinput. Атомарно, без обрезания букв.",
+  },
+];
+---
+
+<section id="how" class="border-y border-[#e5e5e5] bg-white py-16 sm:py-20 dark:border-[#3d3d3d] dark:bg-[#242424]">
+  <div class="container-page">
+    <h2 class="text-center text-3xl font-bold tracking-tight sm:text-4xl">Как это работает</h2>
+    <p class="mx-auto mt-4 max-w-2xl text-center text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
+      Три шага от опечатки до исправленного текста.
+    </p>
+
+    <div class="mt-12 grid gap-6 md:grid-cols-3">
+      {steps.map((s) => (
+        <div class="card">
+          <span class="font-mono text-sm font-bold text-[#1c71d8] dark:text-[#3584e4]">{s.n}</span>
+          <h3 class="mt-3 text-xl font-semibold">{s.title}</h3>
+          <p class="mt-2 text-[#0a0a0a]/70 dark:text-[#fafafa]/70">{s.text}</p>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>

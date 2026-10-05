@@ -1,0 +1,72 @@
+---
+import { CONTRIBUTING, INSTALL_DOC, ISSUES, LICENSE, REPO, RELEASES } from "../consts";
+
+const columns = [
+  {
+    title: "Продукт",
+    links: [
+      { label: "Возможности", href: "#features" },
+      { label: "Установка", href: "#install" },
+      { label: "Документация", href: INSTALL_DOC },
+      { label: "Changelog", href: RELEASES },
+    ],
+  },
+  {
+    title: "Сообщество",
+    links: [
+      { label: "GitHub", href: REPO },
+      { label: "Issues", href: ISSUES },
+      { label: "Releases", href: RELEASES },
+      { label: "Контрибьюторам", href: CONTRIBUTING },
+    ],
+  },
+  {
+    title: "Ресурсы",
+    links: [
+      { label: "Лицензия", href: LICENSE },
+      { label: "Тестирование", href: `${REPO}/blob/main/docs/TESTING_v0.2.0.md` },
+    ],
+  },
+];
+
+const year = new Date().getFullYear();
+---
+
+<footer class="border-t border-[#e5e5e5] bg-white py-12 dark:border-[#3d3d3d] dark:bg-[#242424]">
+  <div class="container-page">
+    <div class="grid gap-10 lg:grid-cols-4">
+      <div>
+        <div class="flex items-center gap-2.5 font-bold">
+          <img src="/logo.svg" alt="" width="32" height="32" class="h-8 w-8 rounded-lg" />
+          <span class="text-lg">LinguaFix</span>
+        </div>
+        <p class="mt-4 text-sm text-[#0a0a0a]/60 dark:text-[#fafafa]/60">
+          MIT License · © {year} Pavel
+        </p>
+      </div>
+
+      {columns.map((col) => (
+        <div>
+          <h3 class="text-sm font-semibold">{col.title}</h3>
+          <ul class="mt-4 space-y-2">
+            {col.links.map((l) => (
+              <li>
+                <a
+                  href={l.href}
+                  rel="noopener"
+                  class="text-sm text-[#0a0a0a]/60 transition-colors hover:text-[#0a0a0a] dark:text-[#fafafa]/60 dark:hover:text-[#fafafa]"
+                  >{l.label}</a
+                >
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+
+    <div class="mt-10 flex flex-col gap-2 border-t border-[#e5e5e5] pt-6 text-sm text-[#0a0a0a]/50 sm:flex-row sm:items-center sm:justify-between dark:border-[#3d3d3d] dark:text-[#fafafa]/50">
+      <p>Made with ❤ for Linux</p>
+      <p>Зеркало сайта: <a href="https://linguafix.layero.app" class="underline" rel="noopener">linguafix.layero.app</a></p>
+    </div>
+  </div>
+</footer>

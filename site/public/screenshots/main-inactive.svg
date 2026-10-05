@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 900 600" role="img" aria-label="LinguaFix: Главное окно · выключено (плейсхолдер)">
+  <rect width="900" height="600" rx="18" fill="#1e1e1e"/>
+  <rect x="0.5" y="0.5" width="899" height="599" rx="18" fill="none" stroke="#3d3d3d"/>
+  <rect x="1" y="1" width="898" height="62" rx="17" fill="#2d2d2d"/>
+  <rect x="1" y="46" width="898" height="17" fill="#2d2d2d"/>
+  <text x="28" y="40" font-family="Inter, sans-serif" font-size="22" font-weight="700" fill="#fafafa">LinguaFix</text>
+  <text x="150" y="40" font-family="Inter, sans-serif" font-size="16" fill="#9a9a9a">Главное окно · выключено</text>
+  <circle cx="862" cy="32" r="7" fill="#4a4a4a"/>
+  <circle cx="838" cy="32" r="7" fill="#4a4a4a"/>
+  <rect x="270" y="130" width="360" height="200" rx="100" fill="#2d2d2d" stroke="#3d3d3d" stroke-width="3"/>
+  <circle cx="450" cy="230" r="70" fill="#4a4a4a"/>
+  <text x="450" y="244" text-anchor="middle" font-family="Inter, sans-serif" font-size="34" font-weight="700" fill="#fafafa">ВЫКЛ</text>
+  <text x="450" y="300" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" fill="#9a9a9a">Приостановлен</text>
+  <rect x="350" y="400" width="200" height="56" rx="28" fill="#3584e4"/>
+  <text x="450" y="434" text-anchor="middle" font-family="Inter, sans-serif" font-size="18" font-weight="600" fill="#ffffff">Включить</text>
+  <text x="450" y="520" text-anchor="middle" font-family="Inter, sans-serif" font-size="15" fill="#9a9a9a">Исправления временно отключены</text>
+  <text x="450" y="576" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" fill="#9a9a9a">Плейсхолдер — замените реальным скриншотом</text>
+</svg>

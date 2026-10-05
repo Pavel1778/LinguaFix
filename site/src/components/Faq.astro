@@ -1,0 +1,46 @@
+---
+const faq = [
+  {
+    q: "Заменяет ли LinguaFix раскладку в GNOME?",
+    a: "Нет, работает параллельно. Раскладку переключает через g3kb-switch, но вы можете продолжать пользоваться хоткеем GNOME.",
+  },
+  {
+    q: "Будет ли работать в терминале?",
+    a: "Да, но рекомендуется добавить терминал в исключения (Настройки → Исключения). Иначе команды могут «исправляться».",
+  },
+  {
+    q: "Как быть с полями паролей?",
+    a: "v0.2.0 использует AT-SPI — если поле помечено как password, fix не срабатывает. Дополнительно работают стоп-слова.",
+  },
+  {
+    q: "Собирает ли LinguaFix данные обо мне?",
+    a: "Нет. Всё работает локально. Единственный опциональный сетевой запрос — проверка обновлений, по умолчанию выключена.",
+  },
+  {
+    q: "Как временно отключить?",
+    a: "Большая кнопка в GUI или systemctl --user stop linguafix.service.",
+  },
+  {
+    q: "Поддерживается ли macOS / Windows?",
+    a: "Нет. Только Linux.",
+  },
+];
+---
+
+<section id="faq" class="container-page py-16 sm:py-20">
+  <h2 class="text-center text-3xl font-bold tracking-tight sm:text-4xl">Частые вопросы</h2>
+
+  <div class="mx-auto mt-10 max-w-3xl space-y-3">
+    {faq.map((item) => (
+      <details class="group rounded-xl border border-[#e5e5e5] bg-white dark:border-[#3d3d3d] dark:bg-[#2d2d2d]">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-4 px-5 py-4 font-medium">
+          <span>{item.q}</span>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 transition-transform group-open:rotate-180" aria-hidden="true">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </summary>
+        <p class="px-5 pb-4 text-[#0a0a0a]/70 dark:text-[#fafafa]/70">{item.a}</p>
+      </details>
+    ))}
+  </div>
+</section>

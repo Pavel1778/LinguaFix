@@ -1,0 +1,13 @@
+# Astro
+.astro/
+dist/
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Vercel
+.vercel
+
+# OS
+.DS_Store
