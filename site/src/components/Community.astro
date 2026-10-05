@@ -36,7 +36,7 @@ const links = [
 
     <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
       {badges.map((b) => (
-        <a href={b.href} rel="noopener">
+        <a href={b.href} target="_blank" rel="noopener noreferrer">
           <img src={b.src} alt={b.alt} height="20" loading="lazy" />
         </a>
       ))}
@@ -44,7 +44,7 @@ const links = [
 
     <div class="mx-auto mt-10 grid max-w-3xl gap-4 sm:grid-cols-3">
       {links.map((l) => (
-        <a href={l.href} rel="noopener" class="card flex items-center gap-3 hover:border-[#1c71d8] dark:hover:border-[#3584e4]">
+        <a href={l.href} target="_blank" rel="noopener noreferrer" class="card flex items-center gap-3 hover:border-[#1c71d8] dark:hover:border-[#3584e4]">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="text-[#1c71d8] dark:text-[#3584e4]" aria-hidden="true">
             <path d={l.icon} />
           </svg>

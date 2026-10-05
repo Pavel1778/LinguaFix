@@ -1,18 +1,39 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 900 600" role="img" aria-label="LinguaFix: Главное окно · выключено (плейсхолдер)">
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="600" viewBox="0 0 900 600" role="img" aria-label="LinguaFix: главное окно, исправления приостановлены">
+  <defs>
+    <linearGradient id="btnOff" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3a3a"/>
+      <stop offset="1" stop-color="#2a2a2a"/>
+    </linearGradient>
+    <linearGradient id="headerOff" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#323232"/>
+      <stop offset="1" stop-color="#282828"/>
+    </linearGradient>
+  </defs>
+
   <rect width="900" height="600" rx="18" fill="#1e1e1e"/>
   <rect x="0.5" y="0.5" width="899" height="599" rx="18" fill="none" stroke="#3d3d3d"/>
-  <rect x="1" y="1" width="898" height="62" rx="17" fill="#2d2d2d"/>
-  <rect x="1" y="46" width="898" height="17" fill="#2d2d2d"/>
+
+  <rect x="1" y="1" width="898" height="62" rx="17" fill="url(#headerOff)"/>
+  <rect x="1" y="46" width="898" height="17" fill="#282828"/>
   <text x="28" y="40" font-family="Inter, sans-serif" font-size="22" font-weight="700" fill="#fafafa">LinguaFix</text>
   <text x="150" y="40" font-family="Inter, sans-serif" font-size="16" fill="#9a9a9a">Главное окно · выключено</text>
   <circle cx="862" cy="32" r="7" fill="#4a4a4a"/>
   <circle cx="838" cy="32" r="7" fill="#4a4a4a"/>
-  <rect x="270" y="130" width="360" height="200" rx="100" fill="#2d2d2d" stroke="#3d3d3d" stroke-width="3"/>
-  <circle cx="450" cy="230" r="70" fill="#4a4a4a"/>
-  <text x="450" y="244" text-anchor="middle" font-family="Inter, sans-serif" font-size="34" font-weight="700" fill="#fafafa">ВЫКЛ</text>
-  <text x="450" y="300" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" fill="#9a9a9a">Приостановлен</text>
-  <rect x="350" y="400" width="200" height="56" rx="28" fill="#3584e4"/>
-  <text x="450" y="434" text-anchor="middle" font-family="Inter, sans-serif" font-size="18" font-weight="600" fill="#ffffff">Включить</text>
-  <text x="450" y="520" text-anchor="middle" font-family="Inter, sans-serif" font-size="15" fill="#9a9a9a">Исправления временно отключены</text>
-  <text x="450" y="576" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" fill="#9a9a9a">Плейсхолдер — замените реальным скриншотом</text>
+
+  <circle cx="450" cy="248" r="100" fill="url(#btnOff)"/>
+  <circle cx="450" cy="248" r="100" fill="none" stroke="#4a4a4a" stroke-width="2"/>
+  <path d="M429.35 218.51 A36 36 0 1 1 470.65 218.51" fill="none" stroke="#8a8a8a" stroke-width="9" stroke-linecap="round"/>
+  <line x1="450" y1="212" x2="450" y2="248" stroke="#8a8a8a" stroke-width="9" stroke-linecap="round"/>
+
+  <text x="450" y="382" text-anchor="middle" font-family="Inter, sans-serif" font-size="26" font-weight="700" fill="#fafafa">Выключено</text>
+  <text x="450" y="412" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" fill="#9a9a9a">Исправления приостановлены</text>
+
+  <rect x="150" y="448" width="600" height="62" rx="31" fill="#262626" stroke="#3d3d3d"/>
+  <rect x="355" y="453" width="196" height="52" rx="26" fill="#4a4a4a"/>
+  <text x="253" y="486" text-anchor="middle" font-family="Inter, sans-serif" font-size="17" font-weight="600" fill="#9a9a9a">Ручной</text>
+  <text x="450" y="486" text-anchor="middle" font-family="Inter, sans-serif" font-size="17" font-weight="600" fill="#fafafa">Авто</text>
+  <text x="647" y="486" text-anchor="middle" font-family="Inter, sans-serif" font-size="17" font-weight="600" fill="#9a9a9a">Гибрид</text>
+
+  <text x="450" y="546" text-anchor="middle" font-family="Inter, sans-serif" font-size="15" fill="#9a9a9a">Нажмите, чтобы возобновить исправления</text>
+  <text x="450" y="578" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" fill="#6f6f6f">Плейсхолдер — замените реальным скриншотом</text>
 </svg>
