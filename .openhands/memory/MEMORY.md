@@ -6,6 +6,9 @@
 - **`[tool.coverage.run] omit = ["src/linguafix/gui/*"]`** — CI installs no PyGObject, so the 23 GUI tests skip and the ~800 GUI lines would report 0 %, dropping CI total to ~66 % and failing the gate. Re-add only if CI starts installing GTK.
 - CI runs Python 3.10/3.11/3.12, all green.
 
+
+- **Tooling trap**: the `file_editor` tool corrupts non-ASCII on save for some files (double-encodes UTF-8: em-dash, box-drawing, Cyrillic). Restore with `git checkout HEAD -- <file>` and re-apply edits via a Python heredoc; detect by scanning `git ls-files` for runs of mojibake lead chars.
+
 ## Key invariants (easy to regress)
 - The daemon tracks the current word as **scancodes** (`daemon._scancodes`), not just characters. `TextInjector.replace_text(backspace_count: int, new: str, layout: str)`. The daemon passes `len(self._scancodes)`. A string-based backspace count reintroduces the `рhello` truncation bug (first char left behind).
 - **Boundary-Space fix (do not regress):** when a Space triggers the flush, the Space is *already on screen*, so the on-screen text is `buffer + " "`. The daemon deletes one extra char and types `converted + " "` (trailing space, not leading) and records undo as `buffer + boundary_char`. Only a Space is consumed/retyped (`injector.can_type(char, layout)` gates it): it is layout-invariant and typable by every backend. Enter/Tab are left in place after the word so a newline/tab is never dropped. The old `trigger_settle_ms` sleep remains but was never the real cause — the count/boundary mismatch was.
@@ -32,6 +35,8 @@
 - Tray (AppIndicator3) absent in dev; not a blocker.
 
 ## Repo / process
+
+- v0.2.0 GUI work at commit **783119b** on `feat/linguafix-v0.2.0` and `main` (both same, unpushed): metadata-only correction history (`history_size`, SIGUSR2 -> `history.json`), quiet hours, default exceptions list.
 - **v0.1.0 released** (2026-10-04). PR #1 (draft) merged into `main` with `--no-ff` (merge commit `b3c903f`); tag `v0.1.0` pushed → `release.yml` built the `.deb`/sdist, ran smoke+zero-config, published the GitHub Release with `SHA256SUMS.txt`. `main` is the live branch; `feat/linguafix-initial-implementation` is kept. Issues #2/#3/#4 closed (not deleted); #5 ("ищу тестировщиков") kept OPEN, re-milestoned to **v0.2.0** along with #4 (gswitch backend). Milestone `v0.1.0` and `v0.2.0` exist. Use `create_pr` only when asked.
 - **v0.2.0 released** (2026-10-04, tag `v0.2.0`, PR #9 merged). `release.yml` published the `.deb`/sdist + `SHA256SUMS.txt`. **`main` now holds the WHOLE project** (merge `66e7698`): v0.2.0 + both fix batches + the **landing page** (`site/`, Astro + Tailwind, self-hosted fonts) + new logo/screenshots, all previously only on `feat/linguafix-v0.2.0`. All feature/fix branches (`feat/linguafix-v0.2.0`, `feat/linguafix-initial-implementation`, `fix/daemon-zombie-pid-and-start-honesty`, `fix/daemon-boundary-space-and-mode-switch`) are now fully contained in `main`. Stale build artifacts (`site/.astro/`, `site/dist/`, `site/node_modules/`) are untracked/gitignored; never commit them. `site/package-lock.json` IS tracked.
 - **Stage work goes on `feat/linguafix-v0.2.0`, never `main`.** If a stage commit lands on `main` by mistake: `git checkout feat/linguafix-v0.2.0 && git merge --ff-only <sha> && git checkout main && git reset --hard <prev>`.
