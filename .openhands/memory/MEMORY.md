@@ -41,3 +41,15 @@
 - **v0.2.0 released** (2026-10-04, tag `v0.2.0`, PR #9 merged). `release.yml` published the `.deb`/sdist + `SHA256SUMS.txt`. **`main` now holds the WHOLE project** (merge `66e7698`): v0.2.0 + both fix batches + the **landing page** (`site/`, Astro + Tailwind, self-hosted fonts) + new logo/screenshots, all previously only on `feat/linguafix-v0.2.0`. All feature/fix branches (`feat/linguafix-v0.2.0`, `feat/linguafix-initial-implementation`, `fix/daemon-zombie-pid-and-start-honesty`, `fix/daemon-boundary-space-and-mode-switch`) are now fully contained in `main`. Stale build artifacts (`site/.astro/`, `site/dist/`, `site/node_modules/`) are untracked/gitignored; never commit them. `site/package-lock.json` IS tracked.
 - **Stage work goes on `feat/linguafix-v0.2.0`, never `main`.** If a stage commit lands on `main` by mistake: `git checkout feat/linguafix-v0.2.0 && git merge --ff-only <sha> && git checkout main && git reset --hard <prev>`.
 - **`scripts/*_test.sh` quoting trap**: the whole inner container script is the argument to `bash -c` wrapped in **single quotes**. Any single quote inside (even in a grep pattern) closes it and silently corrupts the script — the `ACTION!="remove"` udev check became `grep -q ACTION!=remove` and always failed. Use double quotes for grep patterns inside those blocks. Both smoke and zero-config now pass on `debian:12`.
+
+## Landing page / deploy
+- Site is Astro under `site/`. Deploy branch is `feat/linguafix-v0.2.0` (Layero);
+  `main` is kept fast-forwarded to it. Primary host https://linguafix.layero.app;
+  the Vercel preview must stay `noindex` (Base.astro keys it off `VERCEL_URL`).
+- Hero "window" illustration is inline `WindowMock.astro` (not an `<img>`), so its
+  SVG text inherits the self-hosted Inter font. The power glyph is an SVG arc:
+  keep sweep-flag `0` (`A36 36 0 1 0`) — flag `1` makes the arc bulge over the
+  top of the disc and the icon looks "съехало". Verify by rendering headless and
+  measuring the white-glyph centroid (offset must be ~0).
+- Daemon network I/O (the opt-in daily update check) must run off the evdev
+  event-loop thread — it has a 5 s timeout and would freeze typing.
