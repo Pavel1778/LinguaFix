@@ -27,5 +27,4 @@
   <text x="120" y="472" font-family="Inter, sans-serif" font-size="18" fill="#fafafa">Français (fr)</text>
   <rect x="446" y="446" width="72" height="36" rx="18" fill="#4a4a4a"/>
   <circle cx="466" cy="464" r="14" fill="#ffffff"/>
-  <text x="450" y="576" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" fill="#9a9a9a">Плейсхолдер — замените реальным скриншотом</text>
 </svg>

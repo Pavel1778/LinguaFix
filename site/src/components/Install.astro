@@ -18,10 +18,10 @@ bash install.sh`;
     </p>
 
     <div class="mx-auto mt-10 max-w-3xl">
-      <div class="flex gap-1 rounded-lg border border-[#e5e5e5] bg-[#fafafa] p-1 dark:border-[#3d3d3d] dark:bg-[#2d2d2d]" role="tablist">
-        <button type="button" class="install-tab flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors" data-tab="deb" role="tab" aria-selected="true">Debian / Ubuntu / Mint</button>
-        <button type="button" class="install-tab flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors" data-tab="src" role="tab" aria-selected="false">Из исходников</button>
-        <button type="button" class="install-tab flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors" data-tab="other" role="tab" aria-selected="false">Другие</button>
+      <div class="flex flex-col gap-1 rounded-lg border border-[#e5e5e5] bg-[#fafafa] p-1 sm:flex-row dark:border-[#3d3d3d] dark:bg-[#2d2d2d]" role="tablist">
+        <button type="button" class="install-tab w-full rounded-md px-3 py-2.5 text-sm font-medium transition-colors sm:flex-1 sm:py-2" data-tab="deb" role="tab" aria-selected="true">Debian / Ubuntu / Mint</button>
+        <button type="button" class="install-tab w-full rounded-md px-3 py-2.5 text-sm font-medium transition-colors sm:flex-1 sm:py-2" data-tab="src" role="tab" aria-selected="false">Из исходников</button>
+        <button type="button" class="install-tab w-full rounded-md px-3 py-2.5 text-sm font-medium transition-colors sm:flex-1 sm:py-2" data-tab="other" role="tab" aria-selected="false">Другие</button>
       </div>
 
       <div class="mt-6" data-panel="deb">

@@ -22,5 +22,4 @@
   <rect x="90" y="420" width="720" height="80" rx="14" fill="#2d2d2d"/>
   <text x="120" y="465" font-family="Inter, sans-serif" font-size="18" font-weight="600" fill="#fafafa">Хоткей fix</text>
   <text x="600" y="465" font-family="JetBrains Mono, monospace" font-size="18" fill="#3584e4">SHIFT+SHIFT</text>
-  <text x="450" y="576" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" fill="#9a9a9a">Плейсхолдер — замените реальным скриншотом</text>
 </svg>

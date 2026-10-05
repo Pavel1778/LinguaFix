@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Landing page mobile audit (8 items): removed the leaked developer note
+  «Плейсхолдер — замените реальным скриншотом» from all four mock-up SVGs;
+  replaced the external shields.io footer badges (broken behind a slow/blocked
+  CDN, and not proxied by the host) with self-hosted SVGs in
+  `site/public/badges/`; corrected the footer host wording (layero.app is the
+  primary site, Vercel is the mirror); code blocks now wrap instead of clipping
+  at 375 px; the install tabs stack vertically on mobile; localised the
+  «Privacy First» feature title to «Приватность»; softened the step-03 copy to
+  «Атомарно, одной транзакцией».
+
 - The opt-in update check no longer blocks the keyboard event loop: the daily
   network request runs on a worker thread, so a slow or offline network cannot
   freeze typing for the whole request timeout.
