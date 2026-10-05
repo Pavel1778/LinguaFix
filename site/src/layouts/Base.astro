@@ -1,8 +1,5 @@
 ---
-import "@fontsource/inter/400.css";
-import "@fontsource/inter/500.css";
-import "@fontsource/inter/700.css";
-import "@fontsource/jetbrains-mono/400.css";
+import { Font } from "astro:assets";
 import "../styles/global.css";
 
 interface Props {
@@ -46,6 +43,9 @@ const ogImage = new URL("/og-image.png", Astro.site);
 
     <meta name="theme-color" content="#3584e4" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+
+    <Font cssVariable="--font-inter" preload />
+    <Font cssVariable="--font-mono" preload />
   </head>
   <body>
     <slot />
