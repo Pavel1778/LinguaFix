@@ -27,7 +27,7 @@
 - GUI HomePage toggle: `_on_toggle_clicked` calls start/stop then `_reconcile` polls `is_active()` (12×150 ms) before `refresh()` — do not trust the start/stop return value for the UI state; systemd can return before `is-active` flips.
 
 ## Environment quirks
-- `evdev` installed but has no `__version__`. Real target: Debian 13 trixie + GNOME 48 + Wayland (outside declared 42–45 range, still works).
+- `evdev` installed but has no `__version__`. Real target: Debian 13 trixie + GNOME 48 + Wayland (declared support is now GNOME 45+, tested on 48).
 - No `/dev/uinput` access or real keyboard in the dev container; tests monkeypatch `evdev.UInput` with a recording fake and `TextInjector._uinput_available`.
 - Tray (AppIndicator3) absent in dev; not a blocker.
 

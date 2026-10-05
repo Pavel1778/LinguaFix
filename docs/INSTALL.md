@@ -1,6 +1,6 @@
 # Installation
 
-LinguaFix targets Debian 12+ / Ubuntu 22.04+ with GNOME 42–45 on either X11 or
+LinguaFix targets Debian 12+ / Ubuntu 22.04+ with GNOME 45+ on either X11 or
 Wayland. Python 3.10 or newer is required.
 
 ## Zero-config .deb path (recommended)
@@ -44,7 +44,7 @@ reports a permission problem after a relogin, see
 
 On GNOME Wayland the active layout is changed through `g3kb-switch`, which
 talks to a GNOME Shell extension and is tied to the shell's D-Bus API. That API
-has changed between GNOME releases, so the supported range is **GNOME 42–45**.
+has changed between GNOME releases, so the supported range is **GNOME 45+ (tested on 48)**.
 `install.sh` prints a warning when it detects a GNOME version outside that
 range. If `g3kb-switch` is missing or incompatible, LinguaFix still replaces the
 text but cannot change the active layout.

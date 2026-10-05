@@ -82,8 +82,8 @@ Caramba Switcher for Windows.
 ## 📋 Требования / Requirements
 
 - Debian 12+ или Ubuntu 22.04+
-- GNOME 42–45 (протестированный диапазон; `g3kb-switch` зависит от версии
-  GNOME Shell — вне этого диапазона переключение раскладки может не работать)
+- GNOME 45+ (тестировалось на 48; `g3kb-switch` зависит от версии
+  GNOME Shell — на старых версиях переключение раскладки может не работать)
 - X11 или Wayland
 - Python 3.10+
 - Пакеты: `python3-evdev`, `wtype` (Wayland) или `xdotool` (X11)
@@ -411,3 +411,11 @@ MIT — см. [LICENSE](LICENSE).
 - [python-evdev](https://python-evdev.readthedocs.io/) — чтение клавиатуры
   (`evdev`) и ввод текста (`evdev.UInput`).
 - Идея вдохновлена Caramba Switcher для Windows.
+
+## 🌐 Сайт
+
+- **Основной:** https://linguafix.layero.app
+- **Preview (Vercel):** https://lingua-fix-6933-ilusi3wr6-pavel1778s-projects.vercel.app
+
+Vercel-деплой помечен `noindex, nofollow` — он для разработки,
+поисковики его не индексируют.

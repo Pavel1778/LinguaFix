@@ -7,8 +7,8 @@ import sitemap from "@astrojs/sitemap";
 // so canonical URLs and the generated sitemap point at the real host.
 // Override at build time with the SITE_URL environment variable (for example
 // in Vercel: Settings → Environment Variables → SITE_URL). The default is the
-// domain that actually serves the site today; `linguafix.vercel.app` returned
-// 404, which made the canonical/og:image URLs point at a dead host.
+// domain that actually serves the site today; the old default host returned
+// 404, which made the canonical/og:image URLs point at a dead domain.
 const site = process.env.SITE_URL || "https://linguafix.layero.app";
 
 export default defineConfig({

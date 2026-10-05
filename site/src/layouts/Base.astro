@@ -15,6 +15,11 @@ const {
 
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const ogImage = new URL("/og-image.png", Astro.site);
+
+// Vercel sets VERCEL_URL for every deployment. The Vercel copy is a preview;
+// keep it out of search engines so the Layero mirror stays the canonical one
+// and the two hosts do not compete as duplicate content.
+const robots = import.meta.env.VERCEL_URL ? "noindex, nofollow" : "index, follow";
 ---
 
 <!doctype html>
@@ -24,6 +29,7 @@ const ogImage = new URL("/og-image.png", Astro.site);
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="canonical" href={canonical} />
+    <meta name="robots" content={robots} />
 
     <title>{title}</title>
     <meta name="description" content={description} />

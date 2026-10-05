@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://linguafix.vercel.app/sitemap-index.xml
+Sitemap: https://linguafix.layero.app/sitemap-index.xml

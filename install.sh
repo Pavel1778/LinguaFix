@@ -110,10 +110,10 @@ fi
 # ---------------------------------------------------------------------------
 GNOME_VERSION="$(gnome-shell --version 2>/dev/null | grep -oE '[0-9]+' | head -1 || true)"
 if [ -n "${GNOME_VERSION}" ]; then
-    if [ "${GNOME_VERSION}" -ge 42 ] && [ "${GNOME_VERSION}" -le 45 ]; then
-        log "Обнаружен GNOME ${GNOME_VERSION} (поддерживается: 42–45)."
+    if [ "${GNOME_VERSION}" -ge 45 ]; then
+        log "Обнаружен GNOME ${GNOME_VERSION} (поддерживается: 45+)."
     else
-        warn "GNOME ${GNOME_VERSION} вне протестированного диапазона (42–45)."
+        warn "GNOME ${GNOME_VERSION} старше 45 — вне тестированного диапазона."
         warn "Переключение раскладки через g3kb-switch может не работать."
     fi
 else
@@ -124,7 +124,7 @@ if have g3kb-switch; then
     log "g3kb-switch уже установлен."
 else
     warn "g3kb-switch не найден — переключение раскладки в GNOME Wayland работать не будет."
-    warn "g3kb-switch требует расширение GNOME Shell и поддерживает GNOME 42–45."
+    warn "g3kb-switch требует расширение GNOME Shell и поддерживает GNOME 45+."
     warn "Установите его отдельно (см. https://github.com/dvorka/g3kb-switch) или через:"
     warn "  sudo apt install g3kb-switch    # если пакет доступен в вашем репозитории"
 fi
