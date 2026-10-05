@@ -1,0 +1,56 @@
+---
+import { CI_BADGE, CONTRIBUTING, ISSUES, LICENSE, REPO } from "../consts";
+
+const badges = [
+  { src: CI_BADGE, alt: "CI status", href: `${REPO}/actions/workflows/ci.yml` },
+  {
+    src: "https://img.shields.io/badge/License-MIT-yellow.svg",
+    alt: "License: MIT",
+    href: LICENSE,
+  },
+  {
+    src: "https://img.shields.io/badge/python-3.10%2B-blue.svg",
+    alt: "Python 3.10+",
+    href: "https://www.python.org/downloads/",
+  },
+  {
+    src: "https://img.shields.io/badge/platform-Debian%20%7C%20Ubuntu-A80030.svg",
+    alt: "Platform: Debian | Ubuntu",
+    href: REPO,
+  },
+];
+
+const links = [
+  { label: "Исходный код", href: REPO, icon: "M8 18l-5-6 5-6M16 6l5 6-5 6" },
+  { label: "Сообщить о проблеме", href: ISSUES, icon: "M12 9v4M12 17h.01M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6A2 2 0 0 0 22 18L13.7 3.9a2 2 0 0 0-3.4 0Z" },
+  { label: "Гайд для контрибьюторов", href: CONTRIBUTING, icon: "M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" },
+];
+---
+
+<section id="community" class="border-y border-[#e5e5e5] bg-white py-16 sm:py-20 dark:border-[#3d3d3d] dark:bg-[#242424]">
+  <div class="container-page">
+    <h2 class="text-center text-3xl font-bold tracking-tight sm:text-4xl">Сообщество и открытый код</h2>
+    <p class="mx-auto mt-4 max-w-2xl text-center text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
+      MIT License. Весь код открыт, issues и pull requests приветствуются.
+    </p>
+
+    <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+      {badges.map((b) => (
+        <a href={b.href} rel="noopener">
+          <img src={b.src} alt={b.alt} height="20" loading="lazy" />
+        </a>
+      ))}
+    </div>
+
+    <div class="mx-auto mt-10 grid max-w-3xl gap-4 sm:grid-cols-3">
+      {links.map((l) => (
+        <a href={l.href} rel="noopener" class="card flex items-center gap-3 hover:border-[#1c71d8] dark:hover:border-[#3584e4]">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="text-[#1c71d8] dark:text-[#3584e4]" aria-hidden="true">
+            <path d={l.icon} />
+          </svg>
+          <span class="text-sm font-medium">{l.label}</span>
+        </a>
+      ))}
+    </div>
+  </div>
+</section>

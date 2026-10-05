@@ -1,0 +1,58 @@
+---
+type Feature = { title: string; text: string; icon: string };
+
+// Lucide-style 24×24 outline paths, kept inline so the page ships no icon JS.
+const features: Feature[] = [
+  {
+    title: "Wayland и X11",
+    text: "Работает на обоих протоколах. GNOME, KDE, Sway, Hyprland.",
+    icon: "M3 5h18v12H3zM8 21h8M12 17v4",
+  },
+  {
+    title: "Privacy First",
+    text: "Всё локально. Ноль сетевых запросов. Текст не пишется в логи.",
+    icon: "M5 11V8a7 7 0 0 1 14 0v3M6 11h12v9H6zM12 15v2",
+  },
+  {
+    title: "Zero-Config .deb",
+    text: "apt install — и работает. Автозагрузка, права, systemd.",
+    icon: "M12 2c3 4 5 7 5 10a5 5 0 0 1-10 0c0-3 2-6 5-10ZM9 15l-2 5M15 15l2 5",
+  },
+  {
+    title: "Умный контекст",
+    text: "Смотрит на соседние слова. Не трогает URL, email, код.",
+    icon: "M9 3a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 1V3a3 3 0 0 0-3 0ZM15 3a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-3 1",
+  },
+  {
+    title: "Три режима",
+    text: "Auto (мгновенно) / Manual (по хоткею) / Hybrid (+undo).",
+    icon: "M13 2 4 14h6l-1 8 9-12h-6z",
+  },
+  {
+    title: "5 языков",
+    text: "en, ru, uk, de, fr.",
+    icon: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM3 12h18M12 3c2.5 2.5 4 5.5 4 9s-1.5 6.5-4 9c-2.5-2.5-4-5.5-4-9s1.5-6.5 4-9Z",
+  },
+];
+---
+
+<section id="features" class="container-page py-16 sm:py-20">
+  <h2 class="text-center text-3xl font-bold tracking-tight sm:text-4xl">Возможности</h2>
+  <p class="mx-auto mt-4 max-w-2xl text-center text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
+    Всё, что нужно, чтобы забыть о переключении раскладки.
+  </p>
+
+  <div class="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+    {features.map((f) => (
+      <div class="card">
+        <span class="inline-flex h-11 w-11 items-center justify-center rounded-lg bg-[#1c71d8]/10 text-[#1c71d8] dark:bg-[#3584e4]/15 dark:text-[#3584e4]">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d={f.icon} />
+          </svg>
+        </span>
+        <h3 class="mt-4 text-lg font-semibold">{f.title}</h3>
+        <p class="mt-2 text-[#0a0a0a]/70 dark:text-[#fafafa]/70">{f.text}</p>
+      </div>
+    ))}
+  </div>
+</section>

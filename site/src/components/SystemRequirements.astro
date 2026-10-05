@@ -1,0 +1,38 @@
+---
+const rows = [
+  { k: "ОС", v: "Debian 13+ (trixie) / Ubuntu 24.04+" },
+  { k: "Окружение", v: "GNOME 45+ (Wayland или X11)" },
+  { k: "Архитектура", v: "x86_64 (amd64)" },
+  {
+    k: "Зависимости",
+    v: "python3-evdev, python3-uinput, g3kb-switch, wtype, xdotool — устанавливаются автоматически с .deb",
+  },
+  { k: "RAM", v: "~30 MB" },
+  { k: "Диск", v: "~5 MB" },
+];
+---
+
+<section id="requirements" class="container-page py-16 sm:py-20">
+  <h2 class="text-center text-3xl font-bold tracking-tight sm:text-4xl">Системные требования</h2>
+  <p class="mx-auto mt-4 max-w-2xl text-center text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
+    Лёгкий демон — почти не заметен на фоне остальных процессов.
+  </p>
+
+  <dl class="mx-auto mt-10 max-w-3xl overflow-hidden rounded-xl border border-[#e5e5e5] dark:border-[#3d3d3d]">
+    {rows.map((r, i) => (
+      <div
+        class:list={[
+          "grid gap-1 px-5 py-4 sm:grid-cols-3 sm:gap-4",
+          i % 2 === 0 ? "bg-white dark:bg-[#2d2d2d]" : "bg-[#fafafa] dark:bg-[#242424]",
+        ]}
+      >
+        <dt class="font-medium">{r.k}</dt>
+        <dd class="text-[#0a0a0a]/70 sm:col-span-2 dark:text-[#fafafa]/70">{r.v}</dd>
+      </div>
+    ))}
+  </dl>
+
+  <p class="mx-auto mt-6 max-w-3xl text-center text-sm text-[#0a0a0a]/60 dark:text-[#fafafa]/60">
+    KDE, Sway, Hyprland — должно работать, но не тестировалось.
+  </p>
+</section>
