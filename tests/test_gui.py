@@ -697,7 +697,8 @@ def test_window_menu_actions(gui_state: Any) -> None:
     window._on_saved("ok")
     window._on_show_advanced(None, None)
     window._on_show_advanced(None, None)
-    assert len(window.stack.get_pages()) == 4
+    names = {page.get_name() for page in window.stack.get_pages()}
+    assert names == {"home", "settings", "dictionary", "history", "advanced"}
 
 
 def test_about_window_builds() -> None:
