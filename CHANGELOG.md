@@ -13,8 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   «Плейсхолдер — замените реальным скриншотом» from all four mock-up SVGs;
   replaced the external shields.io footer badges (broken behind a slow/blocked
   CDN, and not proxied by the host) with self-hosted SVGs in
-  `site/public/badges/`; corrected the footer host wording (layero.app is the
-  primary site, Vercel is the mirror); code blocks now wrap instead of clipping
+  `site/public/badges/`; the footer now names the single canonical host
+  (linguafix.layero.app) instead of a mirror link that hit a login wall; code
+  blocks now wrap instead of clipping
   at 375 px; the install tabs stack vertically on mobile; localised the
   «Privacy First» feature title to «Приватность»; softened the step-03 copy to
   «Атомарно, одной транзакцией».
