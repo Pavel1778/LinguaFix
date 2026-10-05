@@ -85,7 +85,13 @@ class FakeInjector:
     def __init__(self) -> None:
         self.replacements: list[tuple[int, str, str]] = []
 
-    def replace_text(self, backspace_count: int, new: str, layout: str) -> bool:
+    def can_type(self, char: str, layout: str) -> bool:
+        # Mirror the uinput backend: only Space is layout-invariant and typed.
+        return char == " "
+
+    def replace_text(
+        self, backspace_count: int, new: str, layout: str, boundary_char: str = ""
+    ) -> bool:
         self.replacements.append((backspace_count, new, layout))
         return True
 
@@ -122,8 +128,9 @@ def test_backspace_count_equals_number_of_typed_keys() -> None:
 
     injector = daemon.injector
     assert isinstance(injector, FakeInjector)
-    # Exactly five Backspaces for the five physical keys, and "hello" typed.
-    assert injector.replacements == [(5, "hello", "us")]
+    # Five Backspaces for the five physical keys plus one for the triggering
+    # Space, and the Space is retyped before "hello" so nothing is stranded.
+    assert injector.replacements == [(6, "hello ", "us")]
     assert daemon.buffer == ""
 
 
@@ -141,7 +148,7 @@ def test_extra_keypress_is_included_in_the_count() -> None:
     injector = daemon.injector
     assert isinstance(injector, FakeInjector)
     count, _new, _layout = injector.replacements[0]
-    assert count == 6
+    assert count == 7
 
 
 def test_backspace_after_typing_reduces_the_count() -> None:
@@ -153,7 +160,8 @@ def test_backspace_after_typing_reduces_the_count() -> None:
 
     injector = daemon.injector
     assert isinstance(injector, FakeInjector)
-    assert injector.replacements == [(5, "hello", "us")]
+    # Five word keys plus the triggering Space, which is retyped before "hello".
+    assert injector.replacements == [(6, "hello ", "us")]
 
 
 # --- the uinput backend emits the right events -------------------------------
@@ -275,15 +283,18 @@ def test_daemon_with_real_uinput_injector_emits_exact_batch(
 
     assert len(RecordingUInput.instances) == 2
     backspace_device, text_device = RecordingUInput.instances
-    assert backspace_device.presses == [(EV_KEY, BACKSPACE, 1)] * 5
+    # Six Backspaces: the five word keys and the triggering Space.
+    assert backspace_device.presses == [(EV_KEY, BACKSPACE, 1)] * 6
     assert backspace_device.synced == 1
     assert text_device.synced == 1
+    # The Space is retyped last, after "hello".
     assert [code for _etype, code, _value in text_device.presses] == [
         int(evdev.ecodes.KEY_H),
         int(evdev.ecodes.KEY_E),
         int(evdev.ecodes.KEY_L),
         int(evdev.ecodes.KEY_L),
         int(evdev.ecodes.KEY_O),
+        int(evdev.ecodes.KEY_SPACE),
     ]
     assert daemon.buffer == ""
 

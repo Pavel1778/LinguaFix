@@ -421,6 +421,31 @@ def test_mode_show_and_set(isolated_env: Path, capsys: pytest.CaptureFixture[str
     assert capsys.readouterr().out.strip() == "manual"
 
 
+def test_mode_signals_running_daemon(isolated_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Changing the mode must reach a running daemon, not only the file."""
+    from linguafix import daemon_control
+
+    reloads: list[bool] = []
+    monkeypatch.setattr(daemon_control, "is_running", lambda: True)
+    monkeypatch.setattr(daemon_control, "reload_config", lambda: reloads.append(True) or True)
+
+    assert cli.main(["mode", "manual"]) == 0
+    assert reloads == [True]
+
+
+def test_mode_does_not_signal_when_daemon_stopped(
+    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from linguafix import daemon_control
+
+    reloads: list[bool] = []
+    monkeypatch.setattr(daemon_control, "is_running", lambda: False)
+    monkeypatch.setattr(daemon_control, "reload_config", lambda: reloads.append(True) or True)
+
+    assert cli.main(["mode", "manual"]) == 0
+    assert reloads == []
+
+
 def test_undo_requires_running_daemon(
     isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

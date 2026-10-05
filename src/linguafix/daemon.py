@@ -532,21 +532,21 @@ class LinguaFixDaemon:
 
         if name == "KEY_SPACE":
             if self.config.on_space:
-                self._process_buffer(boundary=True)
+                self._process_buffer(boundary=True, boundary_char=" ")
             else:
                 self._reset_buffer()
             return
 
         if name in _ENTER_KEYS:
             if self.config.on_enter:
-                self._process_buffer(boundary=True)
+                self._process_buffer(boundary=True, boundary_char="\n")
             else:
                 self._reset_buffer()
             return
 
         if name in _TAB_KEYS:
             if self.config.on_tab:
-                self._process_buffer(boundary=True)
+                self._process_buffer(boundary=True, boundary_char="\t")
             else:
                 self._reset_buffer()
             return
@@ -922,7 +922,9 @@ class LinguaFixDaemon:
             self._scancodes = []
             self._suspended_buffer = None
 
-    def _process_buffer(self, *, force: bool = False, boundary: bool = False) -> None:
+    def _process_buffer(
+        self, *, force: bool = False, boundary: bool = False, boundary_char: str = ""
+    ) -> None:
         """Analyse the buffer, never letting an error escape.
 
         A failure in the detector, converter, switcher or injector must not kill
@@ -935,12 +937,17 @@ class LinguaFixDaemon:
                 key (Space/Enter/Tab). The daemon then waits
                 ``trigger_settle_ms`` before deleting, so the boundary key is
                 processed by the application first.
+            boundary_char: The character the boundary key produced (``" "``,
+                ``"\\n"`` or ``"\\t"``). It is already on screen right after the
+                word; when the corrected text stays in the same layout the
+                replacement consumes and retypes it, so it is not stranded in
+                front of the corrected word (the ``рhello`` symptom).
         """
         # Capture the text so a traceback can be scrubbed of it before logging.
         with self._lock:
             sensitive = self.buffer.strip()
         try:
-            self._process_buffer_inner(force=force, boundary=boundary)
+            self._process_buffer_inner(force=force, boundary=boundary, boundary_char=boundary_char)
         except Exception as exc:  # the daemon must survive any failure
             self._log_sanitized("Failed to process the buffer", exc, sensitive)
 
@@ -959,7 +966,9 @@ class LinguaFixDaemon:
                 formatted = formatted.replace(needle, "<redacted>")
         logger.error("%s\n%s", message, formatted.rstrip())
 
-    def _process_buffer_inner(self, *, force: bool = False, boundary: bool = False) -> None:
+    def _process_buffer_inner(
+        self, *, force: bool = False, boundary: bool = False, boundary_char: str = ""
+    ) -> None:
         """Analyse the current word and apply a correction when appropriate."""
         # Snapshot and clear the buffer under the lock, then release it before
         # the (slow) switch/inject so typing during a fix is never lost. Holding
@@ -1082,16 +1091,34 @@ class LinguaFixDaemon:
 
         self.switcher.switch_to(target)
         time.sleep(0.05)
+
+        # The word-boundary key (Space/Enter/Tab) that triggered the flush is
+        # already on screen right after the word, so the on-screen text is
+        # ``buffer + boundary_char``. A Space is the only boundary that is both
+        # layout-invariant and reliably typable by every backend, so only a
+        # Space is consumed and retyped: the replacement deletes one extra
+        # character and types the corrected word followed by the Space again.
+        # That is what stops the Space from being stranded in front of the word
+        # (``hello`` -> ``рhello``). Enter/Tab keep their place after the
+        # corrected text, because deleting them without being able to retype
+        # them would silently drop the user's newline or tab.
+        replacement = converted
+        backspace_total = backspace_count
+        if boundary_char == " " and self.injector.can_type(boundary_char, target):
+            replacement = converted + boundary_char
+            backspace_total = backspace_count + 1
+
         logger.debug(
-            "Sending %d backspaces, then injecting %d chars into %s",
-            backspace_count,
-            len(converted),
+            "Sending %d backspaces, then injecting %d chars into %s (boundary=%r)",
+            backspace_total,
+            len(replacement),
             target,
+            boundary_char if backspace_total != backspace_count else "",
         )
-        if self.injector.replace_text(backspace_count, converted, target):
-            # The fixed text has the same length as the original, so recording
-            # the original lets a later undo restore the screen exactly.
-            self._record_undo(buffer, current, backspace_count)
+        if self.injector.replace_text(backspace_total, replacement, target):
+            # Record the *pre-fix* on-screen text so a later undo restores it
+            # exactly, including the boundary that was consumed and retyped.
+            self._record_undo(buffer + boundary_char, current, backspace_total)
             logger.debug("Flush complete, buffer cleared")
             if self.config.notify_on_fix:
                 self._notify()

@@ -66,10 +66,17 @@ class GuiState:
         save_config(self.config)
 
     def set_mode(self, mode: str) -> None:
-        """Set the working mode and persist it."""
+        """Set the working mode, persist it and apply it to a running daemon.
+
+        A running daemon keeps its own copy of the configuration, so writing the
+        file alone would only take effect after a restart. When a daemon is up
+        we also ask it to reload, so the new mode is live immediately.
+        """
         self.config.mode = mode
         self.config.validate()
         self.save()
+        if daemon_is_running():
+            daemon_reload_config()
 
     def set_languages(self, languages: list[str]) -> None:
         """Replace the enabled languages and persist them."""

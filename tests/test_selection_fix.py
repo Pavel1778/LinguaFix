@@ -46,7 +46,13 @@ class FakeInjector:
         self.combos.append(list(key_names))
         return self.combo_result
 
-    def replace_text(self, backspace_count: int, new: str, layout: str) -> bool:
+    def can_type(self, char: str, layout: str) -> bool:
+        # Mirror the uinput backend: only Space is layout-invariant and typed.
+        return char == " "
+
+    def replace_text(
+        self, backspace_count: int, new: str, layout: str, boundary_char: str = ""
+    ) -> bool:
         return True
 
     def describe(self) -> str:

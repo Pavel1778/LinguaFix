@@ -49,7 +49,13 @@ class FakeSwitcher:
 class FakeInjector:
     replacements: list[tuple[int, str, str]] = field(default_factory=list)
 
-    def replace_text(self, backspace_count: int, new: str, layout: str) -> bool:
+    def can_type(self, char: str, layout: str) -> bool:
+        # Mirror the uinput backend: only Space is layout-invariant and typed.
+        return char == " "
+
+    def replace_text(
+        self, backspace_count: int, new: str, layout: str, boundary_char: str = ""
+    ) -> bool:
         self.replacements.append((backspace_count, new, layout))
         return True
 
@@ -98,7 +104,7 @@ def test_typo_is_corrected_when_enabled() -> None:
     _press(daemon, "langauge")
     _press(daemon, " ")
     injector = _injector(daemon)
-    assert injector.replacements == [(8, "language", "us")]
+    assert injector.replacements == [(9, "language ", "us")]
 
 
 def test_typo_is_left_alone_when_disabled() -> None:
@@ -122,7 +128,7 @@ def test_layout_fix_takes_precedence_over_t9() -> None:
     _press(daemon, "ghbdtn")
     _press(daemon, " ")
     injector = _injector(daemon)
-    assert injector.replacements == [(6, "привет", "ru")]
+    assert injector.replacements == [(7, "привет ", "ru")]
 
 
 def test_user_word_is_not_typo_corrected() -> None:

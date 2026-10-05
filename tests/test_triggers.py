@@ -51,7 +51,13 @@ class FakeInjector:
     replacements: list[tuple[int, str, str]] = field(default_factory=list)
     backend: str = "fake"
 
-    def replace_text(self, backspace_count: int, new: str, layout: str) -> bool:
+    def can_type(self, char: str, layout: str) -> bool:
+        # Mirror the uinput backend: only Space is layout-invariant and typed.
+        return char == " "
+
+    def replace_text(
+        self, backspace_count: int, new: str, layout: str, boundary_char: str = ""
+    ) -> bool:
         self.replacements.append((backspace_count, new, layout))
         return True
 
@@ -120,7 +126,7 @@ def test_space_triggers_fix_and_clears_buffer() -> None:
     assert daemon.buffer == "ghbdtn"
     press(daemon, " ")
     # The fix ran inside the same Space keystroke, without any idle wait.
-    assert _injector(daemon).replacements == [(6, "привет", "ru")]
+    assert _injector(daemon).replacements == [(7, "привет ", "ru")]
     assert daemon.buffer == ""
 
 
@@ -160,9 +166,9 @@ def test_three_words_are_three_independent_fixes() -> None:
 
     injector = _injector(daemon)
     assert [new for _count, new, _layout in injector.replacements] == [
-        "привет",
-        "дом",
-        "как",
+        "привет ",
+        "дом ",
+        "как ",
     ]
     assert daemon.buffer == ""
 

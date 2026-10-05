@@ -83,7 +83,13 @@ class FakeInjector:
     def __init__(self) -> None:
         self.replacements: list[tuple[int, str, str]] = []
 
-    def replace_text(self, backspace_count: int, new: str, layout: str) -> bool:
+    def can_type(self, char: str, layout: str) -> bool:
+        # Mirror the uinput backend: only Space is layout-invariant and typed.
+        return char == " "
+
+    def replace_text(
+        self, backspace_count: int, new: str, layout: str, boundary_char: str = ""
+    ) -> bool:
         self.replacements.append((backspace_count, new, layout))
         return True
 
@@ -124,10 +130,15 @@ def _injector(daemon: LinguaFixDaemon) -> FakeInjector:
 # --- the exact batch at a boundary ------------------------------------------
 
 
-def test_space_boundary_emits_five_backspaces_and_hello(
+def test_space_boundary_emits_six_backspaces_and_hello(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``руддщ`` + Space deletes all five keys and types ``hello``."""
+    """``руддщ`` + Space deletes the word *and* the Space, then retypes ``hello``.
+
+    Deleting only the five word keys would leave the on-screen Space in front of
+    the correction (``рhello``); the replacement consumes that Space and types it
+    back, so the result is exactly ``hello`` followed by one Space.
+    """
     RecordingUInput.instances.clear()
     monkeypatch.setattr(TextInjector, "_uinput_available", lambda self: True)
     monkeypatch.setattr(evdev, "UInput", RecordingUInput)
@@ -144,16 +155,19 @@ def test_space_boundary_emits_five_backspaces_and_hello(
 
     assert len(RecordingUInput.instances) == 2
     backspace_device, text_device = RecordingUInput.instances
-    # Exactly five Backspaces: the first character must not survive.
-    assert backspace_device.presses == [(EV_KEY, BACKSPACE, 1)] * 5
+    # Six Backspaces: the five word keys and the triggering Space. The first
+    # character must not survive.
+    assert backspace_device.presses == [(EV_KEY, BACKSPACE, 1)] * 6
     assert backspace_device.synced == 1
     assert text_device.synced == 1
+    # ``hello`` retyped, followed by the Space that was consumed.
     assert [code for _etype, code, _value in text_device.presses] == [
         int(evdev.ecodes.KEY_H),
         int(evdev.ecodes.KEY_E),
         int(evdev.ecodes.KEY_L),
         int(evdev.ecodes.KEY_L),
         int(evdev.ecodes.KEY_O),
+        int(evdev.ecodes.KEY_SPACE),
     ]
     assert daemon.buffer == ""
 
@@ -168,7 +182,7 @@ def test_trigger_settle_waits_before_deleting(monkeypatch: pytest.MonkeyPatch) -
     _press(daemon, ["KEY_SPACE"])
 
     assert 0.077 in sleeps
-    assert _injector(daemon).replacements == [(5, "hello", "us")]
+    assert _injector(daemon).replacements == [(6, "hello ", "us")]
 
 
 def test_idle_flush_does_not_wait_trigger_settle(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -194,7 +208,7 @@ def test_zero_trigger_settle_does_not_sleep(monkeypatch: pytest.MonkeyPatch) -> 
     _press(daemon, ["KEY_SPACE"])
 
     assert 0.077 not in sleeps
-    assert _injector(daemon).replacements == [(5, "hello", "us")]
+    assert _injector(daemon).replacements == [(6, "hello ", "us")]
 
 
 # --- the boundary key is not buffered ---------------------------------------
@@ -219,6 +233,8 @@ def test_enter_boundary_flushes_too(monkeypatch: pytest.MonkeyPatch) -> None:
     _press(daemon, ["KEY_ENTER"])
 
     assert 0.077 in sleeps
+    # Enter cannot be produced by the uinput backend, so it keeps its place and
+    # is not retyped by the replacement.
     assert _injector(daemon).replacements == [(5, "hello", "us")]
 
 
@@ -235,4 +251,4 @@ def test_consecutive_words_flush_independently() -> None:
         _press(daemon, ["KEY_SPACE"])
         assert daemon.buffer == ""
 
-    assert injector.replacements == [(5, "hello", "us")] * 3
+    assert injector.replacements == [(6, "hello ", "us")] * 3

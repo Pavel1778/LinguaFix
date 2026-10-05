@@ -51,7 +51,13 @@ class FakeInjector:
     replacements: list[tuple[int, str, str]] = field(default_factory=list)
     backend: str = "fake"
 
-    def replace_text(self, backspace_count: int, new: str, layout: str) -> bool:
+    def can_type(self, char: str, layout: str) -> bool:
+        # Mirror the uinput backend: only Space is layout-invariant and typed.
+        return char == " "
+
+    def replace_text(
+        self, backspace_count: int, new: str, layout: str, boundary_char: str = ""
+    ) -> bool:
         self.replacements.append((backspace_count, new, layout))
         return True
 
@@ -115,7 +121,7 @@ def test_auto_mode_fixes_automatically() -> None:
     daemon = make_daemon(mode="auto")
     press(daemon, "ghbdtn")
     tap(daemon, "KEY_SPACE")
-    assert _injector(daemon).replacements == [(6, "привет", "ru")]
+    assert _injector(daemon).replacements == [(7, "привет ", "ru")]
 
 
 def test_manual_mode_skips_automatic_fix() -> None:
@@ -131,7 +137,7 @@ def test_manual_mode_forces_fix_for_listed_app(monkeypatch: pytest.MonkeyPatch) 
     daemon = make_daemon(mode="manual", exceptions_force_in_manual=["kitty"])
     press(daemon, "ghbdtn")
     tap(daemon, "KEY_SPACE")
-    assert _injector(daemon).replacements == [(6, "привет", "ru")]
+    assert _injector(daemon).replacements == [(7, "привет ", "ru")]
 
 
 def test_manual_mode_ignores_unlisted_app(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -146,7 +152,7 @@ def test_hybrid_mode_fixes_automatically() -> None:
     daemon = make_daemon(mode="hybrid")
     press(daemon, "ghbdtn")
     tap(daemon, "KEY_SPACE")
-    assert _injector(daemon).replacements == [(6, "привет", "ru")]
+    assert _injector(daemon).replacements == [(7, "привет ", "ru")]
 
 
 def test_hotkey_forces_fix_in_manual_mode() -> None:
@@ -203,11 +209,11 @@ def test_undo_restores_the_original_text() -> None:
     press(daemon, "ghbdtn")
     tap(daemon, "KEY_SPACE")
     injector = _injector(daemon)
-    assert injector.replacements == [(6, "привет", "ru")]
+    assert injector.replacements == [(7, "привет ", "ru")]
 
     daemon._undo_last_fix()
     # Six characters replaced again, this time back to the original.
-    assert injector.replacements[1] == (6, "ghbdtn", "us")
+    assert injector.replacements[1] == (7, "ghbdtn ", "us")
 
 
 def test_undo_hotkey_triggers_restore() -> None:
@@ -217,7 +223,7 @@ def test_undo_hotkey_triggers_restore() -> None:
     daemon._handle_event(make_event("KEY_LEFTCTRL", 1))
     tap(daemon, "KEY_Z")
     injector = _injector(daemon)
-    assert injector.replacements[-1] == (6, "ghbdtn", "us")
+    assert injector.replacements[-1] == (7, "ghbdtn ", "us")
 
 
 def test_undo_without_history_is_noop() -> None:
