@@ -22,7 +22,7 @@
 
   <circle cx="450" cy="248" r="100" fill="url(#btnOff)"/>
   <circle cx="450" cy="248" r="100" fill="none" stroke="#4a4a4a" stroke-width="2"/>
-  <path d="M429.35 218.51 A36 36 0 1 1 470.65 218.51" fill="none" stroke="#8a8a8a" stroke-width="9" stroke-linecap="round"/>
+  <path d="M429.35 218.51 A36 36 0 1 0 470.65 218.51" fill="none" stroke="#8a8a8a" stroke-width="9" stroke-linecap="round"/>
   <line x1="450" y1="212" x2="450" y2="248" stroke="#8a8a8a" stroke-width="9" stroke-linecap="round"/>
 
   <text x="450" y="382" text-anchor="middle" font-family="Inter, sans-serif" font-size="26" font-weight="700" fill="#fafafa">Выключено</text>

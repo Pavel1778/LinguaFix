@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- The opt-in update check no longer blocks the keyboard event loop: the daily
+  network request runs on a worker thread, so a slow or offline network cannot
+  freeze typing for the whole request timeout.
+- Landing page: the power glyph in the hero and the placeholder window is centred
+  again. The arc's sweep flag was inverted, which pushed the icon to the top of
+  the button instead of forming a ring around its centre.
+- Landing page demo leaves URL, e-mail, path and version tokens untouched,
+  matching the daemon's structural-separator rule.
+- Re-synced `black` formatting of `tests/test_data_sync.py` with the current
+  release of the formatter.
+
 ## [0.2.0] - 2026-10-04
 
 ### Added

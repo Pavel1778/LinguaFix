@@ -316,8 +316,11 @@ class LinguaFixDaemon:
         )
         # Stage 13: the loop checks for updates at most once a day. The deadline
         # is kept in memory so the poll loop never touches the disk or network
-        # until it is actually due.
+        # until it is actually due. The in-flight flag stops a second check from
+        # starting while the worker thread is still on the network.
         self._next_update_check: float = 0.0
+        self._update_check_in_flight: bool = False
+        self._update_thread: threading.Thread | None = None
 
         # The characters currently on screen for the word being typed. Derived
         # from ``_scancodes`` and kept in step with it (one char per printable
@@ -1503,18 +1506,38 @@ class LinguaFixDaemon:
             self._maybe_check_update()
 
     def _maybe_check_update(self) -> None:
-        """Run the opt-in update check at most once a day (Stage 13)."""
+        """Kick off the opt-in update check at most once a day (Stage 13).
+
+        The HTTP request has a multi-second timeout and must never run on the
+        event-loop thread: a slow network would freeze every keystroke for the
+        duration. It runs on a daemon worker thread instead.
+        """
         if not self.config.update_check_enabled:
+            return
+        if self._update_check_in_flight:
             return
         now = time.time()
         if now < self._next_update_check:
             return
-        from .update_check import CHECK_INTERVAL_SECONDS, check_for_update
+        from .update_check import CHECK_INTERVAL_SECONDS
 
         # Throttle in memory; the loop runs every ``SELECT_TIMEOUT`` and must
         # not read the stamp file (or the network) on each iteration.
         self._next_update_check = now + CHECK_INTERVAL_SECONDS
-        info = check_for_update()
+        self._update_check_in_flight = True
+        self._update_thread = threading.Thread(
+            target=self._update_check_worker, name="linguafix-update", daemon=True
+        )
+        self._update_thread.start()
+
+    def _update_check_worker(self) -> None:
+        """Perform the network update check off the event loop (worker thread)."""
+        from .update_check import check_for_update
+
+        try:
+            info = check_for_update()
+        finally:
+            self._update_check_in_flight = False
         if info is None or not info.update_available:
             return
         logger.info(

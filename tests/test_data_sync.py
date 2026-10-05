@@ -31,6 +31,6 @@ def test_duplicated_data_file_is_in_sync(name: str) -> None:
     package_copy = PACKAGE_DATA_DIR / name
     assert root_copy.is_file(), f"{root_copy} is missing"
     assert package_copy.is_file(), f"{package_copy} is missing"
-    assert root_copy.read_bytes() == package_copy.read_bytes(), (
-        f"{name} differs between data/ and src/linguafix/data/; keep them in sync"
-    )
+    assert (
+        root_copy.read_bytes() == package_copy.read_bytes()
+    ), f"{name} differs between data/ and src/linguafix/data/; keep them in sync"

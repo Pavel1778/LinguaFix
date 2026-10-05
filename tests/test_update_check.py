@@ -125,7 +125,42 @@ def test_daemon_check_enabled_notifies(monkeypatch: pytest.MonkeyPatch, isolated
     monkeypatch.setattr(daemon, "_notify_update", notified.append)
 
     daemon._maybe_check_update()
+    assert daemon._update_thread is not None
+    daemon._update_thread.join(timeout=5)
     assert notified == ["v0.3.0"]
     # A second call within the interval is throttled in memory.
     daemon._maybe_check_update()
     assert notified == ["v0.3.0"]
+
+
+def test_daemon_check_does_not_block_event_loop(
+    monkeypatch: pytest.MonkeyPatch, isolated_env: Path
+) -> None:
+    """The network check runs off the event-loop thread.
+
+    A slow request must not freeze the loop: ``_maybe_check_update`` returns
+    immediately and the HTTP work happens on the worker thread.
+    """
+    import threading
+
+    from linguafix.config import Config
+    from linguafix.daemon import LinguaFixDaemon
+
+    daemon = LinguaFixDaemon(config=Config(update_check_enabled=True))
+    release = threading.Event()
+    started = threading.Event()
+
+    def slow_check(*_a: object, **_k: object) -> None:
+        started.set()
+        release.wait(timeout=5)
+        return None
+
+    monkeypatch.setattr(update_check, "check_for_update", slow_check)
+
+    daemon._maybe_check_update()  # returns while the worker is still blocked
+    assert started.wait(timeout=5)
+    assert daemon._update_check_in_flight is True
+    assert daemon._update_thread is not None and daemon._update_thread.is_alive()
+    release.set()
+    daemon._update_thread.join(timeout=5)
+    assert daemon._update_check_in_flight is False

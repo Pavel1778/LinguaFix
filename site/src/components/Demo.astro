@@ -50,11 +50,17 @@
     toEn[RU[i]] = US[i];
   }
 
-  // Convert each run of letters to the opposite layout, keeping other characters.
+  // A token that joins sub-parts with a structural separator (URL, e-mail,
+  // path, version, hyphenated id) is never rewritten — the daemon skips it too.
+  const SEPARATOR = /\w[.@/\\:_-]\w/;
+
+  // Convert each whitespace-separated token to the opposite layout, keeping
+  // other characters and leaving separator-joined tokens untouched.
   function convert(text: string): string {
-    return text.replace(/[A-Za-zА-Яа-яЁё]+/g, (word) => {
-      const map = /[А-Яа-яЁё]/.test(word) ? toEn : toRu;
-      return [...word].map((ch) => map[ch] ?? ch).join("");
+    return text.replace(/\S+/g, (token) => {
+      if (SEPARATOR.test(token)) return token;
+      const map = /[А-Яа-яЁё]/.test(token) ? toEn : toRu;
+      return [...token].map((ch) => map[ch] ?? ch).join("");
     });
   }
 
