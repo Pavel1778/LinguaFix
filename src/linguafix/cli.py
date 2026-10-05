@@ -224,6 +224,12 @@ def cmd_mode(args: argparse.Namespace) -> int:
         print(f"Недопустимый режим: {exc}")
         return 2
     save_config(config)
+    # A running daemon holds its own config copy; ask it to reload so the new
+    # mode takes effect immediately instead of at the next restart.
+    from .daemon_control import is_running, reload_config
+
+    if is_running():
+        reload_config()
     print(f"Режим: {config.mode}")
     return 0
 

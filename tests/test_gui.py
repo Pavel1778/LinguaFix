@@ -137,6 +137,33 @@ def test_mode_switcher_persists(gui_state: Any, monkeypatch: pytest.MonkeyPatch)
     assert saved == ["hybrid"]
 
 
+def test_set_mode_signals_running_daemon(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Switching mode in the GUI must reach a running daemon, not just the file."""
+    from linguafix.gui import state as state_module
+
+    reloads: list[bool] = []
+    monkeypatch.setattr(state_module, "daemon_is_running", lambda: True)
+    monkeypatch.setattr(state_module, "daemon_reload_config", lambda: reloads.append(True) or True)
+
+    gui_state.set_mode("hybrid")
+    assert gui_state.config.mode == "hybrid"
+    assert reloads == [True]
+
+
+def test_set_mode_does_not_signal_when_daemon_stopped(
+    gui_state: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from linguafix.gui import state as state_module
+
+    reloads: list[bool] = []
+    monkeypatch.setattr(state_module, "daemon_is_running", lambda: False)
+    monkeypatch.setattr(state_module, "daemon_reload_config", lambda: reloads.append(True) or True)
+
+    gui_state.set_mode("manual")
+    assert gui_state.config.mode == "manual"
+    assert reloads == []
+
+
 def test_autostart_switch_enables_and_disables(
     gui_state: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:

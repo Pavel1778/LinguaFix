@@ -189,6 +189,22 @@ class TextInjector:
         """Return the name of the active backend."""
         return self._backend
 
+    def can_type(self, char: str, layout: str) -> bool:
+        """Return whether ``char`` can be typed in ``layout`` by this backend.
+
+        Used to decide whether a word-boundary character can be safely consumed
+        and retyped as part of a replacement. The literal backends (``wtype``,
+        ``xdotool``) can type any character; the layout-aware ``uinput`` backend
+        can only produce the characters it has a physical key for.
+        """
+        if not char:
+            return False
+        if self._backend in (BACKEND_WTYPE, BACKEND_XDOTOOL):
+            return True
+        if self._backend != BACKEND_UINPUT:
+            return False
+        return self._char_to_key(char, layout) is not None
+
     def replace_text(self, backspace_count: int, new: str, layout: str) -> bool:
         """Delete ``backspace_count`` characters and type ``new``.
 

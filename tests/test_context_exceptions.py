@@ -46,7 +46,13 @@ class FakeSwitcher:
 class FakeInjector:
     replacements: list[tuple[int, str, str]] = field(default_factory=list)
 
-    def replace_text(self, backspace_count: int, new: str, layout: str) -> bool:
+    def can_type(self, char: str, layout: str) -> bool:
+        # Mirror the uinput backend: only Space is layout-invariant and typed.
+        return char == " "
+
+    def replace_text(
+        self, backspace_count: int, new: str, layout: str, boundary_char: str = ""
+    ) -> bool:
         self.replacements.append((backspace_count, new, layout))
         return True
 
@@ -161,7 +167,7 @@ def test_unlisted_app_still_fixes(monkeypatch: pytest.MonkeyPatch) -> None:
     daemon = make_daemon(monkeypatch, mode="auto", exceptions_apps=["gnome-terminal"])
     press(daemon, "ghbdtn")
     tap(daemon, "KEY_SPACE")
-    assert _injector(daemon).replacements == [(6, "привет", "ru")]
+    assert _injector(daemon).replacements == [(7, "привет ", "ru")]
 
 
 def test_force_in_manual_list_applies_to_manual_mode(
@@ -171,7 +177,7 @@ def test_force_in_manual_list_applies_to_manual_mode(
     daemon = make_daemon(monkeypatch, mode="manual", exceptions_force_in_manual=["kitty"])
     press(daemon, "ghbdtn")
     tap(daemon, "KEY_SPACE")
-    assert _injector(daemon).replacements == [(6, "привет", "ru")]
+    assert _injector(daemon).replacements == [(7, "привет ", "ru")]
 
 
 # --- skip rules -------------------------------------------------------------
