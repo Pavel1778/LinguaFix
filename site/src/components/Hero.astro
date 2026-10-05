@@ -6,7 +6,7 @@ import { DEB_URL, LATEST_RELEASE, REPO, VERSION } from "../consts";
   <div>
     <h1 class="text-4xl font-bold leading-tight tracking-tight sm:text-5xl">
       Печатаете не в той раскладке?<br class="hidden sm:block" />
-      <span class="text-[#1c71d8] dark:text-[#3584e4]">LinguaFix исправит за 30&nbsp;мс</span>
+      <span class="text-[#1c71d8] dark:text-[#3584e4]">LinguaFix исправит мгновенно</span>
     </h1>
 
     <p class="mt-6 max-w-xl text-lg text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
@@ -15,13 +15,13 @@ import { DEB_URL, LATEST_RELEASE, REPO, VERSION } from "../consts";
     </p>
 
     <div class="mt-8 flex flex-wrap items-center gap-3">
-      <a href={DEB_URL} class="btn btn-primary" rel="noopener">Скачать .deb</a>
-      <a href={LATEST_RELEASE} class="btn btn-secondary" rel="noopener">Последний релиз</a>
-      <a href={REPO} class="btn btn-ghost" rel="noopener">Смотреть на GitHub →</a>
+      <a href={DEB_URL} class="btn btn-primary" target="_blank" rel="noopener noreferrer">Скачать .deb</a>
+      <a href={LATEST_RELEASE} class="btn btn-secondary" target="_blank" rel="noopener noreferrer">Последний релиз</a>
+      <a href={REPO} class="btn btn-ghost" target="_blank" rel="noopener noreferrer">Смотреть на GitHub →</a>
     </div>
 
     <p class="mt-6 text-sm text-[#0a0a0a]/60 dark:text-[#fafafa]/60">
-      Debian 13+ · GNOME 48+ · MIT License · v{VERSION}
+      Debian 13+ · GNOME 45+ · MIT License · v{VERSION}
     </p>
   </div>
 
