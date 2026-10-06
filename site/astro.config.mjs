@@ -11,10 +11,15 @@ import sitemap from "@astrojs/sitemap";
 // 404, which made the canonical/og:image URLs point at a dead domain.
 const site = process.env.SITE_URL || "https://linguafix.layero.app";
 
+// Vercel sets VERCEL_URL for every deployment. The Vercel copy is a noindex
+// preview, so it must not publish a sitemap: a sitemap advertises URLs to
+// crawlers, which is the opposite of what a preview needs.
+const isVercelBuild = Boolean(process.env.VERCEL_URL);
+
 export default defineConfig({
   site,
   output: "static",
-  integrations: [tailwind(), sitemap()],
+  integrations: [tailwind(), ...(isVercelBuild ? [] : [sitemap()])],
   compressHTML: true,
   experimental: {
     // Self-hosted at build time with metric-matched fallbacks, so the text
