@@ -7,6 +7,7 @@
 - CI: Python 3.10/3.11/3.12, all green.
 - **Repo formatter is `black`, not `ruff format`.** `ruff format` rewrites an assert in `tests/test_data_sync.py` into a style `black --check` rejects → CI lint fails. Use `ruff check --fix` only; run `black src tests` to reformat.
 - CI has two test jobs: core (`--cov-fail-under=80`, `gui/*` omitted) and a GUI job under `xvfb-run` with `--cov-config=coverage-gui.rc --cov-fail-under=85`. Both runnable locally now.
+- **CI triggers are `push: [main]` and `pull_request: [main]` only.** The deploy branch `feat/linguafix-v0.2.0` gets no push CI; verify via `main` (identical tree after the merge) or open a PR.
 - **Tooling trap**: `file_editor` corrupts non-ASCII on save for some files (double-encodes UTF-8: em-dash, box-drawing, Cyrillic). Restore with `git checkout HEAD -- <file>`, re-apply edits via a Python heredoc (`encoding="utf-8"`); detect by scanning `git ls-files` for mojibake lead-char runs.
 
 ## Key invariants (easy to regress)
@@ -42,6 +43,19 @@
 
 ## desktop-ID
 - `data/linguafix.desktop` and `src/linguafix/data/linguafix.desktop` must stay byte-identical (`tests/test_data_sync.py`) and carry `StartupWMClass=io.github.pavel1778.LinguaFix` == `gui/app.py` APP_ID, so GNOME associates the window with its launcher.
+
+## SEO / findability
+- **Two hosts, one canonical.** Layero `https://linguafix.layero.app` is indexed; the Vercel preview is `noindex`. `site/src/layouts/Base.astro` sets the robots meta from `import.meta.env.VERCEL_URL` (set on every Vercel build). Canonical and og:url always point at `Astro.site` (Layero).
+- **robots.txt is a build-time route** `site/src/pages/robots.txt.ts` (there is NO `site/public/robots.txt`): Layero gets `Allow: /` + sitemap URL, Vercel gets `Disallow: /`. A static file would be byte-identical on both hosts.
+- **The sitemap is generated only when `VERCEL_URL` is unset** (`astro.config.mjs`): `integrations: [tailwind(), ...(isVercelBuild ? [] : [sitemap()])]`. The preview must not advertise URLs.
+- `site/vercel.json` also sends `X-Robots-Tag: noindex, nofollow` for `/(.*)` as an HTTP-level backstop.
+- **The Vercel preview is behind Deployment Protection** (302 to `vercel.com/sso-api`), so its deployed robots/meta cannot be curl-verified without a bypass secret. Verify by building both ways locally (`VERCEL_URL=x npm run build` vs plain).
+- `site/public/og-image.png` is 1200x630 (the GitHub social-preview image).
+
+## GitHub repo metadata (manual - token cannot)
+- The fine-grained `GITHUB_TOKEN` has no admin scope: `PUT /topics` and `PATCH /repos/...` return 403. **Topics, About description, Website and Social preview must be set in the GitHub UI.**
+- Topics are currently EMPTY; `homepage` is a STALE `https://linguafix.vercel.app` (should be `https://linguafix.layero.app`).
+- Suggested topics: linux, keyboard-layout, layout-switcher, wayland, x11, gnome, kde, sway, evdev, uinput, python, gtk4, libadwaita, productivity, input-method, russian, english, punto-switcher-alternative, caramba-switcher-alternative, auto-switcher.
 
 ## Environment quirks
 - `evdev` has no `__version__`. Target: Debian 13 trixie + GNOME 48 + Wayland (declared GNOME 45+).
