@@ -15,9 +15,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   quotes and spacing, applied only when layout detection and typo correction both
   decline. A replacement the input backend cannot type is refused wholesale rather
   than half-applied. Off by default.
-- Search-engine metadata: a generated `robots.txt` (index + sitemap on the
-  canonical host, `Disallow: /` on the Vercel preview), an `X-Robots-Tag: noindex`
-  header on the preview, and a keyword paragraph plus both site links in the README.
+- Search-engine metadata for two indexed hosts: each host declares itself
+  canonical (`https://linguafix.layero.app` for the Russian primary,
+  `https://linguafix.vercel.app` for the English mirror) and cross-links the other
+  with `hreflang` (`ru`, `en`, `x-default`), so the copies do not compete as
+  duplicate content. A generated `robots.txt` and a sitemap are emitted per host,
+  the default `description`/`og:locale`/JSON-LD follow the host language, and the
+  README carries a keyword paragraph plus both site links.
+- Google and Yandex site-verification files served on both hosts, an
+  `apple-touch-icon`, and a footer "About" block in the host language.
 
 ### Fixed
 
@@ -33,8 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   D-Bus cannot re-pay the 5 s timeout on every GUI refresh.
 - The desktop launcher declares `StartupWMClass` equal to the application id, so
   GNOME associates the running window with its installed entry.
-- The Vercel preview no longer publishes a sitemap, so the two hosts cannot
-  compete as duplicate content.
+- Both hosts publish their own sitemap and `robots.txt` instead of the preview
+  suppressing them, so each is independently discoverable without duplicate content.
 
 - Landing page mobile audit (8 items): removed the leaked developer note
   «Плейсхолдер — замените реальным скриншотом» from all four mock-up SVGs;
