@@ -6,9 +6,9 @@
 LinguaFix — автоматический переключатель раскладки клавиатуры для Linux. Исправляет текст, набранный не в той раскладке (`ghbdtn` → `привет`), автоматически и мгновенно. Работает в Wayland и X11, GNOME 45+, KDE, Sway, через `evdev` + `uinput`. Аналог Caramba Switcher и Punto Switcher. Бесплатно, MIT, без телеметрии.
 
 [![CI](https://github.com/Pavel1778/LinguaFix/actions/workflows/ci.yml/badge.svg)](https://github.com/Pavel1778/LinguaFix/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
-[![Debian / Ubuntu](https://img.shields.io/badge/platform-Debian%20%7C%20Ubuntu-A80030.svg)](#-требования--requirements)
+[![License: MIT](https://linguafix.layero.app/badges/license.svg)](LICENSE)
+[![Python 3.10+](https://linguafix.layero.app/badges/python.svg)](https://www.python.org/downloads/)
+[![Debian / Ubuntu](https://linguafix.layero.app/badges/platform.svg)](#-требования--requirements)
 
 ---
 
@@ -238,7 +238,7 @@ e-mail, пути или версии (`github.com`, `test@example.com`, `3.14`),
 
 ### Бренд, имя или техножаргон не исправляется
 
-Частотные словари не знают брендов (`vercel`, `муксуд`), имён и жаргона, поэтому
+Частотные словари не знают брендов (`vercel`, `муксуд`), имён и жаргона, так что
 детектор молчит: он не уверен, что `муксуд` — это английское `vercel`. Научите
 слово — и конвертация станет для детектора «известной хорошей»:
 
@@ -457,8 +457,8 @@ MIT — см. [LICENSE](LICENSE).
 
 ## 🌐 Сайт
 
-- **Основной сайт:** https://linguafix.layero.app
-- **Зеркало (Vercel, preview):** https://lingua-fix-6933-ilusi3wr6-pavel1778s-projects.vercel.app
+- **Основной сайт (RU):** https://linguafix.layero.app
+- **Зеркало (EN):** https://linguafix.vercel.app
 
-Vercel-деплой помечен `noindex, nofollow` — он для разработки,
-поисковики его не индексируют.
+Оба сайта индексируются в поисковиках с per-host canonical и hreflang
+(`ru` / `en` / `x-default`), поэтому они не конкурируют как дубликаты.

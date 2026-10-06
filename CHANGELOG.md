@@ -64,6 +64,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Re-synced `black` formatting of `tests/test_data_sync.py` with the current
   release of the formatter.
 
+### Removed
+
+- Stale release tag `v0.2.0-stage2` and the merged feature branches; `main` is
+  the only branch left in `origin`.
+
 ## [0.2.0] - 2026-10-04
 
 ### Added
