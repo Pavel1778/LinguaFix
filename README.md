@@ -3,6 +3,8 @@
 > **Твой язык. Автоматически.** — Your language. Automatically.
 > Автоматическое переключение раскладки клавиатуры для Debian GNOME (X11 и Wayland).
 
+LinguaFix — автоматический переключатель раскладки клавиатуры для Linux. Аналог Caramba Switcher и Punto Switcher для GNOME Wayland и X11. Исправляет `ghbdtn` → `привет` автоматически, работает через `evdev` + `uinput`, поддерживает Debian, Ubuntu, GNOME 45+.
+
 [![CI](https://github.com/Pavel1778/LinguaFix/actions/workflows/ci.yml/badge.svg)](https://github.com/Pavel1778/LinguaFix/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
@@ -455,8 +457,8 @@ MIT — см. [LICENSE](LICENSE).
 
 ## 🌐 Сайт
 
-- **Основной:** https://linguafix.layero.app
-- **Preview (Vercel):** https://lingua-fix-6933-ilusi3wr6-pavel1778s-projects.vercel.app
+- **Основной сайт:** https://linguafix.layero.app
+- **Зеркало (Vercel, preview):** https://lingua-fix-6933-ilusi3wr6-pavel1778s-projects.vercel.app
 
 Vercel-деплой помечен `noindex, nofollow` — он для разработки,
 поисковики его не индексируют.

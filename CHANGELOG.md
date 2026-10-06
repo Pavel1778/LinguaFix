@@ -7,7 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A "Т9" tab in the GUI with a single master toggle for typo correction and the
+  new punctuation cleanup, plus per-rule rows.
+- Opt-in punctuation cleanup (`punctuation.py`): dashes, ellipsis, Cyrillic smart
+  quotes and spacing, applied only when layout detection and typo correction both
+  decline. A replacement the input backend cannot type is refused wholesale rather
+  than half-applied. Off by default.
+- Search-engine metadata: a generated `robots.txt` (index + sitemap on the
+  canonical host, `Disallow: /` on the Vercel preview), an `X-Robots-Tag: noindex`
+  header on the preview, and a keyword paragraph plus both site links in the README.
+
 ### Fixed
+
+- The GUI no longer freezes ("приложение не отвечает"): the home page ran its
+  daemon probes (`systemctl`, `g3kb-switch`, `xprop`, the focused-app D-Bus query)
+  synchronously on the GTK main thread on a timer and on every toggle click. They
+  now run on a worker thread (`gui/async_utils.run_in_background`) and report back
+  on the main thread; the toggle click and its reconcile poll are async too.
+- The window tab labels are no longer truncated ("Глав…"): the fixed wide
+  `ViewSwitcher` is replaced by a header `ViewSwitcherTitle` plus a bottom
+  `ViewSwitcherBar` that appears only on narrow windows.
+- `daemon_control._systemctl` backs off for 10 s after a timeout so a hung user
+  D-Bus cannot re-pay the 5 s timeout on every GUI refresh.
+- The desktop launcher declares `StartupWMClass` equal to the application id, so
+  GNOME associates the running window with its installed entry.
+- The Vercel preview no longer publishes a sitemap, so the two hosts cannot
+  compete as duplicate content.
 
 - Landing page mobile audit (8 items): removed the leaked developer note
   «Плейсхолдер — замените реальным скриншотом» from all four mock-up SVGs;
