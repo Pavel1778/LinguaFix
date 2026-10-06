@@ -2,9 +2,11 @@
 
 ## Build / test
 - venv `.venv`; run `.venv/bin/python -m pytest`. GUI tests need `xvfb-run -a` + `PYTHONPATH=/usr/lib/python3/dist-packages` (GTK in this dev container).
-- Coverage: local gate 85 %, CI gate 80 %. Baseline 746 passed / 42 skipped, ~87 % with `gui/*` omitted.
+- Coverage: local gate 85 %, CI gate 80 %. Baseline **807 passed, 88 %** (GUI job); core job 758 passed / 48 skipped, 87 %.
 - `[tool.coverage.run] omit = ["src/linguafix/gui/*"]` — CI has no PyGObject, so GUI tests skip and their ~800 lines would report 0 % (CI total ~66 %, gate fails). Re-add only if CI installs GTK.
 - CI: Python 3.10/3.11/3.12, all green.
+- **Repo formatter is `black`, not `ruff format`.** `ruff format` rewrites an assert in `tests/test_data_sync.py` into a style `black --check` rejects → CI lint fails. Use `ruff check --fix` only; run `black src tests` to reformat.
+- CI has two test jobs: core (`--cov-fail-under=80`, `gui/*` omitted) and a GUI job under `xvfb-run` with `--cov-config=coverage-gui.rc --cov-fail-under=85`. Both runnable locally now.
 - **Tooling trap**: `file_editor` corrupts non-ASCII on save for some files (double-encodes UTF-8: em-dash, box-drawing, Cyrillic). Restore with `git checkout HEAD -- <file>`, re-apply edits via a Python heredoc (`encoding="utf-8"`); detect by scanning `git ls-files` for mojibake lead-char runs.
 
 ## Key invariants (easy to regress)
@@ -24,7 +26,22 @@
 - **False-positive guards** (`plausibility_check`, `structural_boundaries`, `identifier_guard`; all default true) in `detector._should_guard`, called in `target_layout` **after** the user-dictionary override. Plausibility = score the buffer in its typed layout; if it reads as real words, veto the conversion. Structural = URL/e-mail/path/version separators. Identifier = `_IDENTIFIER_RE` (snake_case, camelCase, `x86_64`). `should_fix` uses `_should_guard_structure_only` so it stays a superset.
 - **`daemon_control.py` is the single GUI control surface** (replaces deleted `gui/systemd_bridge.py`). `is_running` = PID lock alive **or** systemd active; `stop` prefers `systemctl stop` then SIGTERM→SIGKILL; `reload_config` SIGHUP; `undo_last_fix` SIGUSR1; `spawn_detached` prefers the installed `linguafix` launcher (sets PYTHONPATH for `.deb`) over `sys.executable -m`. Daemon writes `~/.cache/linguafix/daemon.lock` with `flock`.
 - **Zombie PID was the real "toggle works every other time" root cause.** A daemon that exits but is not reaped (GUI spawns it) stays a zombie; `os.kill(pid,0)` still succeeds, so `pid_alive()` lied. `daemon_control.pid_alive` now reads `/proc/<pid>/stat` (state `Z` ⇒ dead); `read_pid` unlinks a stale lock only when it still names the same dead PID; `cli._read_pid`/`_pid_alive` delegate to it; `start` re-checks liveness ~0.3–0.4 s after the lock appears; `daemon.acquire_lock` takes `flock` **before** truncating.
-- GUI HomePage toggle: `_on_toggle_clicked` calls start/stop then `_reconcile` polls `is_active()` (12×150 ms) before `refresh()` — do not trust the start/stop return value; systemd can return before `is-active` flips.
+- GUI HomePage toggle: `_on_toggle_clicked` sets the button busy, starts/stops on a **worker thread**, then `_poll_state`/`_on_polled` re-checks `is_active()` off-thread (12×150 ms) before `refresh()` — do not trust the start/stop return value; systemd can return before `is-active` flips. Never probe the daemon inline on the GTK thread.
+
+## GUI invariants (P0: never block the main thread)
+- **Never run a daemon probe on the GTK main thread.** `systemctl`/`g3kb-switch`/xprop/D-Bus have multi-second timeouts; running one inline froze the window ("приложение не отвечает"). Use `gui/async_utils.run_in_background(fn, on_done, *args)` (worker thread + `GLib.idle_add`); `on_done` runs on the main thread. `HomePage.refresh`/`_on_toggle_clicked` and `HistoryPage.refresh` are async. `tests/test_gui_nonblocking.py` asserts they return before a slow probe finishes.
+- `Gio.BindingFlags` is **not** exposed — use `GObject.BindingFlags`.
+- `Adw.ViewSwitcherTitle.set_title` is deprecated; the window title is used automatically.
+- Page set is 5 (`home settings dictionary typo history`) + lazy `advanced` = 6. Tab truncation is solved with a header `ViewSwitcherTitle` + bottom `ViewSwitcherBar` (revealed when width < `NARROW_WIDTH`=560), not a fixed wide switcher.
+- `daemon_control._systemctl` backs off 10 s after a timeout so a hung user D-Bus does not re-pay the 5 s timeout every refresh.
+
+## Feature: punctuation + T9 tab (opt-in)
+- `punctuation.py` is a small **rule** engine (dashes/ellipsis/smart-quotes/spacing), off by default; wired in `_process_buffer_inner` only when layout detection AND T9 both return None. Any replacement whose chars the backend cannot type is refused wholesale — `uinput` has no key for `—`/`…`, so those cleanups only fire under wtype/xdotool.
+- Config keys `punctuation_correction|_dashes|_ellipsis|_smart_quotes|_fix_spacing`; added to the fixed config key set in `tests/test_privacy_audit.py` (`_ALLOWED_CONFIG_KEYS`).
+- `gui/typo_page.py` is the T9 tab: a big master `BigToggle` (toggles typo+punctuation) plus rows via `BoundPreferencesPage` helpers.
+
+## desktop-ID
+- `data/linguafix.desktop` and `src/linguafix/data/linguafix.desktop` must stay byte-identical (`tests/test_data_sync.py`) and carry `StartupWMClass=io.github.pavel1778.LinguaFix` == `gui/app.py` APP_ID, so GNOME associates the window with its launcher.
 
 ## Environment quirks
 - `evdev` has no `__version__`. Target: Debian 13 trixie + GNOME 48 + Wayland (declared GNOME 45+).
@@ -39,7 +56,7 @@
 
 ## Landing page / deploy
 - **Landing-page assets**: badges are **self-hosted SVGs in `site/public/badges/`** (`ci/license/python/platform.svg`) — shields.io was blocked/slow behind the host, so external badges rendered broken. Footer names **only** `linguafix.layero.app`; the Vercel preview is behind **Deployment Protection** (redirects to a vercel.com login), so never link it publicly. The Vercel build must stay `noindex` — `Base.astro` keys it off `VERCEL_URL`.
-- **CI has a `site` job** (`npm ci` + `npm run build` against `site/package-lock.json`) — added because a broken landing build shipped unnoticed. The GUI job runs `test_gui.py` which **only executes in CI** (skips locally: no GTK/Xvfb here) — page-count assertions drift silently; assert page *names*, not counts.
+- **CI has a `site` job** (`npm ci` + `npm run build` against `site/package-lock.json`) — added because a broken landing build shipped unnoticed. The GUI job runs `test_gui.py`; GTK4+libadwaita+Xvfb are **installed in this dev container now**, so it also runs locally (`xvfb-run -a` + `PYTHONPATH=/usr/lib/python3/dist-packages`). Assert page *names*, not counts.
 - **Verifying the live site**: Layero serves **brotli** — `curl` without `--compressed` returns binary garbage. Use `curl -s --compressed https://linguafix.layero.app/`. Layero redeploys from `feat/linguafix-v0.2.0` within ~30 s of a push.
 - **Pushing**: the git remote token goes stale; refresh with `git remote set-url origin "https://${GITHUB_TOKEN}@github.com/Pavel1778/LinguaFix.git"` and always `GIT_TERMINAL_PROMPT=0` (a stale token otherwise hangs on a password prompt).
 - Hero "window" is inline `WindowMock.astro` (not `<img>`) so its SVG text inherits the self-hosted Inter font. The power glyph is an SVG arc: keep sweep-flag `0` (`A36 36 0 1 0`) — flag `1` bulges the arc over the top of the disc and the icon looks «съехало». Verify by rendering headless and measuring the white-glyph centroid (offset ~0).
