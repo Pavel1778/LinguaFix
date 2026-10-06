@@ -3,7 +3,7 @@
 > **Твой язык. Автоматически.** — Your language. Automatically.
 > Автоматическое переключение раскладки клавиатуры для Debian GNOME (X11 и Wayland).
 
-LinguaFix — автоматический переключатель раскладки клавиатуры для Linux. Аналог Caramba Switcher и Punto Switcher для GNOME Wayland и X11. Исправляет `ghbdtn` → `привет` автоматически, работает через `evdev` + `uinput`, поддерживает Debian, Ubuntu, GNOME 45+.
+LinguaFix — автоматический переключатель раскладки клавиатуры для Linux. Исправляет текст, набранный не в той раскладке (`ghbdtn` → `привет`), автоматически и мгновенно. Работает в Wayland и X11, GNOME 45+, KDE, Sway, через `evdev` + `uinput`. Аналог Caramba Switcher и Punto Switcher. Бесплатно, MIT, без телеметрии.
 
 [![CI](https://github.com/Pavel1778/LinguaFix/actions/workflows/ci.yml/badge.svg)](https://github.com/Pavel1778/LinguaFix/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)

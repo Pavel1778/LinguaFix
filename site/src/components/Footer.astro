@@ -1,5 +1,6 @@
 ---
 import { CONTRIBUTING, INSTALL_DOC, ISSUES, LICENSE, REPO, RELEASES } from "../consts";
+import { pick } from "../lib/site";
 
 const columns = [
   {
@@ -42,6 +43,17 @@ const year = new Date().getFullYear();
         </div>
         <p class="mt-4 text-sm text-[#0a0a0a]/60 dark:text-[#fafafa]/60">
           MIT License · © {year} Pavel
+        </p>
+        <h3 class="mt-6 text-sm font-semibold">
+          {pick("О проекте", "About")}
+        </h3>
+        <p class="mt-3 text-sm text-[#0a0a0a]/60 dark:text-[#fafafa]/60">
+          {
+            pick(
+              "LinguaFix — open-source инструмент для автоматического исправления раскладки клавиатуры. Работает локально, без телеметрии, под MIT лицензией. Поддерживает русский, английский, украинский, немецкий и французский языки.",
+              "LinguaFix is an open-source tool that fixes keyboard layout mistakes automatically. It runs locally, collects no telemetry, and is MIT licensed. It supports Russian, English, Ukrainian, German and French.",
+            )
+          }
         </p>
       </div>
 

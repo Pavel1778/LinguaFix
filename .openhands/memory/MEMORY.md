@@ -44,13 +44,14 @@
 ## desktop-ID
 - `data/linguafix.desktop` and `src/linguafix/data/linguafix.desktop` must stay byte-identical (`tests/test_data_sync.py`) and carry `StartupWMClass=io.github.pavel1778.LinguaFix` == `gui/app.py` APP_ID, so GNOME associates the window with its launcher.
 
-## SEO / findability
-- **Two hosts, one canonical.** Layero `https://linguafix.layero.app` is indexed; the Vercel preview is `noindex`. `site/src/layouts/Base.astro` sets the robots meta from `import.meta.env.VERCEL_URL` (set on every Vercel build). Canonical and og:url always point at `Astro.site` (Layero).
-- **robots.txt is a build-time route** `site/src/pages/robots.txt.ts` (there is NO `site/public/robots.txt`): Layero gets `Allow: /` + sitemap URL, Vercel gets `Disallow: /`. A static file would be byte-identical on both hosts.
-- **The sitemap is generated only when `VERCEL_URL` is unset** (`astro.config.mjs`): `integrations: [tailwind(), ...(isVercelBuild ? [] : [sitemap()])]`. The preview must not advertise URLs.
-- `site/vercel.json` also sends `X-Robots-Tag: noindex, nofollow` for `/(.*)` as an HTTP-level backstop.
-- **The Vercel preview is behind Deployment Protection** (302 to `vercel.com/sso-api`), so its deployed robots/meta cannot be curl-verified without a bypass secret. Verify by building both ways locally (`VERCEL_URL=x npm run build` vs plain).
-- `site/public/og-image.png` is 1200x630 (the GitHub social-preview image).
+## SEO / findability (variant B: both hosts indexed)
+- **Two indexed hosts, one per language.** Layero `https://linguafix.layero.app` is the Russian primary; the Vercel mirror `https://linguafix.vercel.app` is the English copy. Both are `index, follow`. Each declares **itself** canonical and cross-links the other with `hreflang` (`ru`/`en`/`x-default`).
+- `site/src/lib/site.ts` is the single source of truth: `isVercel = Boolean(import.meta.env.VERCEL_URL)`; `siteUrl`/`lang`/`pick(ru,en)` follow it. **Canonical/og:url/sitemap use the stable origin, never the per-deployment `VERCEL_URL` host** (otherwise every preview self-canonicalises).
+- `robots.txt.ts` (no `site/public/robots.txt`): both hosts `Allow: /` + their own sitemap. `astro.config.mjs`: `site` follows the host, `sitemap()` on **both** builds. `Base.astro`: per-host description/og:locale/`<html lang>`/JSON-LD, plus a `SoftwareApplication` JSON-LD block.
+- `vercel.json` no longer sends `X-Robots-Tag: noindex`.
+- Google + Yandex verification files, `apple-touch-icon.png` (180x180, rasterised from `logo.svg`), and a footer "About" block in `site/public/`.
+- **Verify by building both ways** (plain vs `VERCEL_URL=x npm run build`); the Vercel production domain is reachable (`linguafix.vercel.app`, no protection) so deployed output can be curl-checked.
+- **Two Vercel projects are connected to this repo:** `linguafix` (rootDirectory `site`, the real one, passes) and a stray `lingua-fix` (rootDirectory null, **fails on its own config** — pre-existing, not caused by code). Vercel checks appear on **PRs only**, never on `main` pushes, so the stray failure only shows on a PR. PRs still report MERGEABLE / mergeStateStatus UNSTABLE.
 
 ## GitHub repo metadata (manual - token cannot)
 - The fine-grained `GITHUB_TOKEN` has no admin scope: `PUT /topics` and `PATCH /repos/...` return 403. **Topics, About description, Website and Social preview must be set in the GitHub UI.**

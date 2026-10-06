@@ -1,6 +1,7 @@
 ---
 import { Font } from "astro:assets";
 import "../styles/global.css";
+import { LAYERO_URL, VERCEL_URL, isVercel, lang, pick, siteUrl } from "../lib/site";
 
 interface Props {
   title?: string;
@@ -8,28 +9,59 @@ interface Props {
 }
 
 const {
-  title = "LinguaFix — автоматическое исправление раскладки для Linux",
-  description =
-    "Автоматический корректор раскладки для Linux. Мгновенно исправляет ghbdtn → привет. Работает в Wayland и X11, GNOME 45+, Debian 13+.",
+  title = pick(
+    "LinguaFix — автоматическое исправление раскладки для Linux",
+    "LinguaFix — automatic keyboard layout switcher for Linux",
+  ),
+  description = pick(
+    "LinguaFix — автоматический переключатель раскладки клавиатуры для Linux. Исправляет ghbdtn → привет мгновенно. Работает в Wayland и X11, GNOME 45+, KDE, Sway. Аналог Caramba Switcher и Punto Switcher. Бесплатно, MIT, без телеметрии.",
+    "LinguaFix — automatic keyboard layout switcher for Linux. Fixes ghbdtn → privet instantly. Works in Wayland and X11, GNOME 45+, KDE, Sway. Free, MIT, no telemetry.",
+  ),
 } = Astro.props;
 
-const canonical = new URL(Astro.url.pathname, Astro.site);
-const ogImage = new URL("/og-image.png", Astro.site);
+// Both hosts are indexed and each declares itself canonical, so the two copies
+// never compete as duplicate content. Canonical and og:url use the stable host
+// origin, never the per-deployment VERCEL_URL host.
+const canonical = new URL(Astro.url.pathname, siteUrl);
+const ogImage = new URL("/og-image.png", siteUrl);
 
-// Vercel sets VERCEL_URL for every deployment. The Vercel copy is a preview;
-// keep it out of search engines so the Layero mirror stays the canonical one
-// and the two hosts do not compete as duplicate content.
-const robots = import.meta.env.VERCEL_URL ? "noindex, nofollow" : "index, follow";
+const schema = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "LinguaFix",
+  description: pick(
+    "Автоматический переключатель раскладки клавиатуры для Linux",
+    "Automatic keyboard layout switcher for Linux",
+  ),
+  applicationCategory: "UtilitiesApplication",
+  operatingSystem: "Linux",
+  softwareVersion: "0.2.0",
+  license: "https://opensource.org/licenses/MIT",
+  url: siteUrl,
+  downloadUrl: "https://github.com/Pavel1778/LinguaFix/releases/latest",
+  codeRepository: "https://github.com/Pavel1778/LinguaFix",
+  author: {
+    "@type": "Person",
+    name: "Pavel",
+    url: "https://github.com/Pavel1778",
+  },
+  offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+};
 ---
 
 <!doctype html>
-<html lang="ru">
+<html lang={lang}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="canonical" href={canonical} />
-    <meta name="robots" content={robots} />
+    <meta name="robots" content="index, follow" />
+
+    <link rel="alternate" hreflang="ru" href={LAYERO_URL + "/"} />
+    <link rel="alternate" hreflang="en" href={VERCEL_URL + "/"} />
+    <link rel="alternate" hreflang="x-default" href={LAYERO_URL + "/"} />
 
     <title>{title}</title>
     <meta name="description" content={description} />
@@ -40,7 +72,7 @@ const robots = import.meta.env.VERCEL_URL ? "noindex, nofollow" : "index, follow
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={ogImage} />
-    <meta property="og:locale" content="ru_RU" />
+    <meta property="og:locale" content={isVercel ? "en_US" : "ru_RU"} />
 
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
@@ -49,6 +81,8 @@ const robots = import.meta.env.VERCEL_URL ? "noindex, nofollow" : "index, follow
 
     <meta name="theme-color" content="#3584e4" media="(prefers-color-scheme: dark)" />
     <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+
+    <script type="application/ld+json" set:html={JSON.stringify(schema)} />
 
     <Font cssVariable="--font-inter" preload />
     <Font cssVariable="--font-mono" preload />
