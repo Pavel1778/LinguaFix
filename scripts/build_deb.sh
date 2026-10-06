@@ -113,6 +113,11 @@ if command -v update-desktop-database >/dev/null 2>&1; then
     update-desktop-database -q /usr/share/applications || true
 fi
 
+# Rebuild the icon cache so the launcher picks up the icon immediately.
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
+fi
+
 # Load uinput so /dev/uinput exists (best effort; a container may lack it).
 if command -v modprobe >/dev/null 2>&1; then
     modprobe uinput 2>/dev/null || true
