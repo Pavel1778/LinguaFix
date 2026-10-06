@@ -57,6 +57,9 @@
 - Topics are currently EMPTY; `homepage` is a STALE `https://linguafix.vercel.app` (should be `https://linguafix.layero.app`).
 - Suggested topics: linux, keyboard-layout, layout-switcher, wayland, x11, gnome, kde, sway, evdev, uinput, python, gtk4, libadwaita, productivity, input-method, russian, english, punto-switcher-alternative, caramba-switcher-alternative, auto-switcher.
 
+- **CI runs `mypy --strict .` over ALL files (tests too), and `ruff` lints tests.** Run `mypy --strict .` locally, not just `mypy --strict src/linguafix` — an unused `# type: ignore` in a test passes the src-only check but fails CI.
+- **Before implementing a "new" feature, `git fetch` and check `origin/main` + recent branches.** A second session re-implemented the GUI non-blocking fix + T9 while `d430485` was already merged into `main` (dedicated T9 tab `gui/typo_page.py`, `gui/async_utils.py`, `punctuation.py` with `PunctuationCorrector.correct`). Duplicate PR #10 was closed; only the `.deb` postinst `gtk-update-icon-cache` fix was still missing (PR #11).
+
 ## Environment quirks
 - `evdev` has no `__version__`. Target: Debian 13 trixie + GNOME 48 + Wayland (declared GNOME 45+).
 - No `/dev/uinput` or real keyboard in dev; tests monkeypatch `evdev.UInput` (recording fake) and `TextInjector._uinput_available`.
