@@ -6,7 +6,7 @@ import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, Gtk  # noqa: E402
+from gi.repository import Adw, Gio, GObject, Gtk  # noqa: E402
 
 from .about_page import build_about_window  # noqa: E402
 from .advanced_page import AdvancedPage  # noqa: E402
@@ -15,14 +15,22 @@ from .history_page import HistoryPage  # noqa: E402
 from .home_page import HomePage  # noqa: E402
 from .settings_page import SettingsPage  # noqa: E402
 from .state import GuiState  # noqa: E402
+from .typo_page import TypoPage  # noqa: E402
+
+# Below this width the in-header tab labels no longer fit ("Главная" becomes
+# "Глав…"), so the switcher moves to a full-width bar under the content, where
+# every label has room. The window keeps a slightly larger default so the labels
+# are whole on first open, but the layout stays correct when the user shrinks it.
+NARROW_WIDTH = 560
 
 
 class LinguaFixWindow(Adw.ApplicationWindow):
-    """The top-level window with a ``ViewSwitcher`` header."""
+    """The top-level window with a responsive ``ViewSwitcher`` header."""
 
     def __init__(self, state: GuiState, application: Adw.Application) -> None:
         super().__init__(application=application, title="LinguaFix")
-        self.set_default_size(560, 720)
+        self.set_default_size(640, 760)
+        self.set_size_request(360, 480)
         self._state = state
 
         self._toasts = Adw.ToastOverlay()
@@ -32,8 +40,14 @@ class LinguaFixWindow(Adw.ApplicationWindow):
 
         header = Adw.HeaderBar()
         self._stack = Adw.ViewStack()
-        switcher = Adw.ViewSwitcher(stack=self._stack, policy=Adw.ViewSwitcherPolicy.WIDE)
-        header.set_title_widget(switcher)
+        # A title switcher shows the tabs in the header while there is room and
+        # collapses them to the window title when there is not; the bar below
+        # carries the full labels in that narrow case. Together they replace the
+        # fixed WIDE switcher that truncated the labels in a small window.
+        # ViewSwitcherTitle takes the window title automatically, so it is not
+        # set here (set_title is deprecated in newer libadwaita).
+        self._switcher_title = Adw.ViewSwitcherTitle(stack=self._stack)
+        header.set_title_widget(self._switcher_title)
 
         menu = Gio.Menu()
         menu.append("О программе", "win.about")
@@ -42,22 +56,37 @@ class LinguaFixWindow(Adw.ApplicationWindow):
         header.pack_end(menu_button)
         toolbar.add_top_bar(header)
 
+        self._switcher_bar = Adw.ViewSwitcherBar(stack=self._stack)
+        self._switcher_title.bind_property(
+            "title-visible",
+            self._switcher_bar,
+            "reveal",
+            GObject.BindingFlags.SYNC_CREATE,
+        )
+        toolbar.add_bottom_bar(self._switcher_bar)
+
         self._home = HomePage(state, self._toasts)
         self._settings = SettingsPage(state, on_saved=self._on_saved)
         self._dictionary = DictionaryPage(state, on_saved=self._on_saved)
+        self._typo = TypoPage(state, self._toasts, on_saved=self._on_saved)
         self._history = HistoryPage(state, self._toasts)
         self._advanced = AdvancedPage(state, on_saved=self._on_saved)
 
         self._stack.add_titled(self._home, "home", "Главная")
         self._stack.add_titled(self._settings, "settings", "Настройки")
         self._stack.add_titled(self._dictionary, "dictionary", "Словарь")
+        self._stack.add_titled(self._typo, "typo", "Т9")
         self._stack.add_titled(self._history, "history", "История")
         # The advanced page is added to the switcher only when revealed, so the
         # basic settings stay uncluttered by default.
         self._advanced_visible = False
         toolbar.set_content(self._stack)
 
+        self.connect("notify::default-width", self._on_width_changed)
         self._install_actions()
+
+    def _on_width_changed(self, _window: Gtk.Window, _param: object) -> None:
+        self._switcher_bar.set_reveal(self.get_width() < NARROW_WIDTH)
 
     def _install_actions(self) -> None:
         about = Gio.SimpleAction.new("about", None)
@@ -110,6 +139,11 @@ class LinguaFixWindow(Adw.ApplicationWindow):
         return self._stack
 
     @property
+    def switcher_bar(self) -> Adw.ViewSwitcherBar:
+        """Expose the narrow-window switcher for tests."""
+        return self._switcher_bar
+
+    @property
     def home(self) -> HomePage:
         """Expose the home page for tests."""
         return self._home
@@ -123,6 +157,11 @@ class LinguaFixWindow(Adw.ApplicationWindow):
     def dictionary_page(self) -> DictionaryPage:
         """Expose the dictionary page for tests."""
         return self._dictionary
+
+    @property
+    def typo_page(self) -> TypoPage:
+        """Expose the typo-correction page for tests."""
+        return self._typo
 
     @property
     def history_page(self) -> HistoryPage:

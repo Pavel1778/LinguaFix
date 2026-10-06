@@ -44,6 +44,7 @@ from .converter import LayoutConverter
 from .detector import LanguageDetector
 from .dictionary import load_user_dictionary
 from .injector import TextInjector
+from .punctuation import PunctuationCorrector
 from .selection_fix import SelectionFix
 from .switcher import LayoutSwitcher
 from .text_expander import TextExpander
@@ -302,6 +303,7 @@ class LinguaFixDaemon:
         # T9: one corrector per language, built lazily from the detector's
         # vocabulary the first time a typo is checked.
         self._typo_correctors: dict[str, TypoCorrector] = {}
+        self._punctuation = PunctuationCorrector()
         # Text expansion (snippets). Loaded once here and re-loaded on reload.
         self._expander = TextExpander()
         self._load_snippets(config)
@@ -928,6 +930,34 @@ class LinguaFixDaemon:
             suggestion = suggestion[:1].upper() + suggestion[1:]
         return suggestion
 
+    def _build_punctuation(self) -> PunctuationCorrector:
+        """Build a corrector from the current config (rules are config-driven)."""
+        cfg = self.config
+        return PunctuationCorrector(
+            dashes=cfg.punctuation_dashes,
+            ellipsis=cfg.punctuation_ellipsis,
+            smart_quotes=cfg.punctuation_smart_quotes,
+            fix_spacing=cfg.punctuation_fix_spacing,
+        )
+
+    def _punctuation_correction(self, buffer: str, current: str) -> str | None:
+        """Return a punctuation-cleaned buffer, or ``None`` when nothing changes.
+
+        Punctuation is not buffered when ``on_punctuation`` consumes it, so this
+        runs on the text as typed. Any replacement whose characters the active
+        backend cannot type (the ``uinput`` backend cannot produce an em dash or
+        an ellipsis) is refused wholesale rather than left half-applied.
+        """
+        if not self.config.punctuation_correction:
+            return None
+        corrected = self._punctuation.correct(buffer, current)
+        if corrected == buffer:
+            return None
+        if not all(self.injector.can_type(char, current) for char in corrected):
+            logger.debug("Punctuation replacement has an untypable character; skipping")
+            return None
+        return corrected
+
     def _record_undo(
         self,
         original: str,
@@ -1205,10 +1235,18 @@ class LinguaFixDaemon:
             # for a single-character typo in the language the user is typing;
             # that fix stays in the current layout.
             corrected = self._typo_correction(buffer, current)
-            if corrected is None:
-                return
-            converted = corrected
-            target = current
+            if corrected is not None:
+                converted = corrected
+                target = current
+            else:
+                # Neither layout detection nor typo correction applied. A final
+                # opt-in pass fixes punctuation (dashes, ellipsis, spacing),
+                # staying in the current layout and never touching letters.
+                punctuated = self._punctuation_correction(buffer, current)
+                if punctuated is None:
+                    return
+                converted = punctuated
+                target = current
         else:
             converted = self.converter.convert(buffer, current, target)
         if converted == buffer:
@@ -1332,6 +1370,7 @@ class LinguaFixDaemon:
         self.detector.set_user_words(load_user_dictionary(new_config.dictionary_custom_path))
         # The vocabularies may have changed, so any cached corrector is stale.
         self._typo_correctors.clear()
+        self._punctuation = self._build_punctuation()
         self._load_snippets(new_config)
         self._skip_regex = _compile_skip_regex(new_config.custom_skip_regex)
         self._excepted_apps = {app.lower() for app in new_config.exceptions_apps}

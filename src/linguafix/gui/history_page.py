@@ -17,6 +17,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
+from .async_utils import run_in_background  # noqa: E402
 from .state import GuiState  # noqa: E402
 
 REFRESH_MS = 2000
@@ -47,6 +48,8 @@ class HistoryPage(Gtk.Box):
         self._state = state
         self._toasts = toast_overlay
         self._rows: list[Gtk.Widget] = []
+        self._refreshing = False
+        self._refresh_pending = False
 
         heading = Gtk.Label(label="История исправлений", xalign=0.0)
         heading.add_css_class("title-2")
@@ -78,21 +81,40 @@ class HistoryPage(Gtk.Box):
         return True
 
     def refresh(self) -> None:
-        """Rebuild the list from the daemon's metadata-only snapshot."""
+        """Rebuild the list from the daemon snapshot, fetched off the main thread.
+
+        ``read_history`` sends a signal to the daemon and reads a file back; doing
+        that on the GTK main thread would stall the window, so it runs on a worker.
+        """
+        if self._refreshing:
+            self._refresh_pending = True
+            return
+        self._refreshing = True
+        run_in_background(self._read_history_safe, on_done=self._apply_history)
+
+    def _read_history_safe(self) -> list[dict[str, object]]:
+        try:
+            return self._state.read_history()
+        except Exception:  # pragma: no cover - defensive, never break the UI
+            return []
+
+    def _apply_history(self, data: object) -> None:
+        self._refreshing = False
+        entries = data if isinstance(data, list) else []
         for row in self._rows:
             self._list.remove(row)
         self._rows.clear()
-        try:
-            entries = self._state.read_history()
-        except Exception:  # pragma: no cover - defensive, never break the UI
-            entries = []
-
         entries = entries[:MAX_ROWS]
         self._empty.set_visible(not entries)
         self._list.set_visible(bool(entries))
         now = time.time()
         for index, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                continue
             self._list.append(self._make_row(entry, now, is_latest=index == 0))
+        if self._refresh_pending:
+            self._refresh_pending = False
+            self.refresh()
 
     def _make_row(self, entry: dict[str, object], now: float, *, is_latest: bool) -> Gtk.Widget:
         length = entry.get("length", 0)

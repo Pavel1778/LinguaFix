@@ -92,6 +92,14 @@ DEFAULT_MIN_VOWEL_RATIO: Final[float] = 0.15
 # least ``DEFAULT_TYPO_MIN_WORD_LENGTH`` characters.
 DEFAULT_TYPO_MAX_DISTANCE: Final[int] = 1
 DEFAULT_TYPO_MIN_WORD_LENGTH: Final[int] = 4
+# Punctuation cleanup. Off by default: rewriting punctuation inside code,
+# formulas or URLs does more harm than good, so the user opts in. The
+# sub-flags stay on so enabling the master switch is useful out of the box.
+DEFAULT_PUNCTUATION_CORRECTION: Final[bool] = False
+DEFAULT_PUNCTUATION_DASHES: Final[bool] = True
+DEFAULT_PUNCTUATION_ELLIPSIS: Final[bool] = True
+DEFAULT_PUNCTUATION_SMART_QUOTES: Final[bool] = False
+DEFAULT_PUNCTUATION_FIX_SPACING: Final[bool] = True
 # The manual-fix hotkey default. A double tap of the same modifier works on
 # every keyboard, unlike the previous ``PAUSE`` default (many laptops have no
 # Pause key). ``SHIFT+SHIFT`` is the double-tap of the shift family.
@@ -192,6 +200,7 @@ _SECTION_PREFIXES: Final[dict[str, str]] = {
     "dictionaries": "dictionary_",
     "typo": "typo_",
     "t9": "typo_",
+    "punctuation": "punctuation_",
     "expander": "text_expander_",
     "selection": "selection_fix_",
     "apps": "exceptions_",
@@ -367,6 +376,13 @@ class Config:
     typo_correction: bool = False
     typo_max_distance: int = DEFAULT_TYPO_MAX_DISTANCE
     typo_min_word_length: int = DEFAULT_TYPO_MIN_WORD_LENGTH
+
+    # --- punctuation cleanup ----------------------------------------------
+    punctuation_correction: bool = DEFAULT_PUNCTUATION_CORRECTION
+    punctuation_dashes: bool = DEFAULT_PUNCTUATION_DASHES
+    punctuation_ellipsis: bool = DEFAULT_PUNCTUATION_ELLIPSIS
+    punctuation_smart_quotes: bool = DEFAULT_PUNCTUATION_SMART_QUOTES
+    punctuation_fix_spacing: bool = DEFAULT_PUNCTUATION_FIX_SPACING
 
     # --- Stage 7: text expansion (snippets) --------------------------------
     text_expander_enabled: bool = False
@@ -547,6 +563,13 @@ class Config:
         self.typo_min_word_length = int(self.typo_min_word_length)
         if self.typo_min_word_length < 3:
             raise ValueError("typo_min_word_length must be >= 3")
+
+        # --- punctuation cleanup -------------------------------------------
+        self.punctuation_correction = bool(self.punctuation_correction)
+        self.punctuation_dashes = bool(self.punctuation_dashes)
+        self.punctuation_ellipsis = bool(self.punctuation_ellipsis)
+        self.punctuation_smart_quotes = bool(self.punctuation_smart_quotes)
+        self.punctuation_fix_spacing = bool(self.punctuation_fix_spacing)
 
         # --- Stage 7: text expansion ---------------------------------------
         self.text_expander_enabled = bool(self.text_expander_enabled)

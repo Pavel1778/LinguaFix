@@ -15,6 +15,7 @@ from typing import Any
 
 import pytest
 
+import linguafix.app_focus as app_focus
 from linguafix.config import Config
 
 _DIST_PACKAGES = "/usr/lib/python3/dist-packages"
@@ -62,10 +63,11 @@ def test_window_creates_with_expected_pages(gui_state: Any) -> None:
 
     app = Adw.Application(application_id="io.github.pavel1778.LinguaFixTest")
     window = LinguaFixWindow(gui_state, app)
-    assert len(window.stack.get_pages()) == 4
+    names = {page.get_name() for page in window.stack.get_pages()}
+    assert names == {"home", "settings", "dictionary", "typo", "history"}
     assert window.home.toggle.state == "off"
     window._on_show_advanced(None, None)
-    assert len(window.stack.get_pages()) == 5
+    assert len(window.stack.get_pages()) == 6
 
 
 def test_big_toggle_start_and_stop(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -88,18 +90,23 @@ def test_big_toggle_start_and_stop(gui_state: Any, monkeypatch: pytest.MonkeyPat
     gi.require_version("Adw", "1")
     from gi.repository import Adw
 
+    monkeypatch.setattr(app_focus, "get_active_app", lambda: None)
+
     page = HomePage(gui_state, Adw.ToastOverlay())
     assert page.toggle.state == STATE_OFF
 
-    # Turn on: the service is not active, so a click starts it.
+    # Turn on: the service is not active, so a click starts it. The click must
+    # return at once (the start runs on a worker thread), leaving the button busy.
     page._on_toggle_clicked()
     assert calls == ["start"]
     assert page.toggle.state == STATE_BUSY
+    page._on_toggle_done(True)
 
-    # The service is now active; the next click stops it.
+    # The service is now active; a synchronous status apply flips the button ON.
     active["value"] = True
-    page.refresh()
+    page._apply_status(page._collect_status())
     assert page.toggle.state == STATE_ON
+
     page._on_toggle_clicked()
     assert calls == ["start", "stop"]
     assert page.toggle.state == STATE_BUSY
@@ -698,7 +705,7 @@ def test_window_menu_actions(gui_state: Any) -> None:
     window._on_show_advanced(None, None)
     window._on_show_advanced(None, None)
     names = {page.get_name() for page in window.stack.get_pages()}
-    assert names == {"home", "settings", "dictionary", "history", "advanced"}
+    assert names == {"home", "settings", "dictionary", "typo", "history", "advanced"}
 
 
 def test_about_window_builds() -> None:
@@ -811,8 +818,9 @@ def test_home_page_quiet_hours_indicator(gui_state: Any, monkeypatch: pytest.Mon
         def add_toast(self, _t: object) -> None:
             pass
 
+    monkeypatch.setattr(app_focus, "get_active_app", lambda: None)
     page = HomePage(gui_state, _Toasts())
-    page.refresh()
+    page._apply_status(page._collect_status())
     assert page._pause.get_visible() is True
     assert "тихие часы" in page._pause.get_label()
 
@@ -824,3 +832,77 @@ def test_gui_state_in_quiet_hours() -> None:
     config = Config(quiet_hours_enabled=True, quiet_hours_start="00:00", quiet_hours_end="23:59")
     state = GuiState(config=config)
     assert state.in_quiet_hours() is True
+
+
+def test_typo_page_master_toggle(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gui_state, "save", lambda: None)
+    monkeypatch.setattr(gui_state, "reload_config", lambda: True)
+    from linguafix.gui.typo_page import TypoPage
+    from linguafix.gui.widgets.big_toggle import STATE_OFF, STATE_ON
+
+    class _Toasts:
+        def add_toast(self, _t: object) -> None:
+            pass
+
+    page = TypoPage(gui_state, _Toasts())
+    assert page.toggle.state == STATE_OFF
+    page._on_toggle_clicked()
+    assert gui_state.config.typo_correction is True
+    assert gui_state.config.punctuation_correction is True
+    assert page.toggle.state == STATE_ON
+    page._on_toggle_clicked()
+    assert gui_state.config.typo_correction is False
+    assert gui_state.config.punctuation_correction is False
+    assert page.toggle.state == STATE_OFF
+
+
+def test_typo_page_reset_restores_defaults(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(gui_state, "save", lambda: None)
+    from linguafix.gui.typo_page import TypoPage
+
+    class _Toasts:
+        def add_toast(self, _t: object) -> None:
+            pass
+
+    gui_state.config.typo_correction = True
+    gui_state.config.typo_max_distance = 2
+    gui_state.config.punctuation_smart_quotes = True
+    page = TypoPage(gui_state, _Toasts())
+    page._on_reset(None)
+    assert gui_state.config.typo_correction is False
+    assert gui_state.config.typo_max_distance == 1
+    assert gui_state.config.punctuation_smart_quotes is False
+    assert gui_state.config.punctuation_dashes is True
+
+
+def test_typo_page_punctuation_switch_persists(
+    gui_state: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    saved: list[str] = []
+    monkeypatch.setattr(gui_state, "save", lambda: saved.append("save"))
+    from linguafix.gui.typo_page import TypoPage
+
+    class _Toasts:
+        def add_toast(self, _t: object) -> None:
+            pass
+
+    page = TypoPage(gui_state, _Toasts())
+    page._dashes_switch.set_active(not page._dashes_switch.get_active())
+    assert gui_state.config.punctuation_dashes is False
+    assert saved == ["save"]
+
+
+def test_desktop_entry_matches_app_id() -> None:
+    """The launcher must declare the same app-id the GUI runs under.
+
+    GNOME matches a running window to its launcher by ``StartupWMClass``; if it
+    does not equal the ``Gtk.Application`` id, the window shows a generic icon
+    and cannot be pinned or grouped with the installed entry.
+    """
+    from pathlib import Path
+
+    from linguafix.gui.app import APP_ID
+
+    root = Path(__file__).resolve().parents[1]
+    entry = (root / "data" / "linguafix.desktop").read_text(encoding="utf-8")
+    assert f"StartupWMClass={APP_ID}\n" in entry
