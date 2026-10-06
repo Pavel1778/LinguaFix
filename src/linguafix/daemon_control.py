@@ -38,6 +38,12 @@ START_TIMEOUT: Final[float] = 5.0
 STOP_GRACE: Final[float] = 3.0
 POLL_INTERVAL: Final[float] = 0.1
 SYSTEMCTL_TIMEOUT: Final[float] = 5.0
+# When ``systemctl`` times out (a hung or missing user D-Bus) every probe would
+# otherwise pay the full timeout again. After one failure the module stops
+# calling systemctl for a short while and falls back to the PID lock file, which
+# is enough to report daemon state without a multi-second stall per refresh.
+SYSTEMCTL_BACKOFF: Final[float] = 10.0
+_systemctl_backoff_until: float = 0.0
 
 
 def lock_path() -> Path:
@@ -115,8 +121,16 @@ def systemctl_available() -> bool:
 def _systemctl(
     args: list[str], timeout: float = SYSTEMCTL_TIMEOUT
 ) -> subprocess.CompletedProcess[str] | None:
-    """Run ``systemctl --user <args>`` returning ``None`` on any failure."""
+    """Run ``systemctl --user <args>`` returning ``None`` on any failure.
+
+    A timeout (a hung user D-Bus) starts a short backoff during which systemctl
+    is not called at all: the PID lock file still answers "is a daemon running",
+    and this keeps a stalled systemctl from freezing every refresh in a caller.
+    """
+    global _systemctl_backoff_until
     if not systemctl_available():
+        return None
+    if time.monotonic() < _systemctl_backoff_until:
         return None
     try:
         return subprocess.run(
@@ -127,6 +141,7 @@ def _systemctl(
             timeout=timeout,
         )
     except (OSError, subprocess.SubprocessError) as exc:
+        _systemctl_backoff_until = time.monotonic() + SYSTEMCTL_BACKOFF
         logger.debug("systemctl %s failed: %s", args, exc)
         return None
 
