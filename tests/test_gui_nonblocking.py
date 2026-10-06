@@ -89,7 +89,7 @@ def test_slow_probe_does_not_block_the_main_loop() -> None:
 
     _wait_for_worker_idle()
     state = _state_with_slow_collector(delay=1.0)
-    page = HomePage(state, Adw.ToastOverlay())  # type: ignore[arg-type]
+    page = HomePage(state, Adw.ToastOverlay())
     page.refresh()
     assert page._probe_in_flight is True
 
@@ -114,7 +114,7 @@ def test_slow_probe_result_is_applied_after_it_completes() -> None:
 
     _wait_for_worker_idle()
     state = _state_with_slow_collector(delay=0.3)
-    page = HomePage(state, Adw.ToastOverlay())  # type: ignore[arg-type]
+    page = HomePage(state, Adw.ToastOverlay())
     page.refresh()
     _spin(1.0)
     assert page.toggle.state == STATE_ON
