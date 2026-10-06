@@ -40,6 +40,28 @@ def _gtk_usable() -> bool:
 pytestmark = pytest.mark.skipif(not _gtk_usable(), reason="GTK4/libadwaita or display unavailable")
 
 
+def _pump(iterations: int = 60, delay: float = 0.005) -> None:
+    """Spin the GTK main loop so pending async callbacks run.
+
+    The home page and the history page run every daemon probe on a worker
+    thread and deliver the result through ``GLib.idle_add``. A test that clicks
+    a button must therefore let the worker finish and the main loop turn before
+    asserting. ``delay`` gives the worker thread time to complete its task.
+    """
+    import time
+
+    import gi
+
+    gi.require_version("GLib", "2.0")
+    from gi.repository import GLib
+
+    context = GLib.MainContext.default()
+    for _ in range(iterations):
+        while context.pending():
+            context.iteration(False)
+        time.sleep(delay)
+
+
 @pytest.fixture
 def gui_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
     """Return a :class:`GuiState` isolated to ``tmp_path`` and a fake backend."""
@@ -91,18 +113,25 @@ def test_big_toggle_start_and_stop(gui_state: Any, monkeypatch: pytest.MonkeyPat
     page = HomePage(gui_state, Adw.ToastOverlay())
     assert page.toggle.state == STATE_OFF
 
-    # Turn on: the service is not active, so a click starts it.
+    # Turn on: the service is not active, so a click starts it. The button goes
+    # busy immediately, then settles on the real daemon state once the async
+    # start and the reconcile poll have both completed.
     page._on_toggle_clicked()
-    assert calls == ["start"]
     assert page.toggle.state == STATE_BUSY
+    _pump()
+    assert calls == ["start"]
 
     # The service is now active; the next click stops it.
     active["value"] = True
     page.refresh()
+    _pump()
     assert page.toggle.state == STATE_ON
     page._on_toggle_clicked()
-    assert calls == ["start", "stop"]
     assert page.toggle.state == STATE_BUSY
+    active["value"] = False
+    _pump()
+    assert calls == ["start", "stop"]
+    assert page.toggle.state == STATE_OFF
 
 
 def test_undo_button_asks_daemon(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -122,6 +151,7 @@ def test_undo_button_asks_daemon(gui_state: Any, monkeypatch: pytest.MonkeyPatch
 
     page = HomePage(gui_state, Adw.ToastOverlay())
     page._on_undo_clicked(None)
+    _pump()
     assert calls == ["undo"]
 
 
@@ -193,9 +223,11 @@ def test_autostart_switch_enables_and_disables(
 
     page = HomePage(gui_state, Adw.ToastOverlay())
     page.autostart_row.set_active(True)
+    _pump()
     assert calls == [True]
     enabled["value"] = True
     page.autostart_row.set_active(False)
+    _pump()
     assert calls == [True, False]
 
 
@@ -460,6 +492,7 @@ def test_app_exceptions_set_apps_and_detect(gui_state: Any) -> None:
 
     entry = _Entry()
     widget._on_detect_clicked(None, entry)
+    _pump()
     assert entry.get_text() == "firefox"
 
 
@@ -541,6 +574,29 @@ def test_advanced_page_typo_group_reflects_config(
     assert gui_state.config.typo_correction is False
 
 
+def test_advanced_page_punctuation_group_reflects_config(
+    gui_state: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gui_state, "save", lambda: None)
+    from linguafix.gui.advanced_page import AdvancedPage
+
+    gui_state.config.punctuation_enabled = True
+    gui_state.config.punctuation_smart_quotes = True
+    page = AdvancedPage(gui_state)
+
+    # The group is built and reads its values from the config.
+    switch = next(
+        row
+        for row in page._punctuation_rows
+        if getattr(row, "_linguafix_field", None) == "punctuation_enabled"
+    )
+    assert switch.get_active() is True
+    assert page._punctuation_switch.get_active() is True
+    # Toggling the master switch writes through to the config.
+    page._punctuation_switch.set_active(False)
+    assert gui_state.config.punctuation_enabled is False
+
+
 def test_advanced_page_expander_group_reflects_config(
     gui_state: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -595,6 +651,7 @@ def test_app_layout_map_detect(gui_state: Any) -> None:
 
     widget = AppLayoutMap("Раскладка", on_detect=lambda: "firefox")
     widget._on_detect_clicked(None)
+    _pump()
     assert widget._app_entry.get_text() == "firefox"
 
     no_detect = AppLayoutMap("Раскладка")

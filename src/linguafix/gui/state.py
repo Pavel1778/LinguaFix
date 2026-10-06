@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Final
 
@@ -27,6 +28,7 @@ from ..daemon_control import (
     stop as daemon_stop,
     undo_last_fix as daemon_undo_last_fix,
 )
+from .async_tasks import run_async
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,19 @@ LANGUAGE_LABELS: Final[dict[str, str]] = {
     "de": "Deutsch",
     "fr": "Français",
 }
+
+
+@dataclass
+class StatusSnapshot:
+    """A consistent set of daemon probes gathered on a worker thread.
+
+    The home page renders one snapshot at a time so the toggle, the status row
+    and the autostart switch never disagree while a probe is in flight.
+    """
+
+    active: bool = False
+    layout: str = ""
+    autostart: bool = False
 
 
 @dataclass
@@ -172,6 +187,79 @@ class GuiState:
         if self.last_fix_at is None:
             return None
         return int(time.monotonic() - self.last_fix_at)
+
+    # --- non-blocking probes ---------------------------------------------
+    # Every method below runs a blocking callable (a subprocess or a D-Bus
+    # round trip) in a worker thread and returns the result on the main loop.
+    # The GUI never calls the synchronous variants from a signal handler,
+    # because a slow ``systemctl`` or ``g3kb-switch`` would freeze the window
+    # (the "Приложение не отвечает" hang).
+    def probe_is_active(self, on_done: Callable[[bool], None]) -> None:
+        """Deliver the daemon's running state asynchronously."""
+        run_async(daemon_is_running, on_done, lambda _exc: on_done(False))
+
+    def probe_layout(self, on_done: Callable[[str], None]) -> None:
+        """Deliver the current keyboard layout asynchronously."""
+        run_async(self.current_layout, on_done, lambda _exc: on_done(""))
+
+    def probe_autostart(self, on_done: Callable[[bool], None]) -> None:
+        """Deliver the autostart state asynchronously."""
+        run_async(daemon_autostart_enabled, on_done, lambda _exc: on_done(False))
+
+    def probe_active_app(self, on_done: Callable[[str | None], None]) -> None:
+        """Deliver the focused application's short name asynchronously."""
+        try:
+            from ..app_focus import get_active_app
+        except ImportError:  # pragma: no cover - defensive
+            on_done(None)
+            return
+        run_async(get_active_app, on_done, lambda _exc: on_done(None))
+
+    def probe_toggle(
+        self,
+        want_active: bool,
+        on_done: Callable[[bool], None],
+        on_error: Callable[[BaseException], None] | None = None,
+    ) -> None:
+        """Start or stop the daemon off the main thread, then report success.
+
+        ``on_done`` receives the start/stop return value; the caller still polls
+        :meth:`probe_is_active` afterwards, because systemd can report success
+        before ``is-active`` flips.
+        """
+        work = self.start if want_active else self.stop
+        run_async(work, on_done, on_error)
+
+    def probe_undo(self, on_done: Callable[[bool], None]) -> None:
+        """Ask the daemon to undo its last fix, off the main thread."""
+        run_async(self.undo_last_fix, on_done, lambda _exc: on_done(False))
+
+    def probe_set_autostart(self, enabled: bool, on_done: Callable[[bool], None]) -> None:
+        """Enable or disable autostart, off the main thread."""
+        run_async(lambda: self.set_autostart(enabled), on_done, lambda _exc: on_done(False))
+
+    def probe_status_snapshot(self, on_done: Callable[[StatusSnapshot], None]) -> None:
+        """Gather active/layout/autostart in one worker pass and deliver them.
+
+        All three probes run on the same worker thread, so the UI updates once
+        with a consistent snapshot instead of three times with partial state.
+        """
+        run_async(self._collect_status, on_done, lambda _exc: on_done(StatusSnapshot()))
+
+    def _collect_status(self) -> StatusSnapshot:
+        return StatusSnapshot(
+            active=daemon_is_running(),
+            layout=self.current_layout(),
+            autostart=daemon_autostart_enabled(),
+        )
+
+    def probe_current_app_excepted(self, on_done: Callable[[str | None], None]) -> None:
+        """Deliver the focused app name only when it is on the exception list."""
+
+        def _check(app: str | None) -> None:
+            on_done(app if self.is_app_excepted(app) else None)
+
+        self.probe_active_app(_check)
 
     def status_summary(self) -> str:
         """Return a short human-readable status line."""

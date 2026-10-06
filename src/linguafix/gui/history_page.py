@@ -78,14 +78,25 @@ class HistoryPage(Gtk.Box):
         return True
 
     def refresh(self) -> None:
-        """Rebuild the list from the daemon's metadata-only snapshot."""
+        """Rebuild the list from the daemon's metadata-only snapshot.
+
+        The history request (a signal plus a file read) runs off the main thread
+        so a slow or unresponsive daemon cannot freeze the window.
+        """
+        from .async_tasks import run_async
+
+        run_async(self._load_entries, self._render_entries, lambda _exc: self._render_entries([]))
+
+    def _load_entries(self) -> list[dict[str, object]]:
+        try:
+            return self._state.read_history()
+        except Exception:  # pragma: no cover - defensive, never break the UI
+            return []
+
+    def _render_entries(self, entries: list[dict[str, object]]) -> None:
         for row in self._rows:
             self._list.remove(row)
         self._rows.clear()
-        try:
-            entries = self._state.read_history()
-        except Exception:  # pragma: no cover - defensive, never break the UI
-            entries = []
 
         entries = entries[:MAX_ROWS]
         self._empty.set_visible(not entries)

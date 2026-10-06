@@ -44,6 +44,7 @@ from .converter import LayoutConverter
 from .detector import LanguageDetector
 from .dictionary import load_user_dictionary
 from .injector import TextInjector
+from .punctuation import PunctuationProcessor
 from .selection_fix import SelectionFix
 from .switcher import LayoutSwitcher
 from .text_expander import TextExpander
@@ -294,6 +295,11 @@ class LinguaFixDaemon:
         self._skip_regex = _compile_skip_regex(config.custom_skip_regex)
         self._excepted_apps = {app.lower() for app in config.exceptions_apps}
         self._last_word: str = ""
+        # Trailing punctuation marks typed after a word, kept aside from the
+        # word buffer so the layout/typo passes never see them. Flushed when the
+        # next word starts or the buffer resets (the opt-in punctuation pass).
+        self._punctuation_run: str = ""
+        self._punctuation_time: float = 0.0
         self.detector.set_context_weight(config.context_weight if config.context_analysis else 0.0)
         self.detector.set_dictionary_size(config.dictionary_size)
         user_words = load_user_dictionary(config.dictionary_custom_path)
@@ -302,6 +308,9 @@ class LinguaFixDaemon:
         # T9: one corrector per language, built lazily from the detector's
         # vocabulary the first time a typo is checked.
         self._typo_correctors: dict[str, TypoCorrector] = {}
+        # T9 punctuation clean-up. Rebuilt on every reload so a settings change
+        # takes effect without a restart.
+        self.punctuation = self._build_punctuation(config)
         # Text expansion (snippets). Loaded once here and re-loaded on reload.
         self._expander = TextExpander()
         self._load_snippets(config)
@@ -613,6 +622,10 @@ class LinguaFixDaemon:
                 self._process_buffer(boundary=True, boundary_char=" ")
             else:
                 self._reset_buffer()
+            # The space now sits after any punctuation run, so the run is no
+            # longer the trailing text; dropping it avoids deleting the wrong
+            # characters. (A run before a space is a deliberate pause.)
+            self._punctuation_run = ""
             return
 
         if name in _ENTER_KEYS:
@@ -620,6 +633,7 @@ class LinguaFixDaemon:
                 self._process_buffer(boundary=True, boundary_char="\n")
             else:
                 self._reset_buffer()
+            self._punctuation_run = ""
             return
 
         if name in _TAB_KEYS:
@@ -627,6 +641,7 @@ class LinguaFixDaemon:
                 self._process_buffer(boundary=True, boundary_char="\t")
             else:
                 self._reset_buffer()
+            self._punctuation_run = ""
             return
 
         char = self._key_to_char(code)
@@ -634,10 +649,19 @@ class LinguaFixDaemon:
             return
 
         if self.config.on_punctuation and char in self.config.punctuation_chars:
-            # A punctuation boundary ends the word. The character itself is not
-            # buffered: it is not part of the word and must not be deleted.
-            self._process_buffer(boundary=True)
+            # A punctuation boundary ends the word. The mark is *not* buffered
+            # (it must never reach the layout/typo passes) but is collected into
+            # a trailing run so the opt-in punctuation pass can see it.
+            self._process_buffer(boundary=True, boundary_char=char)
+            if self.config.punctuation_enabled:
+                self._punctuation_run += char
+                self._punctuation_time = time.time()
             return
+
+        # A real character after a punctuation run starts a new word: clean the
+        # run up now (e.g. ``текст--`` -> ``текст—``) before the word begins.
+        if self._punctuation_run:
+            self._flush_punctuation()
 
         with self._lock:
             self.buffer += char
@@ -894,6 +918,46 @@ class LinguaFixDaemon:
                 self._notify()
         return True
 
+    @staticmethod
+    def _build_punctuation(config: Config) -> PunctuationProcessor:
+        """Build the punctuation processor from ``config``."""
+        return PunctuationProcessor(
+            replace_dashes=config.punctuation_dashes,
+            replace_ellipsis=config.punctuation_ellipsis,
+            smart_quotes=config.punctuation_smart_quotes,
+            fix_spacing=config.punctuation_spacing,
+            auto_capitalize=config.punctuation_auto_capitalize,
+            auto_period=config.punctuation_auto_period,
+        )
+
+    def _flush_punctuation(self) -> None:
+        """Clean up the trailing run of punctuation marks, if the pass is on.
+
+        The marks are kept aside from the word buffer so the layout/typo passes
+        never see them; only the run itself is rewritten. This is what turns
+        ``текст--`` into ``текст—`` without touching the word. The replacement
+        deletes exactly the number of characters in the run, because each mark
+        (and each space) was one key press.
+        """
+        run = self._punctuation_run
+        self._punctuation_run = ""
+        if not run or not self.config.punctuation_enabled:
+            return
+        current = self.switcher.get_current_layout()
+        cleaned = self.punctuation.process(run, current)
+        if cleaned == run:
+            return
+        if self._skip_regex is not None and self._skip_regex.search(run):
+            logger.debug("Punctuation run matches custom_skip_regex; skipping")
+            return
+        if self._shutdown_requested or self.dry_run:
+            return
+        logger.info("Punctuation clean-up on %d trailing characters", len(run))
+        if self.injector.replace_text(len(run), cleaned, current):
+            self._record_undo(run, current, len(run), source=current, target=current)
+            if self.config.notify_on_fix:
+                self._notify()
+
     def _typo_correction(self, buffer: str, current: str) -> str | None:
         """Return a single-word typo correction for ``buffer``, or ``None``.
 
@@ -1076,6 +1140,10 @@ class LinguaFixDaemon:
             self.buffer = ""
             self._scancodes = []
             self._suspended_buffer = None
+        # The trailing punctuation run is dropped, not cleaned: the caret is
+        # about to move (navigation key) or a boundary key has already been
+        # processed, so deleting the run would target the wrong text.
+        self._punctuation_run = ""
 
     def _process_buffer(
         self, *, force: bool = False, boundary: bool = False, boundary_char: str = ""
@@ -1332,6 +1400,7 @@ class LinguaFixDaemon:
         self.detector.set_user_words(load_user_dictionary(new_config.dictionary_custom_path))
         # The vocabularies may have changed, so any cached corrector is stale.
         self._typo_correctors.clear()
+        self.punctuation = self._build_punctuation(new_config)
         self._load_snippets(new_config)
         self._skip_regex = _compile_skip_regex(new_config.custom_skip_regex)
         self._excepted_apps = {app.lower() for app in new_config.exceptions_apps}
@@ -1582,6 +1651,15 @@ class LinguaFixDaemon:
             and time.time() - self.last_key_time > self.config.analysis_timeout
         ):
             self._process_buffer()
+        # A punctuation run with no following key press is the last text the user
+        # typed; clean it up after the same idle timeout so ``текст--`` becomes
+        # ``текст—`` without a trailing space. This is the safe moment: no other
+        # key is pending, so the caret sits right after the run.
+        if (
+            self._punctuation_run
+            and time.time() - self._punctuation_time > self.config.analysis_timeout
+        ):
+            self._flush_punctuation()
 
     def stop(self) -> None:
         """Request a graceful shutdown (useful for in-process tests)."""

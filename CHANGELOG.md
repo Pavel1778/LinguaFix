@@ -9,6 +9,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **GUI no longer freezes** ("Приложение не отвечает"). The home page probed
+  `systemctl is-active`, `g3kb-switch -p` and `systemctl is-enabled` on the GTK
+  main thread on every 1.5 s tick, each with a multi-second timeout; a hung
+  systemd or g3kb-switch blocked the whole window. All daemon probes now run on
+  a worker thread (`gui/async_tasks.py`) and deliver a single consistent
+  `StatusSnapshot` back through `GLib.idle_add`. The toggle, the autostart
+  switch, the app-detection buttons and the history read are all non-blocking.
+- The header tab labels are no longer truncated to «Глав…». The window opens
+  wide enough for the full labels and, below 600 sp, a `ViewSwitcherBar`
+  breakpoint reveals them in the bottom bar.
+
+### Added
+
+- **Punctuation clean-up (part of T9)**, opt-in and off by default: `--` → `—`,
+  `...` → `…`, spacing around `, . ! ? ; :`, and guillemets in Cyrillic layouts.
+  It never changes a word, only the punctuation and spacing around it. Auto-
+  capitalisation and a sentence-final period are separate opt-in toggles.
+  Configured in the GUI (Advanced → «Пунктуация») or with the `punctuation_*`
+  keys.
+- The T9 settings and the punctuation settings are both editable in the GUI
+  Advanced page.
+
 - Landing page mobile audit (8 items): removed the leaked developer note
   «Плейсхолдер — замените реальным скриншотом» from all four mock-up SVGs;
   replaced the external shields.io footer badges (broken behind a slow/blocked

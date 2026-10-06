@@ -10,6 +10,8 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk  # noqa: E402
 
+from ..async_tasks import run_async  # noqa: E402
+
 
 class AppExceptionsList(Adw.PreferencesGroup):
     """A preferences group listing application process names.
@@ -81,9 +83,9 @@ class AppExceptionsList(Adw.PreferencesGroup):
     def _on_detect_clicked(self, _button: Gtk.Button, entry: Adw.EntryRow) -> None:
         if self._on_detect is None:
             return
-        name = self._on_detect()
-        if name:
-            entry.set_text(name)
+        # The probe is a D-Bus round trip that can block; run it off the main
+        # thread so the click never freezes the window.
+        run_async(self._on_detect, lambda name: entry.set_text(name) if name else None)
 
     def _emit(self) -> None:
         if self._on_change is not None:

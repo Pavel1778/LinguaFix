@@ -92,6 +92,9 @@ DEFAULT_MIN_VOWEL_RATIO: Final[float] = 0.15
 # least ``DEFAULT_TYPO_MIN_WORD_LENGTH`` characters.
 DEFAULT_TYPO_MAX_DISTANCE: Final[int] = 1
 DEFAULT_TYPO_MIN_WORD_LENGTH: Final[int] = 4
+# Punctuation clean-up. Off by default: it rewrites what the user typed, and a
+# wrong guess (auto-capitalisation, an added period) is more annoying than none.
+DEFAULT_PUNCTUATION_ENABLED: Final[bool] = False
 # The manual-fix hotkey default. A double tap of the same modifier works on
 # every keyboard, unlike the previous ``PAUSE`` default (many laptops have no
 # Pause key). ``SHIFT+SHIFT`` is the double-tap of the shift family.
@@ -192,6 +195,8 @@ _SECTION_PREFIXES: Final[dict[str, str]] = {
     "dictionaries": "dictionary_",
     "typo": "typo_",
     "t9": "typo_",
+    "punctuation": "punctuation_",
+    "punctuations": "punctuation_",
     "expander": "text_expander_",
     "selection": "selection_fix_",
     "apps": "exceptions_",
@@ -367,6 +372,15 @@ class Config:
     typo_correction: bool = False
     typo_max_distance: int = DEFAULT_TYPO_MAX_DISTANCE
     typo_min_word_length: int = DEFAULT_TYPO_MIN_WORD_LENGTH
+
+    # --- Task F: T9 punctuation clean-up -----------------------------------
+    punctuation_enabled: bool = DEFAULT_PUNCTUATION_ENABLED
+    punctuation_dashes: bool = True
+    punctuation_ellipsis: bool = True
+    punctuation_smart_quotes: bool = False
+    punctuation_spacing: bool = True
+    punctuation_auto_capitalize: bool = False
+    punctuation_auto_period: bool = False
 
     # --- Stage 7: text expansion (snippets) --------------------------------
     text_expander_enabled: bool = False
@@ -547,6 +561,15 @@ class Config:
         self.typo_min_word_length = int(self.typo_min_word_length)
         if self.typo_min_word_length < 3:
             raise ValueError("typo_min_word_length must be >= 3")
+
+        # --- T9 punctuation clean-up ---------------------------------------
+        self.punctuation_enabled = bool(self.punctuation_enabled)
+        self.punctuation_dashes = bool(self.punctuation_dashes)
+        self.punctuation_ellipsis = bool(self.punctuation_ellipsis)
+        self.punctuation_smart_quotes = bool(self.punctuation_smart_quotes)
+        self.punctuation_spacing = bool(self.punctuation_spacing)
+        self.punctuation_auto_capitalize = bool(self.punctuation_auto_capitalize)
+        self.punctuation_auto_period = bool(self.punctuation_auto_period)
 
         # --- Stage 7: text expansion ---------------------------------------
         self.text_expander_enabled = bool(self.text_expander_enabled)

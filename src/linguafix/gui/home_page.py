@@ -8,7 +8,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
-from .state import MODE_LABELS, GuiState  # noqa: E402
+from .state import MODE_LABELS, GuiState, StatusSnapshot  # noqa: E402
 from .widgets.big_toggle import STATE_BUSY, STATE_OFF, STATE_ON, BigToggle  # noqa: E402
 from .widgets.mode_switcher import ModeSwitcher  # noqa: E402
 from .widgets.status_row import StatusRow  # noqa: E402
@@ -17,7 +17,13 @@ REFRESH_MS = 1500
 
 
 class HomePage(Gtk.Box):
-    """Main tab of the LinguaFix window."""
+    """Main tab of the LinguaFix window.
+
+    Every daemon probe is asynchronous. The page never calls ``systemctl`` or
+    ``g3kb-switch`` on the GTK main thread: a slow probe used to freeze the
+    whole window ("Приложение не отвечает"). Instead the page schedules a probe
+    and repaints when its result arrives.
+    """
 
     def __init__(self, state: GuiState, toast_overlay: Adw.ToastOverlay) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=18)
@@ -27,6 +33,17 @@ class HomePage(Gtk.Box):
         self.set_margin_end(24)
         self._state = state
         self._toasts = toast_overlay
+        # Last known daemon/autostart state, so a click can compute the desired
+        # target without a blocking read.
+        self._last_active = False
+        self._last_autostart = False
+        # Guards against queueing a new status probe every 1.5 s while a slow
+        # one (systemctl + g3kb-switch) is still running on the worker thread.
+        self._probe_in_flight = False
+        # True while an autostart enable/disable is in flight. A snapshot taken
+        # before the write landed must not overwrite the value the user just
+        # chose, or a quick second toggle would be compared against stale state.
+        self._autostart_pending = False
 
         self._toggle = BigToggle(on_toggle=self._on_toggle_clicked)
         self.append(self._toggle)
@@ -74,25 +91,32 @@ class HomePage(Gtk.Box):
 
     # --- actions ----------------------------------------------------------
     def _on_toggle_clicked(self) -> None:
-        want_active = not self._state.is_active()
+        want_active = not self._last_active
         self._toggle.set_busy()
-        # Perform the (blocking) start/stop, then poll until the daemon state
-        # matches the request. Polling rather than trusting the return value is
-        # what makes the button reliable: systemd start/stop can return before
-        # ``is-active`` flips, which previously left the UI showing a stale
-        # state (the "works every other time" bug).
-        ok = self._state.start() if want_active else self._state.stop()
+        self._state.probe_toggle(
+            want_active,
+            lambda ok: self._on_toggle_done(want_active, ok),
+            lambda _exc: self._on_toggle_done(want_active, False),
+        )
+
+    def _on_toggle_done(self, want_active: bool, ok: bool) -> None:
         if not ok:
             self._toast("Не удалось переключить демон", ok=False)
+        # Poll until the daemon state matches the request. Polling (rather than
+        # trusting the return value) is what makes the button reliable: systemd
+        # start/stop can return before ``is-active`` flips.
         self._reconcile(want_active, attempt=0)
 
-    def _reconcile(self, want_active: bool, attempt: int) -> bool:
+    def _reconcile(self, want_active: bool, attempt: int) -> None:
         """Poll the daemon state until it matches ``want_active``, then redraw."""
-        if self._state.is_active() == want_active or attempt >= 12:
-            self.refresh()
-            return False
-        GLib.timeout_add(150, self._reconcile, want_active, attempt + 1)
-        return False
+
+        def _check(active: bool) -> None:
+            if active == want_active or attempt >= 12:
+                self.refresh()
+            else:
+                GLib.timeout_add(150, self._reconcile, want_active, attempt + 1)
+
+        self._state.probe_is_active(_check)
 
     def _on_mode_changed(self, mode: str) -> None:
         self._state.set_mode(mode)
@@ -100,16 +124,25 @@ class HomePage(Gtk.Box):
 
     def _on_undo_clicked(self, _button: Gtk.Button) -> None:
         """Ask the daemon to undo its last fix without touching app history."""
-        if self._state.undo_last_fix():
-            self._toast("Последнее исправление отменено")
-        else:
-            self._toast("Демон не запущен", ok=False)
+        self._state.probe_undo(
+            lambda ok: self._toast(
+                "Последнее исправление отменено" if ok else "Демон не запущен",
+                ok=ok,
+            )
+        )
 
     def _on_autostart_toggled(self, row: Adw.SwitchRow, _param: object) -> None:
         enabled = row.get_active()
-        if enabled == self._state.is_autostart_enabled():
+        if enabled == self._last_autostart:
             return
-        ok = self._state.set_autostart(enabled)
+        # Reflect the new value immediately and ignore snapshots until the write
+        # lands, so a quick second toggle is not compared against stale state.
+        self._last_autostart = enabled
+        self._autostart_pending = True
+        self._state.probe_set_autostart(enabled, lambda ok: self._on_autostart_done(enabled, ok))
+
+    def _on_autostart_done(self, enabled: bool, ok: bool) -> None:
+        self._autostart_pending = False
         self._toast(
             "Автозагрузка включена" if enabled else "Автозагрузка выключена",
             ok=ok,
@@ -125,44 +158,54 @@ class HomePage(Gtk.Box):
         return True
 
     def refresh(self) -> None:
-        """Re-read the daemon state and update every widget."""
-        active = self._state.is_active()
-        layout = self._state.current_layout()
-        self._toggle.set_state(STATE_ON if active else STATE_OFF, layout)
+        """Schedule a status probe; widgets update when the result arrives."""
+        if not self._probe_in_flight:
+            self._probe_in_flight = True
+            self._state.probe_status_snapshot(self._on_snapshot_ready)
+        self._refresh_pause()
+
+    def _on_snapshot_ready(self, snap: StatusSnapshot) -> None:
+        self._probe_in_flight = False
+        self._apply_snapshot(snap)
+
+    def _apply_snapshot(self, snap: StatusSnapshot) -> None:
+        self._last_active = snap.active
+        self._toggle.set_state(STATE_ON if snap.active else STATE_OFF, snap.layout)
         self._status.update(
-            layout=layout,
+            layout=snap.layout,
             backend=self._state.config.backend,
             mode=MODE_LABELS.get(self._state.config.mode, self._state.config.mode),
             seconds_since_fix=self._state.seconds_since_last_fix(),
         )
-        self._refresh_pause()
         self._mode.set_mode(self._state.config.mode)
-        # Update the autostart switch without re-triggering the handler.
-        self._autostart.handler_block_by_func(self._on_autostart_toggled)
-        self._autostart.set_active(self._state.is_autostart_enabled())
-        self._autostart.handler_unblock_by_func(self._on_autostart_toggled)
+        # Do not clobber the autostart switch while an enable/disable is still
+        # in flight: the snapshot may predate the write.
+        if not self._autostart_pending:
+            self._last_autostart = snap.autostart
+            self._autostart.handler_block_by_func(self._on_autostart_toggled)
+            self._autostart.set_active(snap.autostart)
+            self._autostart.handler_unblock_by_func(self._on_autostart_toggled)
 
     def _refresh_pause(self) -> None:
         """Show why automatic correction is paused, if it is.
 
         Quiet hours win over an app exception: it is the reason the user is more
-        likely to be surprised by. The active-app probe is best-effort; when it
-        cannot tell, no exception line is shown.
+        likely to be surprised by. The active-app probe runs off the main thread
+        and is best-effort; when it cannot tell, no exception line is shown.
         """
-        reason = ""
         if self._state.in_quiet_hours():
-            reason = (
+            self._set_pause(
                 f"Автопереключение приостановлено: тихие часы "
                 f"({self._state.config.quiet_hours_start}–{self._state.config.quiet_hours_end})"
             )
-        else:
-            try:
-                from ..app_focus import get_active_app
-            except ImportError:  # pragma: no cover - defensive
-                get_active_app = None  # type: ignore[assignment]
-            app = get_active_app() if get_active_app is not None else None
-            if self._state.is_app_excepted(app):
-                reason = f"Автопереключение приостановлено (приложение «{app}»)"
+            return
+        self._state.probe_current_app_excepted(
+            lambda app: self._set_pause(
+                f"Автопереключение приостановлено (приложение «{app}»)" if app else ""
+            )
+        )
+
+    def _set_pause(self, reason: str) -> None:
         self._pause.set_label(reason)
         self._pause.set_visible(bool(reason))
 

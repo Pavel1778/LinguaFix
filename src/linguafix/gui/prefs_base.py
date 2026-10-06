@@ -44,6 +44,8 @@ class BoundPreferencesPage(Adw.PreferencesPage):
         row = Adw.SwitchRow(title=title, subtitle=subtitle)
         row.set_active(bool(getattr(self._config, field)))
         row.connect("notify::active", self._on_switch, field)
+        # Remember the bound field so a caller (or a test) can find the row.
+        row._linguafix_field = field
         group.add(row)
         return row
 

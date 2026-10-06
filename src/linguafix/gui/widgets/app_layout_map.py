@@ -10,6 +10,8 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gtk  # noqa: E402
 
+from ..async_tasks import run_async  # noqa: E402
+
 
 class AppLayoutMap(Adw.PreferencesGroup):
     """A preferences group mapping an application to a layout.
@@ -84,9 +86,7 @@ class AppLayoutMap(Adw.PreferencesGroup):
     def _on_detect_clicked(self, _button: Gtk.Button) -> None:
         if self._on_detect is None:
             return
-        name = self._on_detect()
-        if name:
-            self._app_entry.set_text(name)
+        run_async(self._on_detect, lambda name: self._app_entry.set_text(name) if name else None)
 
     def _emit(self) -> None:
         if self._on_change is not None:

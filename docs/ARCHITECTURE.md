@@ -350,6 +350,7 @@ fix, so normal capitalisation is unaffected. Hotkeys are re-parsed on
 | `detector.py` | Language detection, context, user dictionary, `target_layout` |
 | `dictionary.py` | Reading/writing the user dictionary file |
 | `typo.py` | T9: bounded Damerau-Levenshtein + `TypoCorrector` (opt-in) |
+| `punctuation.py` | `PunctuationProcessor`: dashes, ellipsis, quotes, spacing (opt-in, never edits words) |
 | `text_expander.py` | Snippet expansion (trigger -> text) |
 | `selection_fix.py` | Convert the layout of already-selected text |
 | `app_focus.py` | Best-effort focused-application detection for exceptions |
@@ -365,3 +366,4 @@ fix, so normal capitalisation is unaffected. Hotkeys are re-parsed on
 | `tray.py` | Optional AppIndicator icon |
 | `cli.py` | `argparse` command-line interface |
 | `gui/` | Optional GTK4 + libadwaita preferences window |
+| `gui/async_tasks.py` | Runs blocking daemon probes on a worker thread (the GUI must never block its main loop) |

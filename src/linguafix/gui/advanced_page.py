@@ -36,6 +36,7 @@ class AdvancedPage(BoundPreferencesPage):
         self._build_exceptions_group()
         self._build_dictionary_group()
         self._build_typo_group()
+        self._build_punctuation_group()
         self._build_expander_group()
         self._build_hotkeys_group()
         self._build_notifications_group()
@@ -251,6 +252,47 @@ class AdvancedPage(BoundPreferencesPage):
         )
         self.add(group)
 
+    # --- punctuation (part of T9) -----------------------------------------
+    def _build_punctuation_group(self) -> None:
+        group = Adw.PreferencesGroup(
+            title="Пунктуация",
+            description="Правит тире, многоточие, кавычки и пробелы вокруг знаков. "
+            "Слова не меняет. Выключено по умолчанию.",
+        )
+        self._punctuation_switch = self.add_switch(
+            group, "Исправлять пунктуацию", "punctuation_enabled"
+        )
+        self._punctuation_rows: list[Adw.SwitchRow] = [self._punctuation_switch]
+        self._punctuation_rows.append(
+            self.add_switch(group, "Заменять -- на —", "punctuation_dashes")
+        )
+        self._punctuation_rows.append(
+            self.add_switch(group, "Заменять ... на …", "punctuation_ellipsis")
+        )
+        self._punctuation_rows.append(
+            self.add_switch(group, "Умные кавычки («текст»)", "punctuation_smart_quotes")
+        )
+        self._punctuation_rows.append(
+            self.add_switch(group, "Исправлять пробелы у знаков", "punctuation_spacing")
+        )
+        self._punctuation_rows.append(
+            self.add_switch(
+                group,
+                "Заглавная буква в начале",
+                "punctuation_auto_capitalize",
+                subtitle="Может ошибаться; выключено по умолчанию",
+            )
+        )
+        self._punctuation_rows.append(
+            self.add_switch(
+                group,
+                "Точка в конце",
+                "punctuation_auto_period",
+                subtitle="Может ошибаться; выключено по умолчанию",
+            )
+        )
+        self.add(group)
+
     # --- text expansion (snippets) ----------------------------------------
     def _build_expander_group(self) -> None:
         group = Adw.PreferencesGroup(
@@ -386,10 +428,13 @@ class AdvancedPage(BoundPreferencesPage):
 
     @staticmethod
     def _on_open_config(_button: Gtk.Button) -> None:
-        path = config_path()
-        try:
+        from .async_tasks import run_async
+
+        def _open() -> None:
+            import contextlib
             import subprocess
 
-            subprocess.run(["xdg-open", str(path)], check=False, timeout=5)
-        except (OSError, subprocess.SubprocessError):  # pragma: no cover - desktop only
-            pass
+            with contextlib.suppress(OSError, subprocess.SubprocessError):
+                subprocess.run(["xdg-open", str(config_path())], check=False, timeout=5)
+
+        run_async(_open)

@@ -22,7 +22,9 @@ class LinguaFixWindow(Adw.ApplicationWindow):
 
     def __init__(self, state: GuiState, application: Adw.Application) -> None:
         super().__init__(application=application, title="LinguaFix")
-        self.set_default_size(560, 720)
+        # Wide enough for the header switcher to show all tab labels at once;
+        # the breakpoint below covers anything narrower.
+        self.set_default_size(720, 780)
         self._state = state
 
         self._toasts = Adw.ToastOverlay()
@@ -32,8 +34,13 @@ class LinguaFixWindow(Adw.ApplicationWindow):
 
         header = Adw.HeaderBar()
         self._stack = Adw.ViewStack()
+        # ``WIDE`` shows full labels in the header; the breakpoint below switches
+        # the header switcher to ``NARROW`` (icons) and reveals a bottom
+        # ``ViewSwitcherBar`` with the full labels when the window is small, so
+        # the tabs are never truncated to "Глав…".
         switcher = Adw.ViewSwitcher(stack=self._stack, policy=Adw.ViewSwitcherPolicy.WIDE)
         header.set_title_widget(switcher)
+        self._switcher = switcher
 
         menu = Gio.Menu()
         menu.append("О программе", "win.about")
@@ -41,6 +48,16 @@ class LinguaFixWindow(Adw.ApplicationWindow):
         menu_button = Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu)
         header.pack_end(menu_button)
         toolbar.add_top_bar(header)
+
+        # On a narrow window the header switcher collapses to icons; this bottom
+        # bar reveals the full tab labels so they stay readable. A breakpoint
+        # turns it on below 600sp instead of guessing from pixel sizes.
+        self._switcher_bar = Adw.ViewSwitcherBar(stack=self._stack)
+        toolbar.add_bottom_bar(self._switcher_bar)
+        breakpoint = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 600sp"))
+        breakpoint.add_setter(self._switcher_bar, "reveal", True)
+        breakpoint.add_setter(switcher, "policy", Adw.ViewSwitcherPolicy.NARROW)
+        self.add_breakpoint(breakpoint)
 
         self._home = HomePage(state, self._toasts)
         self._settings = SettingsPage(state, on_saved=self._on_saved)
@@ -93,13 +110,22 @@ class LinguaFixWindow(Adw.ApplicationWindow):
 
     def _on_open_config(self, _action: object, _param: object) -> None:
         from ..config import config_path
+        from .async_tasks import run_async
 
-        try:
+        def _open() -> bool:
             import subprocess
 
-            subprocess.run(["xdg-open", str(config_path())], check=False, timeout=5)
-        except (OSError, subprocess.SubprocessError):  # pragma: no cover - desktop only
-            self._toasts.add_toast(Adw.Toast(title="Не удалось открыть config.toml"))
+            try:
+                subprocess.run(["xdg-open", str(config_path())], check=False, timeout=5)
+            except (OSError, subprocess.SubprocessError):
+                return False
+            return True
+
+        def _done(ok: bool) -> None:
+            if not ok:
+                self._toasts.add_toast(Adw.Toast(title="Не удалось открыть config.toml"))
+
+        run_async(_open, _done, lambda _exc: _done(False))
 
     def _on_saved(self, message: str) -> None:
         self._toasts.add_toast(Adw.Toast(title=message, timeout=2))
