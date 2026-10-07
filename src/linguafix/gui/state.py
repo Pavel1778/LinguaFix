@@ -65,21 +65,28 @@ class GuiState:
         return self.config
 
     def save(self) -> None:
-        """Persist the current configuration."""
-        save_config(self.config)
-
-    def set_mode(self, mode: str) -> None:
-        """Set the working mode, persist it and apply it to a running daemon.
+        """Persist the current configuration and apply it to a running daemon.
 
         A running daemon keeps its own copy of the configuration, so writing the
-        file alone would only take effect after a restart. When a daemon is up
-        we also ask it to reload, so the new mode is live immediately.
+        file alone would only take effect after a restart. Every save therefore
+        asks a live daemon to reload, not just :meth:`set_mode`: otherwise a
+        switch flipped in the GUI (typo correction, a trigger, a guard) is
+        written to disk but never reaches the daemon, and the feature silently
+        does nothing. The reload is best-effort and never blocks a save.
+        """
+        save_config(self.config)
+        if daemon_is_running():
+            daemon_reload_config()
+
+    def set_mode(self, mode: str) -> None:
+        """Set the working mode and apply it to a running daemon.
+
+        :meth:`save` already pushes the new configuration to a live daemon, so
+        the mode is live immediately without a separate reload.
         """
         self.config.mode = mode
         self.config.validate()
         self.save()
-        if daemon_is_running():
-            daemon_reload_config()
 
     def set_languages(self, languages: list[str]) -> None:
         """Replace the enabled languages and persist them."""

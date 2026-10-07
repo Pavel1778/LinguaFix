@@ -111,6 +111,30 @@ def test_stop_uses_systemd_when_active(isolated_env: Path, monkeypatch: pytest.M
     assert calls == [["stop", "linguafix.service"]]
 
 
+def test_kill_stops_unit_then_sigkills(isolated_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """``kill`` must stop the unit first (Restart=always) then SIGKILL the PID."""
+    calls: list[list[str]] = []
+    killed: list[tuple[int, int]] = []
+    monkeypatch.setattr(daemon_control, "systemd_active", lambda: True)
+    monkeypatch.setattr(daemon_control, "read_pid", lambda: 4242)
+    monkeypatch.setattr(daemon_control, "is_running", lambda: False)
+    monkeypatch.setattr(daemon_control, "_systemctl", lambda args, timeout=5.0: calls.append(args))
+    monkeypatch.setattr(daemon_control, "_kill_pid", lambda pid, sig: killed.append((pid, sig)))
+    assert daemon_control.kill() is True
+    assert calls == [["stop", "linguafix.service"]]
+    assert killed == [(4242, signal.SIGKILL)]
+
+
+def test_kill_manual_daemon(isolated_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    killed: list[tuple[int, int]] = []
+    monkeypatch.setattr(daemon_control, "systemd_active", lambda: False)
+    monkeypatch.setattr(daemon_control, "read_pid", lambda: 4242)
+    monkeypatch.setattr(daemon_control, "is_running", lambda: False)
+    monkeypatch.setattr(daemon_control, "_kill_pid", lambda pid, sig: killed.append((pid, sig)))
+    assert daemon_control.kill() is True
+    assert killed == [(4242, signal.SIGKILL)]
+
+
 def test_start_prefers_systemd_when_enabled(
     isolated_env: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

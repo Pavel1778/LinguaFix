@@ -228,8 +228,10 @@ reading process will meet in practice:
   growing without bound.
 - **Shutdown.** `SIGTERM`/`SIGINT` set a flag. A fix is skipped if shutdown was
   requested before it started, and always finishes once started. `linguafix
-  stop` escalates to `SIGKILL` if the daemon does not exit within 2 seconds;
-  `linguafix kill` skips the graceful attempt.
+  stop` (and `kill`) stop the systemd user unit first when it is the manager,
+  because the unit carries `Restart=always` and would otherwise respawn a
+  process killed out from under systemd; `stop` then escalates to `SIGKILL` if
+  the daemon does not exit within 3 seconds, and `kill` sends `SIGKILL` at once.
 - **Device loss.** When a keyboard disappears the device is dropped and
   discovery is retried in place; `Restart=always` in the unit is the backstop.
 - **Every event and every buffer is guarded.** An exception in the detector,

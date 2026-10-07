@@ -29,10 +29,6 @@ logger = logging.getLogger(__name__)
 
 LOCK_FILE_NAME = "daemon.lock"
 START_TIMEOUT = 5.0
-# How long ``stop`` waits for a graceful SIGTERM exit before escalating. The
-# budget is 3 s; SIGKILL is sent after 2 s so ``stop`` always returns in time.
-STOP_GRACE = 2.0
-STOP_POLL = 0.1
 
 # Russian user-facing strings (English duplicates live in the README).
 MSG_NOT_RUNNING = "LinguaFix не запущен."
@@ -120,64 +116,38 @@ def cmd_start(args: argparse.Namespace) -> int:
     return 1
 
 
-def _wait_for_exit(pid: int, timeout: float) -> bool:
-    """Wait up to ``timeout`` seconds for ``pid`` to disappear."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        if not _pid_alive(pid):
-            return True
-        time.sleep(STOP_POLL)
-    return not _pid_alive(pid)
-
-
 def cmd_stop(_args: argparse.Namespace) -> int:
-    """Stop a running daemon, escalating to SIGKILL if it does not respond."""
-    pid = _read_pid()
-    if pid is None:
-        print(MSG_ALREADY_STOPPED)
-        return 0
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except ProcessLookupError:
-        print(MSG_ALREADY_STOPPED)
-        return 0
-    except OSError as exc:
-        print(f"Не удалось остановить LinguaFix: {exc}")
-        return 1
+    """Stop the daemon, however it was started.
 
-    if _wait_for_exit(pid, STOP_GRACE):
+    Delegates to :func:`linguafix.daemon_control.stop` so the CLI agrees with
+    the GUI: the systemd user unit is stopped first (it carries
+    ``Restart=always`` and would otherwise respawn the daemon a few seconds
+    later), then the lock-file PID is signalled, escalating to SIGKILL.
+    """
+    from .daemon_control import is_running, stop
+
+    if not is_running():
+        print(MSG_ALREADY_STOPPED)
+        return 0
+    if stop():
         print(MSG_STOPPED)
         return 0
-
-    # The daemon is wedged (for example stuck in a subprocess); escalate.
-    logger.warning("PID %d did not exit within %.1fs; sending SIGKILL", pid, STOP_GRACE)
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except OSError as exc:
-        print(f"Не удалось принудительно остановить LinguaFix: {exc}")
-        return 1
-    _wait_for_exit(pid, STOP_GRACE)
-    print(MSG_STOPPED_FORCED)
-    return 0
+    print("Не удалось остановить LinguaFix. Смотрите логи: ~/.local/state/linguafix/")
+    return 1
 
 
 def cmd_kill(_args: argparse.Namespace) -> int:
     """Force-stop a running daemon with SIGKILL, without a graceful attempt."""
-    pid = _read_pid()
-    if pid is None:
+    from .daemon_control import is_running, kill
+
+    if not is_running():
         print(MSG_ALREADY_STOPPED)
         return 0
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except ProcessLookupError:
-        print(MSG_ALREADY_STOPPED)
+    if kill():
+        print(MSG_KILLED)
         return 0
-    except OSError as exc:
-        print(f"Не удалось завершить LinguaFix: {exc}")
-        return 1
-    _wait_for_exit(pid, STOP_GRACE)
-    print(MSG_KILLED)
-    return 0
+    print("Не удалось принудительно завершить LinguaFix.")
+    return 1
 
 
 def cmd_restart(_args: argparse.Namespace) -> int:

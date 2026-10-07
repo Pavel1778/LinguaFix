@@ -11,6 +11,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio  # noqa: E402
 
 from .state import GuiState  # noqa: E402
+from .style import load_stylesheet  # noqa: E402
 from .window import LinguaFixWindow  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,7 @@ class LinguaFixApplication(Adw.Application):
     def do_activate(self) -> None:
         """Present the window, creating it on first activation."""
         if self._window is None:
+            load_stylesheet()
             self._window = LinguaFixWindow(self._state, self)
         self._window.present()
 

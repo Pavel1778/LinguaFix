@@ -105,8 +105,9 @@ class TypoPage(BoundPreferencesPage):
         self._config.typo_correction = enabled
         self._config.punctuation_correction = enabled
         self._config.validate()
+        # ``_save`` persists the config and pushes it to a running daemon, so no
+        # separate reload is needed here.
         self._save("Т9 включён" if enabled else "Т9 выключен")
-        self._state.reload_config()
         self._sync()
 
     def _feature_on(self) -> bool:

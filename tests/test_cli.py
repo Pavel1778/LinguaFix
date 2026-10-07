@@ -98,62 +98,57 @@ def test_status_when_running(
 def test_stop_when_not_running(
     isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(cli, "_read_pid", lambda: None)
+    from linguafix import daemon_control
+
+    monkeypatch.setattr(daemon_control, "is_running", lambda: False)
     assert cli.main(["stop"]) == 0
     assert "уже остановлен" in capsys.readouterr().out
 
 
-def test_stop_sends_signal(
+def test_stop_delegates_to_daemon_control(
     isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(cli, "_read_pid", lambda: 4242)
-    killed: list[tuple[int, int]] = []
-    alive = {"v": True}
+    """``stop`` must go through ``daemon_control.stop`` (stops the systemd unit)."""
+    from linguafix import daemon_control
 
-    def fake_kill(pid: int, sig: int) -> None:
-        killed.append((pid, sig))
-        if sig == cli.signal.SIGTERM:
-            alive["v"] = False
-
-    monkeypatch.setattr(cli.os, "kill", fake_kill)
-    monkeypatch.setattr(cli, "_pid_alive", lambda pid: alive["v"])
+    stopped: list[bool] = []
+    monkeypatch.setattr(daemon_control, "is_running", lambda: True)
+    monkeypatch.setattr(daemon_control, "stop", lambda: stopped.append(True) or True)
     assert cli.main(["stop"]) == 0
-    assert killed == [(4242, cli.signal.SIGTERM)]
+    assert stopped == [True]
     assert "остановлен" in capsys.readouterr().out
 
 
-def test_stop_escalates_to_sigkill(
+def test_stop_reports_failure(
     isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A daemon that ignores SIGTERM must be SIGKILLed after the grace period."""
-    monkeypatch.setattr(cli, "_read_pid", lambda: 4242)
-    killed: list[tuple[int, int]] = []
-    monkeypatch.setattr(cli.os, "kill", lambda pid, sig: killed.append((pid, sig)))
-    # The process stays alive forever, and the grace period is collapsed to keep
-    # the test fast: SIGTERM is sent, the wait expires, then SIGKILL follows.
-    monkeypatch.setattr(cli, "_pid_alive", lambda pid: True)
-    monkeypatch.setattr(cli, "STOP_GRACE", 0.0)
-    assert cli.main(["stop"]) == 0
-    assert killed == [(4242, cli.signal.SIGTERM), (4242, cli.signal.SIGKILL)]
-    assert "SIGKILL" in capsys.readouterr().out
+    from linguafix import daemon_control
+
+    monkeypatch.setattr(daemon_control, "is_running", lambda: True)
+    monkeypatch.setattr(daemon_control, "stop", lambda: False)
+    assert cli.main(["stop"]) == 1
+    assert "Не удалось остановить" in capsys.readouterr().out
 
 
-def test_kill_sends_sigkill(
+def test_kill_delegates_to_daemon_control(
     isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(cli, "_read_pid", lambda: 4242)
-    killed: list[tuple[int, int]] = []
-    monkeypatch.setattr(cli.os, "kill", lambda pid, sig: killed.append((pid, sig)))
-    monkeypatch.setattr(cli, "_pid_alive", lambda pid: False)
+    from linguafix import daemon_control
+
+    killed: list[bool] = []
+    monkeypatch.setattr(daemon_control, "is_running", lambda: True)
+    monkeypatch.setattr(daemon_control, "kill", lambda: killed.append(True) or True)
     assert cli.main(["kill"]) == 0
-    assert killed == [(4242, cli.signal.SIGKILL)]
+    assert killed == [True]
     assert "SIGKILL" in capsys.readouterr().out
 
 
 def test_kill_when_not_running(
     isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(cli, "_read_pid", lambda: None)
+    from linguafix import daemon_control
+
+    monkeypatch.setattr(daemon_control, "is_running", lambda: False)
     assert cli.main(["kill"]) == 0
     assert "уже остановлен" in capsys.readouterr().out
 

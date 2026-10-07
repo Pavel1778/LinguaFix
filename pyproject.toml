@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "linguafix"
-version = "0.2.1"
+version = "0.2.2"
 description = "Automatic keyboard layout switcher for Debian GNOME (X11 and Wayland)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -61,6 +61,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 linguafix = ["data/*.json", "data/*.txt", "data/*.svg", "data/*.desktop"]
+"linguafix.gui" = ["*.css"]
 
 [tool.black]
 line-length = 100
