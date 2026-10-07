@@ -21,7 +21,7 @@ word and switches the active layout, all within that one keystroke.
                        │  │ keys: G H B ...│   │  (immediate)  │  │
                        │  └────────────────┘   └──────┬────────┘  │
                        │        idle fallback ────────┘           │
-                       │        (analysis_timeout 0.8 s)          │
+                       │        (analysis_timeout, adaptive)      │
                        │                             │            │
                        │                             ▼            │
                        │                 ┌──────────────────────┐ │
@@ -55,7 +55,9 @@ word and switches the active layout, all within that one keystroke.
    punctuation are opt-in). The correction therefore happens inside the same
    keystroke that ends the word — there is no visible pause. An idle fallback
    (`analysis_timeout`, default 0.8 s) catches words typed without a separator,
-   such as a long URL.
+   such as a long URL. With `analysis_timeout_adaptive` (on by default) that
+   timeout follows the user's typing speed — shorter for a fast typist, longer
+   for a slow one — clamped to 0.3–2.0 s.
 4. **Analyse.** The buffer is handed to the detector, which tokenises it, scores
    each word against the Russian and English n-gram/word corpora and picks the
    most likely language. Tokens that are not words — a URL, an e-mail address, a
@@ -300,17 +302,21 @@ word is scored against the corpora whose *layout could have produced it*.
   corpora. Without this, an unknown brand makes the detector stay silent.
   `dictionary_size` caps the bundled vocabulary (larger = more recall, more RAM).
 - **Typo correction (T9)** (`typo_correction`, `typo_max_distance`,
-  `typo_min_word_length`). A second, independent correction path, off by
-  default. It runs only when `target_layout` returned `None` — that is, when the
-  layout is already right — so it can never fight the layout switcher. It uses
-  the same vocabulary the detector scores against (`LanguageDetector.vocabulary`)
-  and accepts a replacement only when the word is absent from the vocabulary and
-  within `typo_max_distance` edits of **exactly one** word (optimal string
-  alignment / Damerau-Levenshtein, so a transposition counts as one edit). Two
-  equally close candidates mean no change. Taught words and tokens with an
-  internal separator are never corrected. `TypoCorrector` instances are built
-  lazily per language and dropped on `reload_config`, because the vocabulary can
-  change with `dictionary_size` and `languages`.
+  `typo_max_distance_long`, `typo_min_word_length`). A second, independent
+  correction path, off by default. It runs only when `target_layout` returned
+  `None` — that is, when the layout is already right — so it can never fight the
+  layout switcher. It uses the same vocabulary the detector scores against
+  (`LanguageDetector.ordered_vocabulary`, which preserves the corpus frequency
+  order that `vocabulary` loses in a set) and accepts a replacement only when
+  the word is absent from the vocabulary and within `typo_max_distance` edits of
+  a word (optimal string alignment / Damerau-Levenshtein, so a transposition
+  counts as one edit). A word at least 6 characters long may use
+  `typo_max_distance_long` edits (default 2), but only when the best candidate is
+  clearly more frequent than the runner-up. Two equally close candidates mean no
+  change. Taught words and tokens with an internal separator are never corrected.
+  `TypoCorrector` instances are built lazily per language and dropped on
+  `reload_config`, because the vocabulary can change with `dictionary_size` and
+  `languages`.
 
 ## Modes and hotkeys
 

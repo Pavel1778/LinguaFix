@@ -33,8 +33,11 @@ The exit code is non-zero when a check fails, so it is safe to use in scripts.
    on_punctuation = false
    ```
    If you type a word without ever pressing a boundary, the idle fallback
-   `analysis_timeout` (default `0.8` s) flushes it. Raise it only if you type
-   long unseparated words and want to give them more time.
+   `analysis_timeout` (default `0.8` s) flushes it. With
+   `analysis_timeout_adaptive = true` (the default) that timeout follows your
+   typing speed — shorter when you type fast, longer when you type slowly — so
+   you normally do not need to touch it. Set it to `false` to pin the timeout to
+   the `analysis_timeout` value exactly.
 4. Make sure the words you type are at least `min_word_length` characters long.
 5. Note that LinguaFix deliberately does not rewrite URLs, e-mail addresses,
    file paths, version numbers or hyphenated identifiers (a token with `.`, `@`,
@@ -397,17 +400,20 @@ typo_correction = true
 Even when enabled, it deliberately stays quiet unless the fix is unambiguous:
 
 - the word must be at least `typo_min_word_length` characters (default 4);
-- it must be within `typo_max_distance` edits (default 1) of **exactly one**
-  vocabulary word — if two words are equally close, nothing changes;
+- it must be within `typo_max_distance` edits (default 1) of a vocabulary word —
+  if two words are equally close, nothing changes;
+- a word at least 6 characters long may use `typo_max_distance_long` edits
+  (default 2), but only when the best candidate is clearly more frequent than the
+  runner-up;
 - a word you taught (`linguafix dict add ...`) or a token with a separator
   (`id-with-dash`, `a.b`, `x@y`) is never touched;
 - a word whose layout is wrong is handled by the layout switcher first; T9 only
   runs when the layout is already correct.
 
 If a specific typo is missed, either add the intended word to the dictionary
-(`linguafix dict add language`) or raise `typo_max_distance` to `2`. Raising it
-increases the chance of a wrong correction, so prefer the dictionary when you
-can.
+(`linguafix dict add language`) or raise `typo_max_distance` (or
+`typo_max_distance_long` for long words) to `2`. Raising it increases the chance
+of a wrong correction, so prefer the dictionary when you can.
 
 ## Correction does not trigger for a newer language (uk/de/fr)
 

@@ -225,6 +225,55 @@ def test_idle_timeout_does_not_flush_a_fresh_buffer() -> None:
     assert daemon.buffer == "ghbdtn"
 
 
+# --- adaptive idle timeout --------------------------------------------------
+
+
+def test_adaptive_timeout_shrinks_for_a_fast_typist() -> None:
+    daemon = make_daemon(analysis_timeout=0.8, analysis_timeout_adaptive=True)
+    daemon._key_intervals.extend([0.2] * 10)
+    assert daemon._effective_analysis_timeout() == pytest.approx(0.48)
+
+
+def test_adaptive_timeout_grows_for_a_slow_typist() -> None:
+    daemon = make_daemon(analysis_timeout=0.8, analysis_timeout_adaptive=True)
+    daemon._key_intervals.extend([1.5] * 10)
+    assert daemon._effective_analysis_timeout() == pytest.approx(1.6)
+
+
+def test_adaptive_timeout_is_clamped() -> None:
+    from linguafix.config import MAX_ANALYSIS_TIMEOUT, MIN_ANALYSIS_TIMEOUT
+
+    slow = make_daemon(analysis_timeout=2.0, analysis_timeout_adaptive=True)
+    slow._key_intervals.extend([2.0] * 10)
+    assert slow._effective_analysis_timeout() == MAX_ANALYSIS_TIMEOUT
+
+    fast = make_daemon(analysis_timeout=0.3, analysis_timeout_adaptive=True)
+    fast._key_intervals.extend([0.1] * 10)
+    assert fast._effective_analysis_timeout() == MIN_ANALYSIS_TIMEOUT
+
+
+def test_adaptive_timeout_needs_enough_samples() -> None:
+    daemon = make_daemon(analysis_timeout=0.8, analysis_timeout_adaptive=True)
+    daemon._key_intervals.extend([0.1, 0.1])
+    # Too few keystrokes to judge the pace: fall back to the base value.
+    assert daemon._effective_analysis_timeout() == pytest.approx(0.8)
+
+
+def test_adaptive_timeout_can_be_disabled() -> None:
+    daemon = make_daemon(analysis_timeout=0.8, analysis_timeout_adaptive=False)
+    daemon._key_intervals.extend([0.1] * 20)
+    assert daemon._effective_analysis_timeout() == pytest.approx(0.8)
+
+
+def test_typing_records_intervals_only() -> None:
+    daemon = make_daemon(analysis_timeout_adaptive=True)
+    press(daemon, "ghbdtn")
+    # Timing is collected, but never any character.
+    assert daemon._key_intervals
+    assert all(isinstance(i, float) for i in daemon._key_intervals)
+    assert daemon.buffer == "ghbdtn"
+
+
 # --- configurable boundaries ------------------------------------------------
 
 

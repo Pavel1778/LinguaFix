@@ -230,13 +230,22 @@ class AdvancedPage(BoundPreferencesPage):
         group = Adw.PreferencesGroup(
             title="Исправление опечаток (T9)",
             description="Меняет слово на ближайшее из словаря, только если "
-            "вариант ровно один. Выключено по умолчанию.",
+            "вариант однозначен: одну опечатку в коротком слове, до двух — "
+            "в слове длиной от 6 символов. Выключено по умолчанию.",
         )
         self._typo_switch = self.add_switch(group, "Исправлять опечатки", "typo_correction")
         self.add_spin(
             group,
-            "Максимум опечаток в слове",
+            "Максимум опечаток (короткие слова)",
             "typo_max_distance",
+            lower=1,
+            upper=2,
+            step=1,
+        )
+        self.add_spin(
+            group,
+            "Максимум опечаток (слова от 6 символов)",
+            "typo_max_distance_long",
             lower=1,
             upper=2,
             step=1,

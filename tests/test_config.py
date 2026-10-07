@@ -156,11 +156,22 @@ def test_new_field_defaults() -> None:
         {"hotkey_fix_last_word": "ENTER"},
         {"hotkey_fix_last_word": "CTRL+SPACE"},
         {"hotkey_undo_last_fix": "TAB"},
+        {"typo_max_distance_long": 3},
+        {"typo_long_word_threshold": 3},
+        {"typo_top1_ratio_strict": 0.5},
     ],
 )
 def test_new_field_validation_rejects_bad_values(kwargs: dict[str, object]) -> None:
     with pytest.raises(ValueError):
         Config(**kwargs)
+
+
+def test_typo_long_word_defaults() -> None:
+    config = Config()
+    assert config.typo_max_distance == 1
+    assert config.typo_max_distance_long == 2
+    assert config.typo_long_word_threshold == 6
+    assert config.typo_top1_ratio_strict == 10.0
 
 
 def test_hotkey_normalisation() -> None:

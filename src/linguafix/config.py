@@ -34,6 +34,15 @@ APP_NAME: Final[str] = "linguafix"
 # compound word). Word-boundary keys flush the buffer immediately, so this is
 # only the backstop and can be short.
 DEFAULT_ANALYSIS_TIMEOUT: Final[float] = 0.8
+# Adaptive idle timeout: the effective timeout follows the user's typing speed
+# (a fast typist wants a short backstop, a slow one needs a longer one) and is
+# clamped to this range. ``analysis_timeout`` is the neutral base value.
+DEFAULT_ANALYSIS_TIMEOUT_ADAPTIVE: Final[bool] = True
+MIN_ANALYSIS_TIMEOUT: Final[float] = 0.3
+MAX_ANALYSIS_TIMEOUT: Final[float] = 2.0
+# Average inter-key interval (seconds) at which the timeout is nudged up/down.
+FAST_TYPING_INTERVAL: Final[float] = 0.5
+SLOW_TYPING_INTERVAL: Final[float] = 1.0
 DEFAULT_MIN_WORD_LENGTH: Final[int] = 3
 DEFAULT_MAX_BUFFER_SIZE: Final[int] = 200
 DEFAULT_BACKSPACE_SETTLE_MS: Final[int] = 80
@@ -88,10 +97,17 @@ DEFAULT_PLAUSIBILITY_FLOOR: Final[float] = -7.0
 DEFAULT_MAX_CONSECUTIVE_CONSONANTS: Final[int] = 6
 DEFAULT_MIN_VOWEL_RATIO: Final[float] = 0.15
 # T9 typo correction. Off by default: a wrong correction is worse than none, so
-# the user opts in. Only a single edit is accepted, and only for words of at
-# least ``DEFAULT_TYPO_MIN_WORD_LENGTH`` characters.
+# the user opts in. Only a single edit is accepted for a short word; a word of
+# at least ``DEFAULT_TYPO_LONG_WORD_THRESHOLD`` characters may use two edits,
+# but only when the best candidate clearly beats the runner-up by frequency.
 DEFAULT_TYPO_MAX_DISTANCE: Final[int] = 1
 DEFAULT_TYPO_MIN_WORD_LENGTH: Final[int] = 4
+DEFAULT_TYPO_MAX_DISTANCE_LONG: Final[int] = 2
+DEFAULT_TYPO_LONG_WORD_THRESHOLD: Final[int] = 6
+# Minimum frequency ratio (best / runner-up) before a two-edit fix is applied.
+# Kept modest on purpose: even ``прветт`` -> ``привет`` only beats ``проект``
+# by ~25x in the corpus, so a 100x bar would reject that flagship example.
+DEFAULT_TYPO_TOP1_RATIO_STRICT: Final[float] = 10.0
 # Punctuation cleanup. Off by default: rewriting punctuation inside code,
 # formulas or URLs does more harm than good, so the user opts in. The
 # sub-flags stay on so enabling the master switch is useful out of the box.
@@ -314,6 +330,7 @@ class Config:
     """
 
     analysis_timeout: float = DEFAULT_ANALYSIS_TIMEOUT
+    analysis_timeout_adaptive: bool = DEFAULT_ANALYSIS_TIMEOUT_ADAPTIVE
     min_word_length: int = DEFAULT_MIN_WORD_LENGTH
     max_buffer_size: int = DEFAULT_MAX_BUFFER_SIZE
     stop_words: list[str] = field(default_factory=load_default_stop_words)
@@ -376,6 +393,9 @@ class Config:
     typo_correction: bool = False
     typo_max_distance: int = DEFAULT_TYPO_MAX_DISTANCE
     typo_min_word_length: int = DEFAULT_TYPO_MIN_WORD_LENGTH
+    typo_max_distance_long: int = DEFAULT_TYPO_MAX_DISTANCE_LONG
+    typo_long_word_threshold: int = DEFAULT_TYPO_LONG_WORD_THRESHOLD
+    typo_top1_ratio_strict: float = DEFAULT_TYPO_TOP1_RATIO_STRICT
 
     # --- punctuation cleanup ----------------------------------------------
     punctuation_correction: bool = DEFAULT_PUNCTUATION_CORRECTION
@@ -414,6 +434,7 @@ class Config:
         self.analysis_timeout = float(self.analysis_timeout)
         if self.analysis_timeout <= 0:
             raise ValueError("analysis_timeout must be positive")
+        self.analysis_timeout_adaptive = bool(self.analysis_timeout_adaptive)
 
         self.min_word_length = int(self.min_word_length)
         if self.min_word_length < 1:
@@ -563,6 +584,15 @@ class Config:
         self.typo_min_word_length = int(self.typo_min_word_length)
         if self.typo_min_word_length < 3:
             raise ValueError("typo_min_word_length must be >= 3")
+        self.typo_max_distance_long = int(self.typo_max_distance_long)
+        if self.typo_max_distance_long not in (1, 2):
+            raise ValueError("typo_max_distance_long must be 1 or 2")
+        self.typo_long_word_threshold = int(self.typo_long_word_threshold)
+        if self.typo_long_word_threshold < self.typo_min_word_length:
+            raise ValueError("typo_long_word_threshold must be >= typo_min_word_length")
+        self.typo_top1_ratio_strict = float(self.typo_top1_ratio_strict)
+        if self.typo_top1_ratio_strict < 1.0:
+            raise ValueError("typo_top1_ratio_strict must be >= 1.0")
 
         # --- punctuation cleanup -------------------------------------------
         self.punctuation_correction = bool(self.punctuation_correction)

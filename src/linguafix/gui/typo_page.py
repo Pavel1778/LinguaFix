@@ -48,7 +48,8 @@ class TypoPage(BoundPreferencesPage):
 
         typo_group = Adw.PreferencesGroup(
             title="Опечатки",
-            description="Исправлять одну опечатку в слове, только если вариант однозначен",
+            description="Исправлять опечатки, только если вариант однозначен: "
+            "одну в коротком слове, до двух — в слове длиной от 6 символов",
         )
         self._typo_switch = self.add_switch(typo_group, "Исправлять опечатки", "typo_correction")
         self.add_spin(
@@ -61,8 +62,16 @@ class TypoPage(BoundPreferencesPage):
         )
         self.add_spin(
             typo_group,
-            "Максимум правок",
+            "Максимум правок (короткие слова)",
             "typo_max_distance",
+            lower=1,
+            upper=2,
+            step=1,
+        )
+        self.add_spin(
+            typo_group,
+            "Максимум правок (слова от 6 символов)",
+            "typo_max_distance_long",
             lower=1,
             upper=2,
             step=1,
@@ -116,6 +125,7 @@ class TypoPage(BoundPreferencesPage):
     def _on_reset(self, _button: Gtk.Button) -> None:
         self._config.typo_correction = False
         self._config.typo_max_distance = 1
+        self._config.typo_max_distance_long = 2
         self._config.typo_min_word_length = 4
         self._config.punctuation_correction = False
         self._config.punctuation_dashes = True

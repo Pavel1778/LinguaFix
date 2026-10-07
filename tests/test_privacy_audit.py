@@ -32,6 +32,7 @@ SECRET_MARKERS = ("секретное", "12345", "слово_12", "SECRET")
 # A few config fields are persisted on purpose; the secret must not reach them.
 _ALLOWED_CONFIG_KEYS = {
     "analysis_timeout",
+    "analysis_timeout_adaptive",
     "min_word_length",
     "max_buffer_size",
     "stop_words",
@@ -88,6 +89,9 @@ _ALLOWED_CONFIG_KEYS = {
     "typo_correction",
     "typo_max_distance",
     "typo_min_word_length",
+    "typo_max_distance_long",
+    "typo_long_word_threshold",
+    "typo_top1_ratio_strict",
     "punctuation_correction",
     "punctuation_dashes",
     "punctuation_ellipsis",

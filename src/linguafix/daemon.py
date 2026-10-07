@@ -34,12 +34,22 @@ import subprocess
 import threading
 import time
 import traceback
+from collections import deque
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Final
 
 from .app_focus import get_active_app, get_focused_role
 from .app_layouts import AppLayoutManager
-from .config import Config, cache_dir, in_quiet_hours, snippets_path
+from .config import (
+    FAST_TYPING_INTERVAL,
+    MAX_ANALYSIS_TIMEOUT,
+    MIN_ANALYSIS_TIMEOUT,
+    SLOW_TYPING_INTERVAL,
+    Config,
+    cache_dir,
+    in_quiet_hours,
+    snippets_path,
+)
 from .converter import LayoutConverter
 from .detector import LanguageDetector
 from .dictionary import load_user_dictionary
@@ -60,6 +70,16 @@ LOCK_FILE_NAME: Final[str] = "daemon.lock"
 # Metadata-only correction history written on SIGUSR2 for the GUI to read.
 HISTORY_FILE_NAME: Final[str] = "history.json"
 SELECT_TIMEOUT: Final[float] = 0.25
+# Number of recent inter-key intervals averaged to estimate typing speed. At the
+# event-loop cadence this spans a few seconds of typing, which is enough to tell
+# a fast typist from a slow one without lagging behind a change of pace.
+_TYPING_INTERVAL_WINDOW: Final[int] = 30
+# A gap longer than this is treated as a pause, not typing, and excluded from the
+# speed estimate.
+MAX_TYPING_INTERVAL: Final[float] = 5.0
+# Fewest recorded intervals before the adaptive timeout trusts its estimate; a
+# couple of keystrokes is not a typing speed.
+_MIN_INTERVALS_FOR_ADAPT: Final[int] = 5
 NOTIFY_TIMEOUT: Final[float] = 3.0
 # Pause between keyboard re-discovery attempts after the last device vanished.
 DEVICE_RESCAN_DELAY: Final[float] = 2.0
@@ -332,6 +352,10 @@ class LinguaFixDaemon:
         # The physical keys (evdev codes) that produced ``buffer``.
         self._scancodes: list[int] = []
         self.last_key_time: float = 0.0
+        # Recent inter-key intervals (seconds), used to adapt ``analysis_timeout``
+        # to the user's typing speed. Only timing is kept, never characters.
+        self._key_intervals: deque[float] = deque(maxlen=_TYPING_INTERVAL_WINDOW)
+        self._prev_key_time: float = 0.0
         self._shift = False
         # Set while a Ctrl/Alt chord is held: the word typed before the chord is
         # suspended (dropped if the chord turns out not to be a hotkey) so that
@@ -644,7 +668,15 @@ class LinguaFixDaemon:
         with self._lock:
             self.buffer += char
             self._scancodes.append(code)
-            self.last_key_time = time.time()
+            now = time.time()
+            if self._prev_key_time:
+                interval = now - self._prev_key_time
+                # Ignore a huge gap (the user was away) so it does not skew the
+                # average towards "slow" after every pause.
+                if 0 < interval <= MAX_TYPING_INTERVAL:
+                    self._key_intervals.append(interval)
+            self._prev_key_time = now
+            self.last_key_time = now
             overflow = len(self._scancodes) > self.config.max_buffer_size
         # A held key (auto-repeat) or a paste-like burst can grow the buffer
         # without bound; analyse and clear it instead of waiting for the idle
@@ -917,9 +949,12 @@ class LinguaFixDaemon:
         corrector = self._typo_correctors.get(language)
         if corrector is None:
             corrector = TypoCorrector(
-                list(self.detector.vocabulary(language)),
+                self.detector.ordered_vocabulary(language),
                 max_distance=self.config.typo_max_distance,
                 min_length=self.config.typo_min_word_length,
+                long_word_threshold=self.config.typo_long_word_threshold,
+                long_word_max_distance=self.config.typo_max_distance_long,
+                top1_ratio_strict=self.config.typo_top1_ratio_strict,
             )
             self._typo_correctors[language] = corrector
         suggestion = corrector.suggest(word)
@@ -1611,6 +1646,30 @@ class LinguaFixDaemon:
         except (OSError, subprocess.SubprocessError):
             logger.debug("notify-send failed", exc_info=True)
 
+    def _effective_analysis_timeout(self) -> float:
+        """Return the idle timeout, adapted to the user's typing speed.
+
+        The base is ``analysis_timeout``. When adaptive mode is on and there are
+        enough recent keystrokes to judge the pace, the timeout grows for a slow
+        typist (whose words would otherwise be cut mid-word) and shrinks for a
+        fast one, clamped to ``[MIN_ANALYSIS_TIMEOUT, MAX_ANALYSIS_TIMEOUT]``.
+        """
+        base = self.config.analysis_timeout
+        if not self.config.analysis_timeout_adaptive:
+            return base
+        with self._lock:
+            intervals = list(self._key_intervals)
+        if len(intervals) < _MIN_INTERVALS_FOR_ADAPT:
+            return base
+        average = sum(intervals) / len(intervals)
+        if average >= SLOW_TYPING_INTERVAL:
+            target = base * 2.0
+        elif average <= FAST_TYPING_INTERVAL:
+            target = base * 0.6
+        else:
+            target = base
+        return min(MAX_ANALYSIS_TIMEOUT, max(MIN_ANALYSIS_TIMEOUT, target))
+
     def _flush_if_idle(self) -> None:
         """Flush the buffer when it has been idle past the fallback timeout.
 
@@ -1621,7 +1680,7 @@ class LinguaFixDaemon:
         if (
             self.buffer
             and self.last_key_time
-            and time.time() - self.last_key_time > self.config.analysis_timeout
+            and time.time() - self.last_key_time > self._effective_analysis_timeout()
         ):
             self._process_buffer()
 
