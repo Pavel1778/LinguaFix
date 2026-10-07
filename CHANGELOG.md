@@ -5,6 +5,37 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-10-07
+
+### Fixed
+
+- `linguafix stop` (and `kill`) now actually stop a packaged daemon. The CLI
+  only sent `SIGTERM` to the lock-file PID, so under the systemd user unit
+  (`Restart=always`) systemd respawned the daemon about 5 s later and it looked
+  unstoppable. Both commands now go through `daemon_control`, which stops the
+  unit first; `kill` gained a force-stop path that does the same before sending
+  `SIGKILL`.
+- GUI settings now reach a running daemon. Every `GuiState.save` asks a live
+  daemon to reload, so a switch flipped in the GUI (T9, a trigger, a guard) is
+  applied immediately instead of only after a restart. This is why T9 appeared
+  "on" but never corrected: the toggle was written to `config.toml` but the
+  daemon kept its old in-memory copy.
+- The window no longer resizes itself and breaks. The bottom switcher's
+  `reveal` had two writers (the `ViewSwitcherTitle` binding and a manual
+  `notify::default-width` handler with a different threshold); the duplicate
+  handler is gone. The advanced page is added to the stack once at construction
+  (hidden until revealed) instead of being appended at runtime to a homogeneous
+  `ViewStack`, and the plain pages scroll, so the window shrinks cleanly.
+
+### Changed
+
+- The big on/off button looks like the GNOME quick-settings power button: a
+  white circle with a soft outer ring and a thin `power-symbolic` glyph that
+  turns accent-coloured when active. The `big-toggle`/`active-state`/`busy-state`
+  classes previously had no stylesheet at all. Colours are libadwaita named
+  colours, so light/dark themes follow automatically, and the transitions are
+  dropped when the system asks for reduced motion.
+
 ## [Unreleased]
 
 ### Added
@@ -189,5 +220,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `uk`/`de`/`fr` corpora are opt-in and have not been calibrated against
   live input.
 
+[0.2.2]: https://github.com/Pavel1778/LinguaFix/releases/tag/v0.2.2
+[0.2.1]: https://github.com/Pavel1778/LinguaFix/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Pavel1778/LinguaFix/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Pavel1778/LinguaFix/releases/tag/v0.1.0
