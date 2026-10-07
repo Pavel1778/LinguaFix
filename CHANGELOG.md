@@ -5,41 +5,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.2] - 2026-10-07
-
-### Fixed
-
-- `linguafix stop` (and `kill`) now actually stop a packaged daemon. The CLI
-  only sent `SIGTERM` to the lock-file PID, so under the systemd user unit
-  (`Restart=always`) systemd respawned the daemon about 5 s later and it looked
-  unstoppable. Both commands now go through `daemon_control`, which stops the
-  unit first; `kill` gained a force-stop path that does the same before sending
-  `SIGKILL`.
-- GUI settings now reach a running daemon. Every `GuiState.save` asks a live
-  daemon to reload, so a switch flipped in the GUI (T9, a trigger, a guard) is
-  applied immediately instead of only after a restart. This is why T9 appeared
-  "on" but never corrected: the toggle was written to `config.toml` but the
-  daemon kept its old in-memory copy.
-- The window no longer resizes itself and breaks. The bottom switcher's
-  `reveal` had two writers (the `ViewSwitcherTitle` binding and a manual
-  `notify::default-width` handler with a different threshold); the duplicate
-  handler is gone. The advanced page is added to the stack once at construction
-  (hidden until revealed) instead of being appended at runtime to a homogeneous
-  `ViewStack`, and the plain pages scroll, so the window shrinks cleanly.
-
-### Changed
-
-- The big on/off button looks like the GNOME quick-settings power button: a
-  white circle with a soft outer ring and a thin `power-symbolic` glyph that
-  turns accent-coloured when active. The `big-toggle`/`active-state`/`busy-state`
-  classes previously had no stylesheet at all. Colours are libadwaita named
-  colours, so light/dark themes follow automatically, and the transitions are
-  dropped when the system asks for reduced motion.
-
-## [Unreleased]
+## [0.2.3] - 2026-10-07
 
 ### Added
 
+- Two-edit typo correction for long words: a word of at least six characters may
+  now be corrected within `typo_max_distance_long` edits (default 2), but only
+  when the best candidate is clearly more frequent than the runner-up. Short
+  words keep the strict one-edit rule. Config keys: `typo_max_distance_long`,
+  `typo_long_word_threshold`, `typo_top1_ratio_strict`.
+- Adaptive idle timeout (`analysis_timeout_adaptive`, on by default): the
+  fallback that flushes a word typed without a separator now follows the user's
+  typing speed — shorter for a fast typist, longer for a slow one — clamped to
+  0.3–2.0 s. Only inter-key timing is recorded, never characters.
 - A "Т9" tab in the GUI with a single master toggle for typo correction and the
   new punctuation cleanup, plus per-rule rows.
 - Opt-in punctuation cleanup (`punctuation.py`): dashes, ellipsis, Cyrillic smart
@@ -55,6 +33,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   README carries a keyword paragraph plus both site links.
 - Google and Yandex site-verification files served on both hosts, an
   `apple-touch-icon`, and a footer "About" block in the host language.
+- Packaging contract tests (`tests/test_packaging_contract.py`): the systemd
+  user unit (no `Nice`/`CPUSchedulingPolicy`, `Restart=always`), the desktop
+  entry, package-data coverage, bytecode stripping in `build_deb.sh`, the
+  release workflow's tag filter, and a real `dpkg-deb` contents check.
+
+### Changed
+
+- `linguafix fix` now loads the user dictionary before detection, so a taught
+  brand such as `vercel` is corrected by the CLI exactly as the daemon does.
 
 ### Fixed
 
@@ -99,6 +86,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Stale release tag `v0.2.0-stage2` and the merged feature branches; `main` is
   the only branch left in `origin`.
+
+## [0.2.2] - 2026-10-07
+
+### Fixed
+
+- `linguafix stop` (and `kill`) now actually stop a packaged daemon. The CLI
+  only sent `SIGTERM` to the lock-file PID, so under the systemd user unit
+  (`Restart=always`) systemd respawned the daemon about 5 s later and it looked
+  unstoppable. Both commands now go through `daemon_control`, which stops the
+  unit first; `kill` gained a force-stop path that does the same before sending
+  `SIGKILL`.
+- GUI settings now reach a running daemon. Every `GuiState.save` asks a live
+  daemon to reload, so a switch flipped in the GUI (T9, a trigger, a guard) is
+  applied immediately instead of only after a restart. This is why T9 appeared
+  "on" but never corrected: the toggle was written to `config.toml` but the
+  daemon kept its old in-memory copy.
+- The window no longer resizes itself and breaks. The bottom switcher's
+  `reveal` had two writers (the `ViewSwitcherTitle` binding and a manual
+  `notify::default-width` handler with a different threshold); the duplicate
+  handler is gone. The advanced page is added to the stack once at construction
+  (hidden until revealed) instead of being appended at runtime to a homogeneous
+  `ViewStack`, and the plain pages scroll, so the window shrinks cleanly.
+
+### Changed
+
+- The big on/off button looks like the GNOME quick-settings power button: a
+  white circle with a soft outer ring and a thin `power-symbolic` glyph that
+  turns accent-coloured when active. The `big-toggle`/`active-state`/`busy-state`
+  classes previously had no stylesheet at all. Colours are libadwaita named
+  colours, so light/dark themes follow automatically, and the transitions are
+  dropped when the system asks for reduced motion.
 
 ## [0.2.1] - 2026-10-07
 
@@ -220,6 +238,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `uk`/`de`/`fr` corpora are opt-in and have not been calibrated against
   live input.
 
+[0.2.3]: https://github.com/Pavel1778/LinguaFix/releases/tag/v0.2.3
 [0.2.2]: https://github.com/Pavel1778/LinguaFix/releases/tag/v0.2.2
 [0.2.1]: https://github.com/Pavel1778/LinguaFix/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Pavel1778/LinguaFix/releases/tag/v0.2.0
