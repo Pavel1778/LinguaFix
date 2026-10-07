@@ -212,6 +212,19 @@ def test_fix_empty_text(
     assert "Нет текста" in capsys.readouterr().out
 
 
+def test_fix_honours_user_dictionary(
+    isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A taught brand is not in the frequency corpora; the CLI must load the
+    # user dictionary so ``fix`` agrees with the daemon on ``муксуд``.
+    monkeypatch.setenv("XDG_DATA_HOME", str(isolated_env / "data"))
+    monkeypatch.setattr(cli.LayoutSwitcher, "get_current_layout", lambda self, force=False: "ru")
+    assert cli.main(["dict", "add", "vercel"]) == 0
+    capsys.readouterr()
+    assert cli.main(["fix", "--text", "муксуд"]) == 0
+    assert "vercel" in capsys.readouterr().out
+
+
 def test_fix_dry_run_does_not_apply(
     isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:

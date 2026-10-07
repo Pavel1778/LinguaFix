@@ -149,6 +149,7 @@ class LanguageDetector:
         self._user_words = {word.lower() for word in (user_words or []) if word.strip()}
         self._stop_words = {word.lower() for word in (stop_words or [])}
         self._vocabularies: dict[str, set[str]] = {}
+        self._vocabulary_order: dict[str, list[str]] = {}
         self._bigrams: dict[str, dict[str, float]] = {}
         self._load_corpora()
 
@@ -177,6 +178,7 @@ class LanguageDetector:
                 logger.debug("No corpus for language %s; skipping it", language)
                 continue
             self._vocabularies[language] = vocabulary
+            self._vocabulary_order[language] = [str(w).lower() for w in raw_words]
             self._bigrams[language] = bigrams
 
     @staticmethod
@@ -255,6 +257,14 @@ class LanguageDetector:
         would then consider implausible.
         """
         return set(self._vocabularies.get(language, set()))
+
+    def ordered_vocabulary(self, language: str) -> list[str]:
+        """Return the vocabulary most-frequent-first (empty when absent).
+
+        The corpora are stored most-frequent-first; the T9 corrector uses that
+        order to break a tie between two equally distant candidates.
+        """
+        return list(self._vocabulary_order.get(language, []))
 
     def is_stop_word(self, text: str) -> bool:
         """Return ``True`` if ``text`` contains any configured stop word.

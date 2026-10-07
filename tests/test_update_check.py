@@ -69,6 +69,39 @@ def test_fetch_latest_bad_payload(isolated_env: Path, monkeypatch: pytest.Monkey
         update_check.fetch_latest()
 
 
+def test_update_request_sends_no_typed_text(
+    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The only network call must be a body-less GET of the fixed endpoint."""
+    import io
+
+    captured: list[object] = []
+
+    class _Response(io.BytesIO):
+        def __enter__(self) -> _Response:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    def fake_urlopen(request: object, *_a: object, **_k: object) -> _Response:
+        captured.append(request)
+        return _Response(b'{"tag_name": "v9.9.9"}')
+
+    monkeypatch.setattr(update_check.urllib.request, "urlopen", fake_urlopen)
+    assert update_check.fetch_latest() == "v9.9.9"
+
+    assert len(captured) == 1
+    request = captured[0]
+    assert isinstance(request, update_check.urllib.request.Request)
+    assert request.get_method() == "GET"
+    assert request.data is None
+    # No cookies, tokens or identifiers; only the public endpoint is contacted.
+    assert request.full_url == update_check.RELEASES_URL
+    assert "Cookie" not in request.headers
+    assert "Authorization" not in request.headers
+
+
 def test_maybe_check_disabled_is_noop(isolated_env: Path) -> None:
     called: list[str] = []
     assert (

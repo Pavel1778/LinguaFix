@@ -40,6 +40,9 @@ jobs:
       - name: Ruff
         run: ruff check .
 
+      - name: isort
+        run: isort --check-only .
+
       - name: Black
         run: black --check .
 

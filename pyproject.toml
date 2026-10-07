@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "linguafix"
-version = "0.2.2"
+version = "0.2.3"
 description = "Automatic keyboard layout switcher for Debian GNOME (X11 and Wayland)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -70,6 +70,10 @@ target-version = ["py310"]
 [tool.isort]
 profile = "black"
 line_length = 100
+# Mirror ``[tool.ruff.lint.isort]``: ruff defaults ``combine_as_imports`` on and
+# isort defaults it off, so without this the two disagree on aliased imports.
+combine_as_imports = true
+src_paths = ["src", "tests"]
 
 [tool.ruff]
 line-length = 100
