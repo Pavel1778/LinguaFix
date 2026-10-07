@@ -19,6 +19,7 @@ from ..daemon_control import (
     disable_autostart as daemon_disable_autostart,
     enable_autostart as daemon_enable_autostart,
     is_running as daemon_is_running,
+    last_error as daemon_last_error,
     read_history as daemon_read_history,
     reload_config as daemon_reload_config,
     request_history as daemon_request_history,
@@ -98,6 +99,10 @@ class GuiState:
     def start(self) -> bool:
         """Start the daemon."""
         return daemon_start()
+
+    def last_error(self) -> str | None:
+        """Return the reason the last start attempt failed, if any."""
+        return daemon_last_error()
 
     def stop(self) -> bool:
         """Stop the daemon."""

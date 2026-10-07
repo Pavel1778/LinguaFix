@@ -227,6 +227,53 @@ If GNOME does not show AppIndicator icons, install the "AppIndicator and
 KStatusNotifierItem Support" GNOME extension. If PyGObject is missing LinguaFix
 logs an INFO message and keeps running without a tray icon.
 
+## The on/off switch flips back to OFF
+
+Symptom: you flip the big switch to ON, the spinner runs for a moment, and the
+switch returns to OFF without an error.
+
+Cause: the switch starts a systemd **user** service. Older units set `Nice=-10`
+and `CPUSchedulingPolicy=rr`; a user service has no `CAP_SYS_NICE`, so systemd
+cannot apply them, treats the failure as fatal and the unit never starts. The
+switch correctly reports "not running" and flips back.
+
+Check it:
+
+```bash
+systemctl --user status linguafix.service
+journalctl --user -u linguafix.service -n 20
+```
+
+If the log mentions "Failed to set nice level" or "Operation not permitted",
+update to a build whose unit no longer requests nice/RT scheduling (v0.2.1+).
+If the unit is fine but still fails, the switch now shows the real reason in the
+toast; you can also start the daemon directly to see it:
+
+```bash
+linguafix start --foreground
+```
+
+A daemon that exits with "No keyboard devices found" (wrong permissions, a
+container without `/dev/input`) is reported as a start failure, not as running.
+
+## The app icon is missing
+
+Symptom: LinguaFix runs, but its launcher in the app grid shows a blank or
+generic icon.
+
+Cause: the icon is an SVG. GNOME renders it through gdk-pixbuf, which needs the
+SVG loader from `librsvg2-common`. On a minimal install that loader is absent
+and the icon cannot be rasterised.
+
+```bash
+sudo apt install librsvg2-common hicolor-icon-theme
+gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor 2>/dev/null || true
+```
+
+Then log out and back in so the shell re-reads the icon. The `.deb` declares
+both packages as dependencies from v0.2.1 onward, so a normal install pulls them
+in automatically.
+
 ## Conflict with IBus / Fcitx
 
 IBus and Fcitx also intercept and transform keyboard input. Running them next to

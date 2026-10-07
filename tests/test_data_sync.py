@@ -34,3 +34,18 @@ def test_duplicated_data_file_is_in_sync(name: str) -> None:
     assert (
         root_copy.read_bytes() == package_copy.read_bytes()
     ), f"{name} differs between data/ and src/linguafix/data/; keep them in sync"
+
+
+def test_deb_depends_on_svg_icon_loader() -> None:
+    """The .deb must pull in the gdk-pixbuf SVG loader and the icon theme.
+
+    The app icon is an SVG installed into ``hicolor``. GNOME renders a
+    ``Icon=<name>`` entry through gdk-pixbuf, which needs the SVG loader from
+    ``librsvg2-common``; without it (and the ``hicolor-icon-theme`` that
+    declares the ``scalable/apps`` directory) the launcher shows a blank or
+    generic icon on a minimal install.
+    """
+    script = (REPO_ROOT / "scripts" / "build_deb.sh").read_text(encoding="utf-8")
+    depends_line = next(line for line in script.splitlines() if line.startswith("Depends:"))
+    assert "librsvg2-common" in depends_line
+    assert "hicolor-icon-theme" in depends_line
