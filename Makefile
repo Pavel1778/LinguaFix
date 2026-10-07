@@ -25,12 +25,14 @@ uninstall: ## Run the system uninstaller (bash uninstall.sh)
 test: ## Run the test suite with coverage
 	$(VENV_PY) -m pytest tests/ -q --cov=linguafix --cov-report=term-missing
 
-lint: ## Run ruff and black checks
+lint: ## Run ruff, isort and black checks
 	$(VENV)/bin/ruff check .
+	$(VENV)/bin/isort --check-only .
 	$(VENV)/bin/black --check .
 
-format: ## Auto-format the code with ruff and black
+format: ## Auto-format the code with ruff, isort and black
 	$(VENV)/bin/ruff check . --fix
+	$(VENV)/bin/isort .
 	$(VENV)/bin/black .
 
 typecheck: ## Run mypy in strict mode
