@@ -1,0 +1,57 @@
+/* LinguaFix GUI stylesheet.
+ *
+ * Only the big on/off button needs styling: libadwaita already themes every
+ * standard row, page and header. The colours below are the libadwaita named
+ * colours, so the button follows the system light/dark theme and accent colour
+ * automatically instead of hard-coding a palette.
+ */
+
+.big-toggle {
+  min-width: 150px;
+  min-height: 150px;
+  border-radius: 999px;
+  border: none;
+  background-image: none;
+  background-color: @card_bg_color;
+  /* A soft outer ring (halo) plus a subtle drop shadow gives the button depth
+   * without any bright colour. */
+  box-shadow:
+    0 0 0 14px alpha(@window_fg_color, 0.05),
+    0 0 0 1px alpha(@window_fg_color, 0.08),
+    0 4px 14px alpha(black, 0.12);
+  transition:
+    background-color 250ms ease,
+    box-shadow 250ms ease;
+}
+
+.big-toggle:hover {
+  background-color: shade(@card_bg_color, 1.04);
+}
+
+.big-toggle.active-state {
+  background-color: @card_bg_color;
+  box-shadow:
+    0 0 0 14px alpha(@accent_bg_color, 0.15),
+    0 0 0 1px alpha(@accent_color, 0.35),
+    0 4px 14px alpha(black, 0.15);
+}
+
+.big-toggle image {
+  color: @window_fg_color;
+  transition: color 250ms ease;
+}
+
+.big-toggle.active-state image {
+  color: @accent_color;
+}
+
+.big-toggle.busy-state image {
+  color: @window_fg_color;
+}
+
+/* Honour the system "reduce motion" setting: the widget adds this class when
+ * ``gtk-enable-animations`` is off. */
+.big-toggle.reduce-motion,
+.big-toggle.reduce-motion image {
+  transition: none;
+}

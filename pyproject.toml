@@ -61,6 +61,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 linguafix = ["data/*.json", "data/*.txt", "data/*.svg", "data/*.desktop"]
+"linguafix.gui" = ["*.css"]
 
 [tool.black]
 line-length = 100
