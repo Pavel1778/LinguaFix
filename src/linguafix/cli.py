@@ -21,6 +21,7 @@ from .collect_logs import collect_logs
 from .config import Config, cache_dir, config_path, load_config, save_config
 from .converter import LayoutConverter
 from .detector import LanguageDetector
+from .dictionary import load_user_dictionary
 from .doctor import run_doctor
 from .injector import TextInjector
 from .switcher import LayoutSwitcher
@@ -333,6 +334,9 @@ def cmd_fix(args: argparse.Namespace) -> int:
         stop_words=config.stop_words,
         min_word_length=config.min_word_length,
     )
+    # Match the daemon: taught words must make an otherwise unknown token (a
+    # brand such as ``vercel``) a valid target, or ``fix`` disagrees with it.
+    detector.set_user_words(load_user_dictionary(config.dictionary_custom_path))
     switcher = LayoutSwitcher(layouts=config.layouts, switch_method=config.switch_method)
     injector = TextInjector(converter=converter, backend=config.backend)
 
