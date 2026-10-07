@@ -69,6 +69,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stale release tag `v0.2.0-stage2` and the merged feature branches; `main` is
   the only branch left in `origin`.
 
+## [0.2.1] - 2026-10-07
+
+### Fixed
+
+- GUI toggle: удалены невозможные для user-service директивы
+  Nice/CPUScheduling из systemd unit (это была причина, почему
+  сервис не запускался).
+- GUI toggle: расширено окно reconcile до 10 секунд (совпадает
+  с START_TIMEOUT).
+- GUI toggle: показ реальной причины ошибки через toast
+  (systemctl stderr / spawn failure / daemon exited immediately).
+- Icon: добавлена зависимость `librsvg2-common` — без неё GNOME
+  не рендерит SVG-иконку.
+- Icon: добавлена зависимость `hicolor-icon-theme`.
+- daemon: `_start_tray()` перенесён внутрь try/finally, чтобы
+  исключение в трее не оставляло stale lock.
+
 ## [0.2.0] - 2026-10-04
 
 ### Added
