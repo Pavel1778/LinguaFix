@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from linguafix.gui import state as gui_state
 from linguafix.config import Config, load_config
+from linguafix.gui import state as gui_state
 from linguafix.gui.state import GuiState
 
 
