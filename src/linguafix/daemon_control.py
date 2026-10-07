@@ -283,7 +283,13 @@ def _kill_pid(pid: int, sig: int) -> bool:
 
 
 def stop() -> bool:
-    """Stop the daemon, however it was started."""
+    """Stop the daemon, however it was started.
+
+    The systemd unit is stopped *first* when it is the manager: it carries
+    ``Restart=always``, so a process killed out from under systemd is respawned
+    a few seconds later. A plain detached daemon (no systemd) is signalled
+    directly, and SIGTERM is escalated to SIGKILL when it is ignored.
+    """
     # Stop the unit first when it is the manager: systemd would otherwise
     # restart a process killed out from under it (``Restart=always``).
     if systemd_active():
@@ -295,6 +301,22 @@ def stop() -> bool:
             logger.warning("Daemon %d ignored SIGTERM; escalating to SIGKILL", pid)
             _kill_pid(pid, signal.SIGKILL)
             _wait_until(lambda: not pid_alive(pid), STOP_GRACE)
+    return not is_running()
+
+
+def kill() -> bool:
+    """Force-stop the daemon with SIGKILL, without a graceful attempt.
+
+    Stops the systemd unit first (when active) so ``Restart=always`` cannot
+    resurrect the process, then SIGKILLs the lock-file PID. Used by
+    ``linguafix kill`` for a daemon wedged in a subprocess that ignores SIGTERM.
+    """
+    if systemd_active():
+        _systemctl(["stop", SERVICE])
+    pid = read_pid()
+    if pid is not None:
+        _kill_pid(pid, signal.SIGKILL)
+        _wait_until(lambda: not pid_alive(pid), STOP_GRACE)
     return not is_running()
 
 
