@@ -17,11 +17,18 @@ from .settings_page import SettingsPage  # noqa: E402
 from .state import GuiState  # noqa: E402
 from .typo_page import TypoPage  # noqa: E402
 
-# Below this width the in-header tab labels no longer fit ("Главная" becomes
-# "Глав…"), so the switcher moves to a full-width bar under the content, where
-# every label has room. The window keeps a slightly larger default so the labels
-# are whole on first open, but the layout stays correct when the user shrinks it.
-NARROW_WIDTH = 560
+
+def _scrollable(page: Gtk.Widget) -> Gtk.ScrolledWindow:
+    """Wrap a plain page so overflow scrolls instead of breaking the layout.
+
+    ``Adw.PreferencesPage`` already scrolls; the plain ``Gtk.Box`` pages
+    (home, history) do not, so without this their content would overflow and
+    squash when the window is made smaller.
+    """
+    scroll = Gtk.ScrolledWindow()
+    scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+    scroll.set_child(page)
+    return scroll
 
 
 class LinguaFixWindow(Adw.ApplicationWindow):
@@ -40,12 +47,16 @@ class LinguaFixWindow(Adw.ApplicationWindow):
 
         header = Adw.HeaderBar()
         self._stack = Adw.ViewStack()
+        # Let each page dictate the stack's *height* so a tall page cannot force
+        # a huge natural size that then refuses to shrink (the "window resizes
+        # itself and breaks" symptom). Width stays homogeneous so the header
+        # switcher labels do not jump.
+        self._stack.set_property("vhomogeneous", False)
         # A title switcher shows the tabs in the header while there is room and
         # collapses them to the window title when there is not; the bar below
-        # carries the full labels in that narrow case. Together they replace the
-        # fixed WIDE switcher that truncated the labels in a small window.
-        # ViewSwitcherTitle takes the window title automatically, so it is not
-        # set here (set_title is deprecated in newer libadwaita).
+        # carries the full labels in that narrow case. ``title-visible`` is the
+        # single source of truth for the bottom bar's ``reveal``: a second writer
+        # (a manual width handler) fought this binding and made the bar flicker.
         self._switcher_title = Adw.ViewSwitcherTitle(stack=self._stack)
         header.set_title_widget(self._switcher_title)
 
@@ -72,21 +83,20 @@ class LinguaFixWindow(Adw.ApplicationWindow):
         self._history = HistoryPage(state, self._toasts)
         self._advanced = AdvancedPage(state, on_saved=self._on_saved)
 
-        self._stack.add_titled(self._home, "home", "Главная")
+        self._stack.add_titled(_scrollable(self._home), "home", "Главная")
         self._stack.add_titled(self._settings, "settings", "Настройки")
         self._stack.add_titled(self._dictionary, "dictionary", "Словарь")
         self._stack.add_titled(self._typo, "typo", "Т9")
-        self._stack.add_titled(self._history, "history", "История")
-        # The advanced page is added to the switcher only when revealed, so the
-        # basic settings stay uncluttered by default.
-        self._advanced_visible = False
+        self._stack.add_titled(_scrollable(self._history), "history", "История")
+        # The advanced page is created once, here, so the stack is never
+        # restructured at runtime (adding a page later changed the homogeneous
+        # width and made the switcher bar churn). It is simply hidden from the
+        # switcher until the user reveals it, keeping the basic settings clean.
+        self._advanced_page = self._stack.add_titled(self._advanced, "advanced", "Продвинутые")
+        self._advanced_page.set_visible(False)
         toolbar.set_content(self._stack)
 
-        self.connect("notify::default-width", self._on_width_changed)
         self._install_actions()
-
-    def _on_width_changed(self, _window: Gtk.Window, _param: object) -> None:
-        self._switcher_bar.set_reveal(self.get_width() < NARROW_WIDTH)
 
     def _install_actions(self) -> None:
         about = Gio.SimpleAction.new("about", None)
@@ -112,9 +122,9 @@ class LinguaFixWindow(Adw.ApplicationWindow):
         return group
 
     def _on_show_advanced(self, _action: object, _param: object) -> None:
-        if not self._advanced_visible:
-            self._stack.add_titled(self._advanced, "advanced", "Продвинутые")
-            self._advanced_visible = True
+        # The page already exists in the stack; only reveal it in the switcher
+        # and switch to it, so no runtime restructuring is needed.
+        self._advanced_page.set_visible(True)
         self._stack.set_visible_child_name("advanced")
 
     def _on_about(self, _action: object, _param: object) -> None:
@@ -162,6 +172,11 @@ class LinguaFixWindow(Adw.ApplicationWindow):
     def typo_page(self) -> TypoPage:
         """Expose the typo-correction page for tests."""
         return self._typo
+
+    @property
+    def advanced_page(self) -> Adw.ViewStackPage:
+        """Expose the advanced stack page (for reveal/resize tests)."""
+        return self._advanced_page
 
     @property
     def history_page(self) -> HistoryPage:

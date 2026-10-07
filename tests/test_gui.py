@@ -64,9 +64,12 @@ def test_window_creates_with_expected_pages(gui_state: Any) -> None:
     app = Adw.Application(application_id="io.github.pavel1778.LinguaFixTest")
     window = LinguaFixWindow(gui_state, app)
     names = {page.get_name() for page in window.stack.get_pages()}
-    assert names == {"home", "settings", "dictionary", "typo", "history"}
+    assert names == {"home", "settings", "dictionary", "typo", "history", "advanced"}
+    # The advanced page exists but is hidden from the switcher until revealed.
+    assert window.advanced_page.get_visible() is False
     assert window.home.toggle.state == "off"
     window._on_show_advanced(None, None)
+    assert window.advanced_page.get_visible() is True
     assert len(window.stack.get_pages()) == 6
 
 
@@ -706,6 +709,29 @@ def test_window_menu_actions(gui_state: Any) -> None:
     window._on_show_advanced(None, None)
     names = {page.get_name() for page in window.stack.get_pages()}
     assert names == {"home", "settings", "dictionary", "typo", "history", "advanced"}
+    assert window.stack.get_visible_child_name() == "advanced"
+
+
+def test_window_resizes_without_breaking(gui_state: Any) -> None:
+    """The window must survive resize and tab switches at several widths."""
+    import gi
+
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw
+
+    from linguafix.gui.window import LinguaFixWindow
+
+    app = Adw.Application(application_id="io.github.pavel1778.LinguaFixTestResize")
+    window = LinguaFixWindow(gui_state, app)
+    # Width is homogeneous; height follows the visible page so the window can
+    # shrink instead of being pinned to the tallest page.
+    assert window.stack.get_hhomogeneous() is True
+    assert window.stack.get_vhomogeneous() is False
+    for width, height in ((600, 720), (800, 760), (1200, 900)):
+        window.set_default_size(width, height)
+        for page in window.stack.get_pages():
+            window.stack.set_visible_child_name(page.get_name())
+    assert window.stack.get_visible_child_name() == "advanced"
 
 
 def test_about_window_builds() -> None:
