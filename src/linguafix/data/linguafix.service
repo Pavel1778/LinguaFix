@@ -10,11 +10,11 @@ Type=simple
 ExecStart=@BIN@ start --foreground
 Restart=always
 RestartSec=5
-# Keep the daemon responsive: a layout fix must beat the compositor's own
-# handling of the boundary key that triggered it.
-Nice=-10
-CPUSchedulingPolicy=rr
-CPUSchedulingPriority=20
+# Do NOT add Nice=-10 or CPUSchedulingPolicy=rr here. This is a *user* unit, so
+# it has no CAP_SYS_NICE: systemd cannot apply a negative nice level or a
+# real-time policy, treats the failure as fatal (exit 201) and the unit never
+# starts -- the daemon is stuck in a restart loop. A fix must still beat the
+# compositor, which is achieved by keeping the analysis path short instead.
 Environment=PYTHONUNBUFFERED=1
 StandardOutput=journal
 StandardError=journal

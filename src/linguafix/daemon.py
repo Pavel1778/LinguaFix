@@ -1434,8 +1434,11 @@ class LinguaFixDaemon:
             self.injector.describe(),
             ", dry-run" if self.dry_run else "",
         )
-        self._start_tray()
         try:
+            # Start the tray inside the try so a failing tray can never skip the
+            # lock release below: a leaked flock would leave a lock file naming a
+            # dead process, and the next start would see a stale "already running".
+            self._start_tray()
             self._loop(selector)
         finally:
             # Close the initial devices and any picked up by a re-discovery pass,

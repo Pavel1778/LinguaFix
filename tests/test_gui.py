@@ -906,3 +906,57 @@ def test_desktop_entry_matches_app_id() -> None:
     root = Path(__file__).resolve().parents[1]
     entry = (root / "data" / "linguafix.desktop").read_text(encoding="utf-8")
     assert f"StartupWMClass={APP_ID}\n" in entry
+
+
+def test_toggle_failure_shows_reason(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failed start must surface the real reason, not a bare "не удалось"."""
+    toasts: list[str] = []
+
+    class _Toasts:
+        def add_toast(self, toast: object) -> None:
+            toasts.append(toast.get_title())
+
+    monkeypatch.setattr(app_focus, "get_active_app", lambda: None)
+    monkeypatch.setattr(gui_state, "is_active", lambda: False)
+    monkeypatch.setattr(gui_state, "current_layout", lambda: "")
+    monkeypatch.setattr(gui_state, "is_autostart_enabled", lambda: False)
+    monkeypatch.setattr(gui_state, "start", lambda: False)
+    monkeypatch.setattr(
+        gui_state, "last_error", lambda: "сервис не стал активным (проверьте journalctl)"
+    )
+
+    from linguafix.gui.home_page import HomePage
+
+    page = HomePage(gui_state, _Toasts())
+    page._on_toggle_done(False)
+    assert toasts
+    assert "journalctl" in toasts[-1]
+
+
+def test_toggle_reconcile_window_outlasts_start_timeout() -> None:
+    """The reconcile loop must run longer than a worst-case ``start()``."""
+    from linguafix.daemon_control import START_TIMEOUT
+    from linguafix.gui import home_page
+
+    window = (home_page.RECONCILE_MS / 1000.0) * home_page.RECONCILE_ATTEMPTS
+    # start() can spend START_TIMEOUT on systemd plus START_TIMEOUT on the
+    # detached fallback before giving up; the button must stay busy until then.
+    assert window >= 2 * START_TIMEOUT
+
+
+def test_service_unit_has_no_user_hostile_scheduling() -> None:
+    """A user unit must not request nice/RT scheduling it cannot obtain.
+
+    systemd treats a failed ``Nice=``/``CPUSchedulingPolicy=`` as fatal for a
+    user service (no CAP_SYS_NICE), so the unit never starts and the daemon
+    loops on restart -- exactly the "button flips back to OFF" bug.
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    unit = (root / "data" / "linguafix.service").read_text(encoding="utf-8")
+    active = [line for line in unit.splitlines() if not line.lstrip().startswith("#")]
+    joined = "\n".join(active)
+    assert "Nice=" not in joined
+    assert "CPUSchedulingPolicy=" not in joined
+    assert "CPUSchedulingPriority=" not in joined

@@ -131,7 +131,7 @@ def test_start_spawns_when_systemd_disabled(
     monkeypatch.setattr(daemon_control, "is_running", lambda: False)
     monkeypatch.setattr(daemon_control, "systemd_enabled", lambda: False)
     monkeypatch.setattr(
-        daemon_control, "spawn_detached", lambda dry_run=False: spawned.append(True)
+        daemon_control, "spawn_detached", lambda dry_run=False: spawned.append(True) or True
     )
     monkeypatch.setattr(daemon_control, "_wait_until", lambda predicate, timeout: True)
     monkeypatch.setattr(daemon_control, "read_pid", lambda: 4242)
@@ -145,7 +145,7 @@ def test_start_reports_failure_when_daemon_dies(
     """A daemon that writes the lock then dies must not look like a start."""
     monkeypatch.setattr(daemon_control, "is_running", lambda: False)
     monkeypatch.setattr(daemon_control, "systemd_enabled", lambda: False)
-    monkeypatch.setattr(daemon_control, "spawn_detached", lambda dry_run=False: None)
+    monkeypatch.setattr(daemon_control, "spawn_detached", lambda dry_run=False: True)
     monkeypatch.setattr(daemon_control, "_wait_until", lambda predicate, timeout: True)
     monkeypatch.setattr(daemon_control, "read_pid", lambda: None)
     monkeypatch.setattr(daemon_control.time, "sleep", lambda _s: None)
@@ -238,7 +238,7 @@ def test_spawn_detached_prefers_launcher(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setattr(daemon_control.shutil, "which", lambda _name: "/usr/bin/linguafix")
     monkeypatch.setattr(daemon_control.subprocess, "Popen", _Popen)
-    daemon_control.spawn_detached()
+    assert daemon_control.spawn_detached() is True
     assert recorded == [["/usr/bin/linguafix", "start", "--foreground"]]
 
 
@@ -252,7 +252,7 @@ def test_spawn_detached_falls_back_to_module(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(daemon_control.shutil, "which", lambda _name: None)
     monkeypatch.setattr(daemon_control.subprocess, "Popen", _Popen)
     monkeypatch.setattr(daemon_control.sys, "executable", "/usr/bin/python3")
-    daemon_control.spawn_detached(dry_run=True)
+    assert daemon_control.spawn_detached(dry_run=True) is True
     assert recorded == [
         ["/usr/bin/python3", "-m", "linguafix", "start", "--foreground", "--dry-run"]
     ]
@@ -264,7 +264,7 @@ def test_spawn_detached_handles_oserror(monkeypatch: pytest.MonkeyPatch) -> None
 
     monkeypatch.setattr(daemon_control.shutil, "which", lambda _name: None)
     monkeypatch.setattr(daemon_control.subprocess, "Popen", raise_oserror)
-    daemon_control.spawn_detached()  # must not raise
+    assert daemon_control.spawn_detached() is False  # must not raise
 
 
 def test_start_falls_back_when_systemd_start_fails(
@@ -277,7 +277,7 @@ def test_start_falls_back_when_systemd_start_fails(
     monkeypatch.setattr(daemon_control, "_systemctl", lambda args, timeout=5.0: None)
     monkeypatch.setattr(daemon_control, "_wait_until", lambda predicate, timeout: False)
     monkeypatch.setattr(
-        daemon_control, "spawn_detached", lambda dry_run=False: spawned.append(True)
+        daemon_control, "spawn_detached", lambda dry_run=False: spawned.append(True) or True
     )
     daemon_control.start()
     assert spawned == [True]
@@ -399,3 +399,54 @@ def test_pid_alive_real_zombie() -> None:
         assert daemon_control.pid_alive(child.pid) is False
     finally:
         child.wait()
+
+
+def test_last_error_reports_systemd_failure(
+    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A non-zero ``systemctl start`` must leave a readable reason for the GUI."""
+    import subprocess
+
+    monkeypatch.setattr(daemon_control, "is_running", lambda: False)
+    monkeypatch.setattr(daemon_control, "systemd_enabled", lambda: True)
+    monkeypatch.setattr(daemon_control, "systemd_active", lambda: False)
+    monkeypatch.setattr(daemon_control, "read_pid", lambda: None)
+    monkeypatch.setattr(daemon_control, "_wait_until", lambda predicate, timeout: False)
+    monkeypatch.setattr(daemon_control, "spawn_detached", lambda dry_run=False: False)
+    monkeypatch.setattr(
+        daemon_control,
+        "_systemctl",
+        lambda args, timeout=5.0: subprocess.CompletedProcess(
+            args, 1, "", "Failed to start linguafix.service: Unit failed to start"
+        ),
+    )
+    assert daemon_control.start() is False
+    error = daemon_control.last_error()
+    assert error is not None
+    assert "Unit failed to start" in error
+
+
+def test_last_error_reports_immediate_death(
+    isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A daemon that writes the lock then dies must explain itself."""
+    monkeypatch.setattr(daemon_control, "is_running", lambda: False)
+    monkeypatch.setattr(daemon_control, "systemd_enabled", lambda: False)
+    monkeypatch.setattr(daemon_control, "spawn_detached", lambda dry_run=False: True)
+    monkeypatch.setattr(daemon_control, "_wait_until", lambda predicate, timeout: True)
+    monkeypatch.setattr(daemon_control, "read_pid", lambda: None)
+    monkeypatch.setattr(daemon_control.time, "sleep", lambda _s: None)
+    assert daemon_control.start() is False
+    assert daemon_control.last_error() is not None
+
+
+def test_last_error_cleared_on_success(isolated_env: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A successful start must not keep a stale error from a previous attempt."""
+    monkeypatch.setattr(daemon_control, "is_running", lambda: False)
+    monkeypatch.setattr(daemon_control, "systemd_enabled", lambda: False)
+    monkeypatch.setattr(daemon_control, "spawn_detached", lambda dry_run=False: True)
+    monkeypatch.setattr(daemon_control, "_wait_until", lambda predicate, timeout: True)
+    monkeypatch.setattr(daemon_control, "read_pid", lambda: 4242)
+    monkeypatch.setattr(daemon_control.time, "sleep", lambda _s: None)
+    assert daemon_control.start() is True
+    assert daemon_control.last_error() is None

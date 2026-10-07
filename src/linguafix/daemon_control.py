@@ -45,6 +45,22 @@ SYSTEMCTL_TIMEOUT: Final[float] = 5.0
 SYSTEMCTL_BACKOFF: Final[float] = 10.0
 _systemctl_backoff_until: float = 0.0
 
+# Why the most recent :func:`start` failed, for the GUI to show the user. It is
+# a human-readable one-liner (no typed text) and is reset at the top of every
+# ``start`` so a stale message is never shown after a later success.
+_last_start_error: str | None = None
+
+
+def last_error() -> str | None:
+    """Return the reason the last :func:`start` failed, or ``None``."""
+    return _last_start_error
+
+
+def _set_start_error(message: str | None) -> None:
+    """Record the reason a start attempt failed (or clear it on success)."""
+    global _last_start_error
+    _last_start_error = message
+
 
 def lock_path() -> Path:
     """Return the path of the daemon PID lock file."""
@@ -173,13 +189,17 @@ def _wait_until(predicate: Callable[[], bool], timeout: float) -> bool:
     return predicate()
 
 
-def spawn_detached(dry_run: bool = False) -> None:
+def spawn_detached(dry_run: bool = False) -> bool:
     """Start a detached daemon process, logging any failure.
 
     Prefers the installed ``linguafix`` launcher over ``sys.executable -m``
     because the launcher sets ``PYTHONPATH`` for the packaged layout; spawning
     ``python3 -m linguafix`` directly would fail to import the package in a
     ``.deb`` install when the GUI was not itself started through the launcher.
+
+    Returns:
+        ``True`` when the process was spawned (not when the daemon is healthy:
+        the caller still polls the lock file), ``False`` when ``Popen`` failed.
     """
     launcher = shutil.which("linguafix")
     command = (
@@ -199,6 +219,8 @@ def spawn_detached(dry_run: bool = False) -> None:
         )
     except OSError:
         logger.error("Could not spawn the daemon", exc_info=True)
+        return False
+    return True
 
 
 def start(dry_run: bool = False) -> bool:
@@ -207,21 +229,45 @@ def start(dry_run: bool = False) -> bool:
     Prefers the systemd unit when it is enabled so the service keeps its
     restart-on-failure semantics; otherwise spawns a detached process. Either
     way the daemon writes the PID lock file, which is what the GUI polls.
+
+    On failure :func:`last_error` carries a human-readable reason (the systemd
+    error, a spawn error, or "daemon exited immediately") for the GUI to show
+    instead of a generic message.
     """
+    _set_start_error(None)
     if is_running():
         return True
     if systemd_enabled():
-        _systemctl(["start", SERVICE])
+        result = _systemctl(["start", SERVICE])
+        if result is not None and result.returncode != 0:
+            detail = (result.stderr or result.stdout or "").strip().splitlines()
+            _set_start_error(detail[0] if detail else "systemd не смог запустить сервис")
+            logger.warning("systemctl start failed: %s", detail)
         if _wait_until(lambda: read_pid() is not None or systemd_active(), START_TIMEOUT):
             return True
-    spawn_detached(dry_run=dry_run)
+        if _last_start_error is None:
+            _set_start_error("сервис не стал активным (проверьте journalctl --user -u linguafix)")
+    if not spawn_detached(dry_run=dry_run):
+        # Keep an earlier systemd reason if there is one: it is more specific
+        # than "could not spawn" and points the user at the real failure.
+        if _last_start_error is None:
+            _set_start_error("не удалось запустить процесс демона")
+        return False
     if not _wait_until(lambda: read_pid() is not None, START_TIMEOUT):
+        if _last_start_error is None:
+            _set_start_error("демон не записал PID (проверьте ~/.local/state/linguafix/)")
         return False
     # The lock appears before the daemon checks for devices, so confirm it is
     # still alive a moment later; otherwise a daemon that died instantly (no
     # keyboard devices) would be reported as a successful start.
     time.sleep(0.3)
-    return read_pid() is not None
+    if read_pid() is None:
+        _set_start_error("демон завершился сразу после старта (нет доступа к клавиатуре?)")
+        return False
+    # The fallback spawn succeeded after a failed systemd start: drop the
+    # now-irrelevant systemd reason so it is not shown as a live error.
+    _set_start_error(None)
+    return True
 
 
 def _kill_pid(pid: int, sig: int) -> bool:

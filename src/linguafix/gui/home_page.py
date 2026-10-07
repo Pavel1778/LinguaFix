@@ -15,8 +15,12 @@ from .widgets.mode_switcher import ModeSwitcher  # noqa: E402
 from .widgets.status_row import StatusRow  # noqa: E402
 
 REFRESH_MS = 1500
-RECONCILE_MS = 150
-RECONCILE_ATTEMPTS = 12
+# A start can take up to START_TIMEOUT (5 s) for systemd plus another 5 s for the
+# detached-spawn fallback before daemon_control.start() gives up. The reconcile
+# window must outlast that, or the button flips back to OFF while the start is
+# still in flight -- the "spinner for a moment, then inactive" bug.
+RECONCILE_MS = 250
+RECONCILE_ATTEMPTS = 40
 
 
 class HomePage(Gtk.Box):
@@ -103,7 +107,13 @@ class HomePage(Gtk.Box):
 
     def _on_toggle_done(self, ok: object) -> None:
         if not ok:
-            self._toast("Не удалось переключить демон", ok=False)
+            reason = self._state.last_error()
+            message = (
+                f"Не удалось переключить демон: {reason}"
+                if reason
+                else "Не удалось переключить демон"
+            )
+            self._toast(message, ok=False)
 
     def _poll_state(self, want_active: bool, attempt: int) -> None:
         """Check the daemon state off the main thread, then redraw when it matches."""
