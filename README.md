@@ -216,7 +216,7 @@ on_punctuation = false     # знаки препинания (включать �
 punctuation_chars = ".!?,;:"
 
 # Пауза после удаления перед вводом нового текста (Chromium/Electron).
-backspace_settle_ms = 80
+backspace_settle_ms = 120
 # Пауза после триггера по границе (пробел/Enter), пока приложение
 # обрабатывает саму клавишу-границу, до начала удаления.
 trigger_settle_ms = 50

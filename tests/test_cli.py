@@ -32,6 +32,7 @@ def test_build_parser_has_all_commands() -> None:
         "status",
         "mode",
         "undo",
+        "hotkeys",
         "dict",
         "config",
         "fix",
@@ -45,6 +46,17 @@ def test_build_parser_has_all_commands() -> None:
         "restart",
     ):
         assert command in actions
+
+
+def test_hotkeys_command(isolated_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """``linguafix hotkeys`` prints the effective bindings for a default config."""
+    assert cli.main(["hotkeys"]) == 0
+    out = capsys.readouterr().out
+    assert "SHIFT+SHIFT" in out
+    assert "SHIFT+BACKSPACE" in out
+    assert "CTRL+SHIFT+T" in out
+    assert "CTRL+SHIFT+R" in out
+    assert "2000" in out
 
 
 def test_version_command(capsys: pytest.CaptureFixture[str]) -> None:
