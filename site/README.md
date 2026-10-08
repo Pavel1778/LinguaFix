@@ -48,29 +48,30 @@ site/
 
 ### Layero (зеркало для РФ)
 
-**Автоматически.** Workflow `.github/workflows/deploy-layero.yml` собирает и
-деплоит `site/` на Layero при каждом изменении лендинга в `main`. Нужен один
-секрет: получите API-токен в панели Layero и добавьте его в
-**Settings → Secrets and variables → Actions** под именем `LAYERO_TOKEN`. Без
-секрета шаг завершается предупреждением и не роняет сборку.
+Проект Layero **подключён к репозиторию**: платформа сама собирает и публикует
+сайт на каждом push в `main`. Репозиторий самодостаточен для сборки — на это
+работают два файла:
 
-**Вручную** (если нужно задеплоить из локальной машины):
+- корневой **`layero.json`** — описывает сборку монорепо, т.к. приложение лежит
+  не в корне: `framework: generic`, `buildCommand: npm --prefix site ci &&
+  npm --prefix site run build`, `outputDirectory: site/dist`. Без него Layero
+  из корня не находит приложение («This folder has no app of its own»).
+- `site/layero.json` — настройки, если собирать из папки `site/` вручную.
 
-1. Зарегистрируйтесь на <https://layero.app> через GitHub.
-2. Установите CLI и войдите:
-   ```bash
-   npm i -g layero@latest   # либо используйте npx
-   layero login             # либо задайте LAYERO_TOKEN
-   ```
-3. Задеплойте из папки `site/`:
-   ```bash
-   cd site
-   npx layero@latest deploy
-   ```
-   Сайт будет на `linguafix.layero.app`.
+Проверить план сборки без выгрузки (логин не нужен):
 
-`layero.json` не обязателен, если Layero сам определяет Astro, но оставлен для
-явности.
+```bash
+npx layero@latest deploy --dry-run
+```
+
+**Вручную** (не обязательно, только для локальной проверки):
+
+```bash
+npx layero@latest deploy --root site
+```
+
+`layero.json` не обязателен, если Layero сам определяет Astro, но для монорепо
+корневой файл нужен явно.
 
 ## Обновление версии
 

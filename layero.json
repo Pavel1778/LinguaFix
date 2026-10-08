@@ -1,0 +1,5 @@
+{
+  "framework": "generic",
+  "buildCommand": "npm --prefix site ci && npm --prefix site run build",
+  "outputDirectory": "site/dist"
+}
