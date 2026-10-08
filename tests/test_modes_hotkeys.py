@@ -326,3 +326,61 @@ def test_same_layout_layout_fix_is_refused(monkeypatch: pytest.MonkeyPatch) -> N
     press(daemon, "ghbdtn")  # switcher.current is "us"
     tap(daemon, "KEY_SPACE")
     assert _injector(daemon).replacements == []
+
+
+def test_double_shift_fixes_short_word() -> None:
+    """Double Shift forces a 1-2 character token into the other layout.
+
+    A token below ``min_word_length`` is invisible to the ordinary detector, so
+    the explicit hotkey resolves it itself: ``фт`` typed in the wrong layout
+    becomes ``an``.
+    """
+    daemon = make_daemon(mode="manual", hotkey_fix_last_word="SHIFT+SHIFT")
+    daemon.switcher.current = "ru"
+    press(daemon, "an")  # physical keys render "фт" in the active ru layout
+    assert daemon.buffer == "фт"
+    tap(daemon, "KEY_LEFTSHIFT")
+    tap(daemon, "KEY_LEFTSHIFT")
+    assert _injector(daemon).replacements == [(2, "an", "us")]
+
+
+def test_double_shift_leaves_ambiguous_short_word() -> None:
+    """A short token already valid in the current language is not forced.
+
+    ``ты`` is a real Russian word, so a double Shift must not rewrite it into
+    nonsense even though physical keys 1-2 exist in the other layout.
+    """
+    daemon = make_daemon(mode="manual", hotkey_fix_last_word="SHIFT+SHIFT")
+    daemon.switcher.current = "ru"
+    press(daemon, "ns")  # physical keys render "ты" in the active ru layout
+    assert daemon.buffer == "ты"
+    tap(daemon, "KEY_LEFTSHIFT")
+    tap(daemon, "KEY_LEFTSHIFT")
+    assert _injector(daemon).replacements == []
+
+
+def test_double_shift_single_char_needs_taught_word() -> None:
+    """A single character with no dictionary match is left alone.
+
+    ``а`` converts to ``f`` on US, but a lone letter is never corrected unless
+    the user taught the target, so a stray double Shift cannot deform it.
+    """
+    daemon = make_daemon(mode="manual", hotkey_fix_last_word="SHIFT+SHIFT")
+    daemon.switcher.current = "ru"
+    press(daemon, "f")  # physical key renders "а" in the active ru layout
+    assert daemon.buffer == "а"
+    tap(daemon, "KEY_LEFTSHIFT")
+    tap(daemon, "KEY_LEFTSHIFT")
+    assert _injector(daemon).replacements == []
+
+
+def test_double_shift_fixes_taught_single_char() -> None:
+    """A taught single character is resolved by the explicit hotkey."""
+    daemon = make_daemon(mode="manual", hotkey_fix_last_word="SHIFT+SHIFT")
+    daemon.switcher.current = "ru"
+    daemon.detector.set_user_words(["f"])
+    press(daemon, "f")  # physical key renders "а" in the active ru layout
+    assert daemon.buffer == "а"
+    tap(daemon, "KEY_LEFTSHIFT")
+    tap(daemon, "KEY_LEFTSHIFT")
+    assert _injector(daemon).replacements == [(1, "f", "us")]

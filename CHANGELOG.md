@@ -14,6 +14,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   minute), which hung the whole check; the timeout bounds that. A regression
   test asserts every job keeps a timeout.
 
+## [0.2.6] - 2026-10-08
+
+### Fixed
+
+- The `Received SIGUSR2` log spam is gone for real. The daemon now rewrites its
+  metadata-only history snapshot itself whenever the history changes (a fix or
+  an undo); the GUI only *reads* the file and no longer signals the daemon on a
+  2 s poll timer. The v0.2.5 fix gated one tab's timer but the daemon's own
+  per-fix write was never triggered without the signal, so the log stayed noisy.
+- `typo_correction` (and any other GUI setting) is no longer reset to `false`
+  after a reinstall or a mode change. The daemon's `_persist_config` used to
+  dump its whole, possibly stale, in-memory config over the file; it now applies
+  only the field it changed onto the current file contents.
+- A double Shift now fixes 1-2 character tokens (`фт` -> `an`), which the
+  ordinary detector skips below `min_word_length`. A conversion is applied only
+  when it is unambiguous: the result must be a known word of the target language
+  and the token must not already be a word of the current one; a taught word
+  always wins. Ambiguous tokens (for example a lone letter) are left untouched.
+- An invalid `config.toml` value now logs the exact key it dropped, so a silent
+  revert to a default is traceable to the offending line.
+
+### Added
+
+- The `.deb` `postinst` runs `systemctl --user daemon-reload` after replacing
+  the unit, so the next `systemctl --user restart linguafix.service` no longer
+  warns that the unit changed on disk.
+- `linguafix doctor` gains a "Графический интерфейс" check that names the exact
+  packages to install (`python3-gi gir1.2-gtk-4.0 gir1.2-adw-1`) when the
+  GTK4/libadwaita stack is absent. The GUI stack is a `Recommends` of the
+  `.deb` (a headless install does not need it), so a download followed by
+  `--no-install-recommends` previously failed with a bare message; the
+  requirement is now documented and diagnosed up front.
+
+### Changed
+
+- The Home tab's 1.5 s status poll is paused while the tab is hidden and
+  refreshes on open, so a background window does not keep probing
+  `systemctl`/`g3kb-switch`/D-Bus.
+
 ## [0.2.5] - 2026-10-08
 
 ### Fixed

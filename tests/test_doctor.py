@@ -55,6 +55,20 @@ def test_check_gnome_version_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
     assert doctor.check_gnome_version().status == doctor.WARN
 
 
+def test_check_gui_libraries_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("linguafix.gui.gtk_available", lambda: True)
+    assert doctor.check_gui_libraries().status == doctor.OK
+
+
+def test_check_gui_libraries_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("linguafix.gui.gtk_available", lambda: False)
+    result = doctor.check_gui_libraries()
+    assert result.status == doctor.WARN
+    # The hint must name the exact packages, so a user who downloaded the .deb
+    # knows what to install instead of guessing.
+    assert "gir1.2-adw-1" in (result.hint or "")
+
+
 def test_check_device_access_uaccess(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(doctor, "_uaccess_rule_present", lambda: True)
     monkeypatch.setattr(doctor, "_input_group_membership", lambda: False)

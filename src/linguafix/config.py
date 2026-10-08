@@ -658,7 +658,12 @@ class Config:
 
     @classmethod
     def _drop_invalid(cls, values: dict[str, Any]) -> dict[str, Any]:
-        """Return ``values`` with the keys that fail validation removed."""
+        """Return ``values`` with the keys that fail validation removed.
+
+        Each dropped key is logged by name, so a setting that silently reverts
+        to its default (``typo_correction = false`` after a hand edit) can be
+        traced to the exact offending value.
+        """
         subset = dict(values)
         while subset:
             try:
@@ -672,12 +677,20 @@ class Config:
                         cls(**trial)
                     except (TypeError, ValueError):
                         continue
+                    logger.warning(
+                        "Dropping invalid configuration key %r (value %r); keeping the rest",
+                        key,
+                        subset[key],
+                    )
                     del subset[key]
                     removed = True
                     break
                 if not removed:
                     # No single key is the culprit (a cross-field conflict);
                     # give up on the values rather than guess.
+                    logger.warning(
+                        "Configuration has a cross-field conflict; falling back to defaults"
+                    )
                     return {}
         return subset
 

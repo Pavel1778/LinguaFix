@@ -301,3 +301,27 @@ def test_reinstall_preserves_config(tmp_config_path: Path) -> None:
     assert loaded.mode == "hybrid"
     # Loading alone must not rewrite the file.
     assert tmp_config_path.read_text(encoding="utf-8") == before
+
+
+def test_dropped_invalid_key_is_logged(
+    tmp_config_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A dropped key is named in the log so a silent revert is traceable."""
+    tmp_config_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_config_path.write_text(
+        "typo_correction = true\nanalysis_timeout = 'not-a-number'\n",
+        encoding="utf-8",
+    )
+    with caplog.at_level("WARNING", logger="linguafix.config"):
+        loaded = load_config(tmp_config_path)
+    assert loaded.typo_correction is True
+    assert loaded.analysis_timeout == 0.8
+    assert any("analysis_timeout" in record.message for record in caplog.records)
+
+
+def test_typo_correction_round_trips_through_gui_style_save(tmp_config_path: Path) -> None:
+    """The GUI save path (mutate dataclass -> save_config) persists T9."""
+    config = load_config(tmp_config_path)  # creates defaults
+    config.typo_correction = True
+    save_config(config, tmp_config_path)
+    assert load_config(tmp_config_path).typo_correction is True

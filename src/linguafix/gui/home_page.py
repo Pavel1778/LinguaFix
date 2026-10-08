@@ -79,6 +79,9 @@ class HomePage(Gtk.Box):
         self._reconcile_want: bool | None = None
         self.refresh()
         GLib.timeout_add(REFRESH_MS, self._refresh_tick)
+        # Refresh the moment the page is shown again: the poll below is paused
+        # while the page is hidden, so returning to it must not show stale state.
+        self.connect("map", lambda _widget: self.refresh())
 
     @staticmethod
     def _section_label(text: str) -> Gtk.Label:
@@ -164,7 +167,10 @@ class HomePage(Gtk.Box):
 
     # --- refresh ----------------------------------------------------------
     def _refresh_tick(self) -> bool:
-        self.refresh()
+        # Only poll while the page is visible. A hidden page that kept probing
+        # ran systemctl/g3kb-switch/D-Bus every second and a half for nothing.
+        if self.get_mapped():
+            self.refresh()
         return True
 
     def refresh(self) -> None:

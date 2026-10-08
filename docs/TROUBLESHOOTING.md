@@ -387,6 +387,25 @@ If you want to see why a word was skipped, run the daemon in the foreground with
 `log_level = "DEBUG"` and watch for the `detect(...)` lines; they report the
 scores, the chosen layout and the reason for skipping.
 
+## A one- or two-letter token is not corrected by the fix hotkey (`фт` stays `фт`)
+
+Symptom: you typed a short token on the wrong layout (`фт`, meaning `an`) and a
+double Shift did nothing.
+
+Cause: short tokens are only forced when the conversion is unambiguous — the
+result must be a known word of the target language and the token must not
+already be a word of the current one. A lone letter such as `а` is therefore
+left alone on purpose: a wrong one-character guess is worse than no guess.
+
+Fix: teach the exact target, then the hotkey resolves it regardless of length:
+
+```bash
+linguafix dict add an     # then фт + double Shift -> an
+```
+
+For a single character, teach the target too (`linguafix dict add f` makes
+`а` + double Shift produce `f`).
+
 ## A typo is not corrected (`langauge` stays `langauge`)
 
 Typo correction (T9) is **off by default** — a wrong correction is worse than

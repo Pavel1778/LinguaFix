@@ -278,8 +278,10 @@ word is scored against the corpora whose *layout could have produced it*.
 - **Correction history** (`history_size`). A bounded ring of recent fixes backs
   the GUI "История" tab. An entry stores only the word *length*, the source and
   target layouts, a monotonic timestamp and an `undone` flag — never the typed
-  text. The GUI reads it through `daemon_control.request_history` (SIGUSR2) and
-  `read_history` (the atomically-written `history.json`).
+  text. The daemon rewrites the atomically-written `history.json` whenever the
+  history changes (a fix or an undo); the GUI only *reads* it through
+  `daemon_control.read_history`, without signalling the daemon, so a background
+  tab can poll it without any log spam.
 - **Skip rules** (`ignore_all_caps`, `ignore_with_digits`, `ignore_emails_urls`,
   `custom_skip_regex`). These short-circuit a buffer before detection. Digital
   tokens, `ALL CAPS` and e-mail/URL/path-like tokens (an internal separator such
