@@ -5,6 +5,15 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- CI: every job now sets `timeout-minutes: 15`. A stuck GitHub runner once left
+  the Python 3.12 job pending for ~49 minutes (the same suite finishes in ~1
+  minute), which hung the whole check; the timeout bounds that. A regression
+  test asserts every job keeps a timeout.
+
 ## [0.2.3] - 2026-10-07
 
 ### Added

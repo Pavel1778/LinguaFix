@@ -123,3 +123,24 @@ def test_release_workflow_builds_and_verifies_the_deb() -> None:
     assert "smoke_test.sh" in text
     assert "deb_selfsufficiency_test.sh" in text
     assert "action-gh-release" in text
+
+
+# --- CI workflow ------------------------------------------------------------
+
+
+def test_ci_jobs_have_a_timeout() -> None:
+    text = (REPO_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    # A stuck runner once left the Python 3.12 job pending for ~49 minutes; a
+    # timeout-minutes on every job bounds that instead of hanging the check.
+    _, _, jobs_text = text.partition("\njobs:\n")
+    assert jobs_text, "ci.yml has no jobs section"
+    jobs = re.findall(
+        r"(?m)^  ([A-Za-z0-9_-]+):\n(.*?)(?=^  [A-Za-z0-9_-]+:|\Z)",
+        jobs_text,
+        re.S,
+    )
+    assert jobs, "ci.yml declares no jobs"
+    for name, body in jobs:
+        assert re.search(
+            r"(?m)^    timeout-minutes:\s*\d+", body
+        ), f"CI job {name!r} has no timeout-minutes"

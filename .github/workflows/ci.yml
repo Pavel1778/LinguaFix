@@ -13,6 +13,7 @@ jobs:
   lint-and-test:
     name: Lint & test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -55,6 +56,7 @@ jobs:
   gui:
     name: GUI (GTK4 under xvfb)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -91,6 +93,7 @@ jobs:
   site:
     name: Landing page build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
