@@ -610,17 +610,6 @@ For a permanent change, unset `GTK_IM_MODULE`/`QT_IM_MODULE` in your session
 environment. Do not run LinguaFix and an input method that performs the same
 correction at the same time.
 
-## Corrections trigger while typing a password
-
-On Wayland the daemon cannot see which window has focus, so it cannot tell a
-password field from a text field. Mitigations:
-
-- Keep the default `stop_words` (`password`, `login`, `token`, `secret`, ...).
-- Add the words that appear around your passwords to `stop_words`.
-- Raise `min_word_length` so short passwords are ignored.
-- Disable LinguaFix while entering credentials: `linguafix stop` and
-  `linguafix start` afterwards.
-
 ## Several keyboards: text typed on the "other" one is not corrected
 
 The daemon listens to every keyboard it can find, not just the first one. If a
