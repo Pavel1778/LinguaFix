@@ -141,7 +141,7 @@ def test_new_field_defaults() -> None:
     assert config.hotkey_undo_last_fix == "SHIFT+BACKSPACE"
     assert config.hotkey_reload_config == "CTRL+SHIFT+R"
     assert config.hotkey_toggle_mode == ""
-    assert config.hotkey_double_tap_ms == 300
+    assert config.hotkey_double_tap_ms == 2000
     assert config.undo_window_seconds == 10
     assert config.undo_history_depth == 3
     assert config.confidence_threshold == 0.6
@@ -213,7 +213,28 @@ def test_old_pause_default_migrates_to_double_shift() -> None:
     # A config written before the double-tap default: both fields carry PAUSE.
     config = Config(hotkey="PAUSE", hotkey_fix_last_word="PAUSE")
     assert config.hotkey_fix_last_word == "SHIFT+SHIFT"
-    assert config.hotkey == "SHIFT+SHIFT"
+
+
+def test_legacy_undo_hotkey_is_migrated() -> None:
+    # A pre-0.2.8 install left ``CTRL+CTRL`` in the file; it is not a real
+    # binding, so loading it must yield the documented default.
+    config = Config(hotkey_undo_last_fix="CTRL+CTRL")
+    assert config.hotkey_undo_last_fix == "SHIFT+BACKSPACE"
+
+
+def test_deliberate_undo_hotkey_is_preserved() -> None:
+    # Any value other than the known stale one is a deliberate choice and must
+    # survive validation untouched.
+    config = Config(hotkey_undo_last_fix="CTRL+ALT+Z")
+    assert config.hotkey_undo_last_fix == "CTRL+ALT+Z"
+
+
+def test_toggle_layout_hotkey_default_and_normalisation() -> None:
+    assert Config().hotkey_toggle_layout_last_word == "CTRL+SHIFT+T"
+    assert (
+        Config(hotkey_toggle_layout_last_word="ctrl+shift+y").hotkey_toggle_layout_last_word
+        == "CTRL+SHIFT+Y"
+    )
 
 
 def test_deliberate_pause_on_new_field_is_preserved() -> None:
@@ -349,3 +370,20 @@ def test_typo_correction_round_trips_through_gui_style_save(tmp_config_path: Pat
     config.typo_correction = True
     save_config(config, tmp_config_path)
     assert load_config(tmp_config_path).typo_correction is True
+
+
+def test_float_fields_are_rounded_on_validation() -> None:
+    """A float with a binary tail is normalised, so the file stays clean."""
+    config = Config(analysis_timeout=0.7000000000000001, context_weight=0.30000000000000004)
+    assert config.analysis_timeout == 0.7
+    assert config.context_weight == 0.3
+    # The saved file carries the tidy value, not the tail.
+    assert "0.7000000000000001" not in repr(config.to_dict())
+
+
+def test_float_rounding_round_trips(tmp_config_path: Path) -> None:
+    config = load_config(tmp_config_path)
+    config.analysis_timeout = 0.7000000000000001
+    save_config(config, tmp_config_path)
+    assert "analysis_timeout = 0.7" in tmp_config_path.read_text(encoding="utf-8")
+    assert load_config(tmp_config_path).analysis_timeout == 0.7

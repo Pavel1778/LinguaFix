@@ -38,7 +38,13 @@ class SettingsPage(BoundPreferencesPage):
             [MODE_LABELS[m] for m in MODE_ORDER],
             self._config.mode,
             self._on_mode_selected,
-            subtitle="Авто исправляет сразу, ручной — только по хоткею",
+            # The layout switch is what ``manual`` gates. The opt-in passes
+            # (T9, punctuation) are layout-neutral and still run unless their
+            # own switches are off, so a "fully quiet" manual needs those off.
+            subtitle=(
+                "Авто исправляет сразу, ручной — только по хоткею "
+                "(опечатки и пунктуация — по своим переключателям)"
+            ),
         )
         self.add(group)
 
@@ -67,6 +73,14 @@ class SettingsPage(BoundPreferencesPage):
             on_change=self._make_hotkey_handler("hotkey_undo_last_fix"),
         )
         group.add(self._hotkey_undo)
+        self._hotkey_toggle_layout = HotkeyRow(
+            "Сменить раскладку последнего слова",
+            "Разворачивает последнее слово в другую раскладку (привет → ghbdtn), "
+            "даже если слово выглядит правильным. Пустое значение — выключено.",
+            self._config.hotkey_toggle_layout_last_word,
+            on_change=self._make_hotkey_handler("hotkey_toggle_layout_last_word"),
+        )
+        group.add(self._hotkey_toggle_layout)
         self.add(group)
 
     def _make_hotkey_handler(self, field: str) -> Callable[[str], None]:

@@ -78,3 +78,16 @@ def detector(converter: LayoutConverter) -> LanguageDetector:
 def tmp_config_path(tmp_path: Path) -> Path:
     """Return a temporary path for a config file."""
     return tmp_path / "linguafix" / "config.toml"
+
+
+@pytest.fixture
+def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point every XDG directory at ``tmp_path`` and return it.
+
+    Prevents a test that saves the configuration (or writes a dictionary) from
+    touching the developer's real ``~/.config`` or ``~/.local/share``.
+    """
+    for var in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME"):
+        monkeypatch.setenv(var, str(tmp_path / var.lower()))
+    monkeypatch.setenv("HOME", str(tmp_path))
+    return tmp_path

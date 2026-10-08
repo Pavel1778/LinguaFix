@@ -74,7 +74,11 @@ DEFAULT_EXCEPTION_APPS: Final[tuple[str, ...]] = (
     "code",
     "codium",
     "sublime_text",
-    "gedit",
+    # GNOME Text Editor replaced gedit as the default text editor (gedit is not
+    # installed on Debian 13 / GNOME 48). The probe reduces an app id to its
+    # last dot component and lower-cases it, so ``org.gnome.TextEditor`` is
+    # matched as ``texteditor``.
+    "texteditor",
     "jetbrains-idea",
     "idea",
     "pycharm",
@@ -126,8 +130,26 @@ LEGACY_FIX_HOTKEY: Final[str] = "PAUSE"
 # The undo hotkey default. ``CTRL+Z`` collides with the application's own undo,
 # so the daemon uses ``SHIFT+BACKSPACE`` instead.
 DEFAULT_UNDO_HOTKEY: Final[str] = "SHIFT+BACKSPACE"
-# Maximum gap between the two taps of a double-tap hotkey.
-DEFAULT_DOUBLE_TAP_MS: Final[int] = 300
+# A stuck pre-0.2.8 value: an old build (or a copy of an old default) left
+# ``hotkey_undo_last_fix = "CTRL+CTRL"`` in the user's config, which is a
+# double-tap binding no key map uses for undo. It migrates to the real default.
+LEGACY_UNDO_HOTKEY: Final[str] = "CTRL+CTRL"
+# Manual reverse-conversion hotkey: type ``привет`` -> press it -> ``ghbdtn``.
+DEFAULT_TOGGLE_LAYOUT_HOTKEY: Final[str] = "CTRL+SHIFT+T"
+# Maximum gap between the two taps of a double-tap hotkey. The default is
+# generous (2 s) on purpose: at typing speed two Shift presses made while
+# capitalising or reaching for the modifier can fall well inside a short
+# window, and each false match deletes and retypes text. A deliberate double
+# tap is still far below two seconds, so a real one never misses.
+DEFAULT_DOUBLE_TAP_MS: Final[int] = 2000
+# Accepted range for ``hotkey_double_tap_ms``. The upper bound is wide enough
+# for a user who wants a longer manual-fix window (the request was 2-3 s).
+MIN_DOUBLE_TAP_MS: Final[int] = 100
+MAX_DOUBLE_TAP_MS: Final[int] = 3000
+# The pre-0.2.8 double-tap window. 300 ms is too short: two Shift presses made
+# while capitalising can fall outside it and a deliberate double tap is easy to
+# miss. A config still on the old value migrates to the wider default.
+LEGACY_DOUBLE_TAP_MS: Final[int] = 300
 VALID_BACKENDS: Final[tuple[str, ...]] = ("auto", "uinput", "wtype", "xdotool")
 VALID_SWITCH_METHODS: Final[tuple[str, ...]] = ("auto", "g3kb-switch", "setxkbmap")
 VALID_LOG_LEVELS: Final[tuple[str, ...]] = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
@@ -282,6 +304,39 @@ def data_dir() -> Path:
     return Path(str(resources.files("linguafix") / "data"))
 
 
+def _round_float(value: float, digits: int = 6) -> float:
+    """Round ``value`` for storage to shed binary representation noise.
+
+    A float from a GUI slider can arrive as ``0.7000000000000001``; writing that
+    back to ``config.toml`` is ugly and unstable. Rounding is applied *before*
+    validation so the stored value is exactly what the bound check saw.
+    """
+    return round(value, digits)
+
+
+def _normalise_categories(values: object) -> list[str]:
+    """Coerce ``installed_dict_categories`` to a de-duplicated slug list.
+
+    Slugs are lower-cased and trimmed; ``base`` is always present so the general
+    frequency list is never accidentally disabled. Order is preserved so the
+    user's listing stays stable.
+    """
+    if isinstance(values, str):
+        raw_items: list[object] = [values]
+    elif isinstance(values, (list, tuple)):
+        raw_items = list(values)
+    else:
+        raw_items = []
+    categories: list[str] = []
+    for item in raw_items:
+        slug = str(item).strip().lower()
+        if slug and slug not in categories:
+            categories.append(slug)
+    if "base" not in categories:
+        categories.insert(0, "base")
+    return categories
+
+
 def load_default_stop_words() -> list[str]:
     """Load the bundled stop-word list, returning an empty list on failure."""
     try:
@@ -360,6 +415,9 @@ class Config:
     hotkey_undo_last_fix: str = DEFAULT_UNDO_HOTKEY
     hotkey_toggle_mode: str = ""
     hotkey_reload_config: str = "CTRL+SHIFT+R"
+    # Manual reverse conversion: force the last word (even a correct one) into
+    # the other layout, e.g. ``привет`` -> ``ghbdtn``. No detector involved.
+    hotkey_toggle_layout_last_word: str = DEFAULT_TOGGLE_LAYOUT_HOTKEY
     hotkey_swallow: bool = True
     hotkey_double_tap_ms: int = DEFAULT_DOUBLE_TAP_MS
     undo_window_seconds: int = DEFAULT_UNDO_WINDOW_SECONDS
@@ -384,6 +442,17 @@ class Config:
     exceptions_force_in_manual: list[str] = field(default_factory=list)
     dictionary_size: int = DEFAULT_DICTIONARY_SIZE
     dictionary_custom_path: str = ""
+    # Optional directory of extended dictionaries, one ``<lang>.txt`` per
+    # language. Words from these files are added to the detector's vocabulary
+    # (membership only, so n-gram scoring is unchanged), raising recall for
+    # languages without a big bundled corpus. Empty by default: nothing is
+    # loaded unless the user runs ``linguafix dict download``/``import-file``.
+    extended_dictionary_dir: str = ""
+    # Thematic (professional) dictionary categories the user has installed with
+    # ``linguafix dict install <category>``. ``base`` is the general frequency
+    # list shipped in the package; extra slugs add a domain vocabulary on top of
+    # it. Only category slugs are stored here -- never any typed text.
+    installed_dict_categories: list[str] = field(default_factory=lambda: ["base"])
     history_size: int = DEFAULT_HISTORY_SIZE
     quiet_hours_enabled: bool = False
     quiet_hours_start: str = "22:00"
@@ -431,7 +500,7 @@ class Config:
         Raises:
             ValueError: If a value cannot be coerced into a valid one.
         """
-        self.analysis_timeout = float(self.analysis_timeout)
+        self.analysis_timeout = _round_float(float(self.analysis_timeout))
         if self.analysis_timeout <= 0:
             raise ValueError("analysis_timeout must be positive")
         self.analysis_timeout_adaptive = bool(self.analysis_timeout_adaptive)
@@ -514,12 +583,36 @@ class Config:
             self.hotkey = DEFAULT_FIX_HOTKEY
         self.hotkey_fix_last_word = normalise_hotkey(self.hotkey_fix_last_word)
         self.hotkey_undo_last_fix = normalise_hotkey(self.hotkey_undo_last_fix)
+        # An old install could carry the pre-0.2.8 undo default ``CTRL+CTRL``
+        # (a leftover, not a deliberate binding — no key map uses it for undo).
+        # Migrate it to ``SHIFT+BACKSPACE`` and say so once, so the log explains
+        # why the hotkey changed. A deliberate choice of any other value stands.
+        if self.hotkey_undo_last_fix == LEGACY_UNDO_HOTKEY:
+            logger.info(
+                "Migrating hotkey_undo_last_fix %s -> %s (old default)",
+                LEGACY_UNDO_HOTKEY,
+                DEFAULT_UNDO_HOTKEY,
+            )
+            self.hotkey_undo_last_fix = DEFAULT_UNDO_HOTKEY
         self.hotkey_toggle_mode = normalise_hotkey(self.hotkey_toggle_mode)
         self.hotkey_reload_config = normalise_hotkey(self.hotkey_reload_config)
+        self.hotkey_toggle_layout_last_word = normalise_hotkey(self.hotkey_toggle_layout_last_word)
 
         self.hotkey_double_tap_ms = int(self.hotkey_double_tap_ms)
-        if not 100 <= self.hotkey_double_tap_ms <= 1000:
-            raise ValueError("hotkey_double_tap_ms must be between 100 and 1000")
+        # The pre-0.2.8 default of 300 ms is too short to reliably catch a
+        # deliberate double tap; a config still on it migrates to the wider
+        # default. Any other value is a deliberate choice and is kept.
+        if self.hotkey_double_tap_ms == LEGACY_DOUBLE_TAP_MS:
+            logger.info(
+                "Migrating hotkey_double_tap_ms %d -> %d (old default)",
+                LEGACY_DOUBLE_TAP_MS,
+                DEFAULT_DOUBLE_TAP_MS,
+            )
+            self.hotkey_double_tap_ms = DEFAULT_DOUBLE_TAP_MS
+        if not MIN_DOUBLE_TAP_MS <= self.hotkey_double_tap_ms <= MAX_DOUBLE_TAP_MS:
+            raise ValueError(
+                f"hotkey_double_tap_ms must be between {MIN_DOUBLE_TAP_MS} and {MAX_DOUBLE_TAP_MS}"
+            )
 
         self.undo_window_seconds = int(self.undo_window_seconds)
         if not 3 <= self.undo_window_seconds <= 60:
@@ -529,11 +622,11 @@ class Config:
             raise ValueError("undo_history_depth must be between 1 and 10")
 
         # --- detector / context / exceptions / dictionaries ----------------
-        self.confidence_threshold = float(self.confidence_threshold)
+        self.confidence_threshold = _round_float(float(self.confidence_threshold))
         if not 0.5 <= self.confidence_threshold <= 0.95:
             raise ValueError("confidence_threshold must be between 0.5 and 0.95")
         self.context_analysis = bool(self.context_analysis)
-        self.context_weight = float(self.context_weight)
+        self.context_weight = _round_float(float(self.context_weight))
         if not 0.0 <= self.context_weight <= 1.0:
             raise ValueError("context_weight must be between 0 and 1")
         self.ignore_all_caps = bool(self.ignore_all_caps)
@@ -543,11 +636,11 @@ class Config:
         self.structural_boundaries = bool(self.structural_boundaries)
         self.identifier_guard = bool(self.identifier_guard)
         self.password_guard = bool(self.password_guard)
-        self.plausibility_floor = float(self.plausibility_floor)
+        self.plausibility_floor = _round_float(float(self.plausibility_floor))
         self.max_consecutive_consonants = int(self.max_consecutive_consonants)
         if self.max_consecutive_consonants < 2:
             raise ValueError("max_consecutive_consonants must be >= 2")
-        self.min_vowel_ratio = float(self.min_vowel_ratio)
+        self.min_vowel_ratio = _round_float(float(self.min_vowel_ratio))
         if not 0.0 <= self.min_vowel_ratio < 1.0:
             raise ValueError("min_vowel_ratio must be between 0 and 1")
         self.custom_skip_regex = str(self.custom_skip_regex)
@@ -560,6 +653,17 @@ class Config:
         self.exceptions_apps = [
             str(app).strip() for app in self.exceptions_apps if str(app).strip()
         ]
+        # ``gedit`` was dropped from the default exception list in 0.2.8: it is
+        # not installed on Debian 13 / GNOME 48, where GNOME Text Editor
+        # (``org.gnome.TextEditor`` -> ``texteditor``) took its place. A config
+        # still carrying the old default entry is upgraded, so the text editor
+        # is actually excepted; an entry the user added on top of the default is
+        # kept.
+        if "gedit" in self.exceptions_apps and "texteditor" not in self.exceptions_apps:
+            logger.info("Migrating exceptions_apps: gedit -> texteditor")
+            self.exceptions_apps = [
+                "texteditor" if app == "gedit" else app for app in self.exceptions_apps
+            ]
         self.exceptions_force_in_manual = [
             str(app).strip() for app in self.exceptions_force_in_manual if str(app).strip()
         ]
@@ -568,6 +672,8 @@ class Config:
         if self.dictionary_size not in VALID_DICTIONARY_SIZES:
             raise ValueError(f"dictionary_size must be one of {VALID_DICTIONARY_SIZES}")
         self.dictionary_custom_path = str(self.dictionary_custom_path)
+        self.extended_dictionary_dir = str(self.extended_dictionary_dir).strip()
+        self.installed_dict_categories = _normalise_categories(self.installed_dict_categories)
 
         self.history_size = int(self.history_size)
         if not 1 <= self.history_size <= 100:
@@ -590,7 +696,7 @@ class Config:
         self.typo_long_word_threshold = int(self.typo_long_word_threshold)
         if self.typo_long_word_threshold < self.typo_min_word_length:
             raise ValueError("typo_long_word_threshold must be >= typo_min_word_length")
-        self.typo_top1_ratio_strict = float(self.typo_top1_ratio_strict)
+        self.typo_top1_ratio_strict = _round_float(float(self.typo_top1_ratio_strict))
         if self.typo_top1_ratio_strict < 1.0:
             raise ValueError("typo_top1_ratio_strict must be >= 1.0")
 

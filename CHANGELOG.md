@@ -5,6 +5,70 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.8] - 2026-10-08
+
+### Added
+
+- `linguafix dict download <lang>` and `linguafix dict import-file <path>` load
+  extended frequency word lists (`ru`, `en`, `uk`, `de`, `fr`) into
+  `$XDG_DATA_HOME/linguafix/dictionaries/<lang>.txt`. The detector reads them in
+  addition to the bundled corpora, widening vocabulary membership only — n-gram
+  scoring is unchanged, so already-correct words keep their verdict while rarer
+  words are recognised. Lists mirror FrequencyWords (MIT) under the repository's
+  `dictionaries/` folder. A new landing-page section links them.
+- `dict download` now tries the stable
+  `releases/latest/download/<lang>-50k.txt` asset first, then the branch mirror,
+  then upstream, and finally copies a locally shipped list — so it succeeds with
+  no network. Every list is attached to each GitHub Release and bundled in the
+  `.deb` (`linguafix/data/dictionaries/`), and the landing page links the
+  release assets rather than a branch path.
+- A `toggle_layout` hotkey (default `CTRL+SHIFT+T`) force-retypes the last word
+  in the other layout, the manual reverse of a correction. Configurable as
+  `hotkey_toggle_layout_last_word`.
+- **Thematic (professional) dictionaries.** `linguafix dict categories`,
+  `dict install <category> [--lang ru]`, `dict list-installed` and
+  `dict remove-category <category>` add domain vocabularies on top of the base
+  frequency list: `it`, `medicine`, `legal`, `finance`, `engineering` (ru + en).
+  Installed categories are recorded in `installed_dict_categories` (default
+  `["base"]`) and loaded as membership on top of the corpora. Detection priority
+  is **user dictionary → thematic → base → T9**. Thematic lists are **not**
+  bundled in the `.deb`; each is published as a `linguafix-dict-<slug>.tar.gz`
+  release asset, fetched first, then from the branch mirror, then from the
+  offline repository copy. The `/dictionaries` landing page lists the sections
+  with language, word count, size and licence (MIT).
+
+### Changed
+
+- The undo hotkey default (`SHIFT+BACKSPACE`) and the new toggle hotkey are shown
+  by `linguafix hotkeys` and the GUI. A stale `CTRL+CTRL` value left by an older
+  install is migrated to the default on load and the change is logged.
+- A config still on the pre-0.2.8 double-tap window (`hotkey_double_tap_ms = 300`)
+  is widened to the current default (2000 ms): 300 ms is too short to catch a
+  deliberate double tap reliably. Any other value is treated as a deliberate
+  choice and kept.
+- A config still carrying the old default exception `gedit` (not installed on
+  Debian 13 / GNOME 48) is migrated to `texteditor` (GNOME Text Editor) on load,
+  so the current default text editor is actually excepted.
+- **`manual` mode semantics (contract change).** Previously `mode = "manual"`
+  gated *every* automatic correction, so an opt-in T9 pass never fired
+  (`langauge` → `language` did nothing). Now only the automatic *layout switch*
+  is manual; layout-neutral passes (T9 typo, punctuation) run whenever their own
+  switches are on, in every mode. A user who wants a fully quiet daemon turns
+  `typo_correction` and `punctuation_correction` off (both default off). The
+  settings-tab subtitle says so; `tests/test_typo_daemon.py` and
+  `tests/test_user_config_migration.py` pin the behaviour.
+
+### Fixed
+
+- The GUI tab icons now fall back to text when a symbolic icon is missing from
+  the theme, instead of failing to draw the tab.
+- The two desktop notifications (correction and update-available) had been
+  corrupted into mojibake by an earlier edit; they are readable again. A test
+  now fails on double-encoded UTF-8 anywhere in the tracked sources.
+- The install examples in `README.md`, `docs/INSTALL.md` and `docs/TESTING.md`
+  named an old package version (`0.2.0`/`0.2.1`), so copying them failed with
+  "no such file"; they match the current release and a test pins them to it.
+
 ## [0.2.7] - 2026-10-08
 
 ### Fixed

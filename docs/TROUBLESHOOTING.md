@@ -455,6 +455,22 @@ A language is only a conversion target when its corpus is bundled
 (`ngrams_<lang>.json`) and its layout is in `layouts.json`; a missing corpus is
 skipped rather than treated as an empty model.
 
+### Bigger vocabulary for a language
+
+The bundled word list is the `dictionary_size` most frequent words (5000 by
+default). If real words in your language are still not recognised, add the
+extended top-50k list — it widens the vocabulary without changing the n-gram
+scoring, so nothing that already worked stops working:
+
+```bash
+linguafix dict download ru      # ru, en, uk, de, fr
+linguafix dict download uk
+```
+
+The file lands in `~/.local/share/linguafix/dictionaries/<lang>.txt`. Restart
+the daemon (or press the reload-config hotkey) to load it. You can also import a
+list you already have: `linguafix dict import-file ~/Downloads/uk-50k.txt --lang uk`.
+
 ## I type on purpose in two languages and the daemon fights me
 
 Turn on context analysis (on by default) and give it a known preceding word; or
@@ -593,17 +609,6 @@ fcitx5-remote -e          # Fcitx5
 For a permanent change, unset `GTK_IM_MODULE`/`QT_IM_MODULE` in your session
 environment. Do not run LinguaFix and an input method that performs the same
 correction at the same time.
-
-## Corrections trigger while typing a password
-
-On Wayland the daemon cannot see which window has focus, so it cannot tell a
-password field from a text field. Mitigations:
-
-- Keep the default `stop_words` (`password`, `login`, `token`, `secret`, ...).
-- Add the words that appear around your passwords to `stop_words`.
-- Raise `min_word_length` so short passwords are ignored.
-- Disable LinguaFix while entering credentials: `linguafix stop` and
-  `linguafix start` afterwards.
 
 ## Several keyboards: text typed on the "other" one is not corrected
 

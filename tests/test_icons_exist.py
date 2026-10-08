@@ -73,6 +73,24 @@ def test_every_gui_icon_name_exists() -> None:
     assert not missing, f"GUI references icons absent from the theme: {missing}"
 
 
+@pytest.mark.skipif(not _theme_installed(), reason="no system icon theme installed")
+def test_every_tab_icon_name_exists() -> None:
+    """The view-stack tab icons (``window.TAB_ICONS``) must exist in the theme.
+
+    A tab icon that the theme lacks renders as a broken-image placeholder; the
+    mapping is imported directly so this catches a value the regex parser above
+    would miss inside a dict literal. GTK is required to import the window
+    module, so the test is skipped when it is unavailable.
+    """
+    if not _gi_available():
+        pytest.skip("GTK4 unavailable")
+    from linguafix.gui.window import TAB_ICONS
+
+    assert TAB_ICONS, "no tab icons defined"
+    missing = sorted(name for name in TAB_ICONS.values() if not _icon_present(name))
+    assert not missing, f"tab icons absent from the theme: {missing}"
+
+
 @pytest.mark.skipif(not _gi_available(), reason="GTK4 unavailable")
 def test_the_power_glyph_is_the_one_adwaita_ships() -> None:
     # Regression: ``power-symbolic`` does not exist in Adwaita 48 and rendered

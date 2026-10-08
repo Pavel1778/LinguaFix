@@ -39,6 +39,12 @@ mkdir -p "${DIST_DIR}"
 cp -r "${REPO_DIR}/src/${PKG}" "${BUILD_DIR}/usr/lib/${PKG}/${PKG}"
 find "${BUILD_DIR}/usr/lib/${PKG}" -type d -name __pycache__ -prune -exec rm -rf {} +
 find "${BUILD_DIR}/usr/lib/${PKG}" -name '*.pyc' -delete
+# Ship the frequency dictionaries inside the package so ``dict download`` works
+# offline (and so the lists are present on the user's machine without a network
+# fetch). The source of truth is the repository ``dictionaries/`` folder.
+install -d "${BUILD_DIR}/usr/lib/${PKG}/${PKG}/data/dictionaries"
+install -m 0644 "${REPO_DIR}"/dictionaries/*-50k.txt \
+    "${BUILD_DIR}/usr/lib/${PKG}/${PKG}/data/dictionaries/"
 # Normalise permissions regardless of the developer's umask.
 chmod -R a+rX "${BUILD_DIR}/usr/lib/${PKG}"
 

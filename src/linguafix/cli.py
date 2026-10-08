@@ -14,6 +14,7 @@ import signal
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from . import __version__
@@ -198,6 +199,29 @@ def cmd_mode(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_hotkeys(_args: argparse.Namespace) -> int:
+    """Print the effective hotkeys, so the user can check what is bound.
+
+    The daemon logs its bindings once at startup; this prints the same values
+    on demand, which is what makes a stuck config value (``CTRL+CTRL``) visible
+    without reading the journal.
+    """
+    config = load_config()
+
+    def show(label: str, value: str, enabled: bool = True) -> None:
+        print(f"{label}: {value if value and enabled else '(выключено)'}")
+
+    show("Исправление последнего слова", config.hotkey_fix_last_word)
+    show("Отмена последнего исправления", config.hotkey_undo_last_fix)
+    show("Смена раскладки последнего слова", config.hotkey_toggle_layout_last_word)
+    show("Переключение режима", config.hotkey_toggle_mode)
+    show("Перезагрузка конфигурации", config.hotkey_reload_config)
+    show("Правка выделенного", config.selection_fix_hotkey, config.selection_fix_enabled)
+    print(f"Хоткеи: {'включены' if config.hotkeys_enabled else 'выключены'}")
+    print(f"Окно двойного тапа: {config.hotkey_double_tap_ms} мс")
+    return 0
+
+
 def cmd_undo(_args: argparse.Namespace) -> int:
     """Ask a running daemon to undo its most recent correction."""
     pid = _read_pid()
@@ -214,11 +238,24 @@ def cmd_undo(_args: argparse.Namespace) -> int:
 
 
 def cmd_dict(args: argparse.Namespace) -> int:
-    """Manage the user dictionary (words that are never corrected)."""
-    from .dictionary import add_user_word, load_user_dictionary, save_user_dictionary
+    """Manage the user dictionary and the extended (frequency) dictionaries."""
+    from .dictionary import (
+        BUNDLED_DICTIONARY_LANGUAGES,
+        add_user_word,
+        default_extended_dictionary_dir,
+        load_user_dictionary,
+        save_user_dictionary,
+    )
+
+    action = args.dict_action
+
+    if action in ("download", "import-file"):
+        return _cmd_dict_extended(action, args, default_extended_dictionary_dir)
+
+    if action in ("categories", "install", "list-installed", "remove-category"):
+        return _cmd_dict_thematic(action, args, default_extended_dictionary_dir)
 
     path = config_path_for_dict()
-    action = args.dict_action
     if action == "list":
         words = load_user_dictionary(str(path))
         if not words:
@@ -245,8 +282,149 @@ def cmd_dict(args: argparse.Namespace) -> int:
         save_user_dictionary(remaining, str(path))
         print(f"Удалено. Всего слов: {len(remaining)}.")
         return 0
-    print("Использование: linguafix dict list|add <слово>|remove <слово>")
+    languages = "|".join(BUNDLED_DICTIONARY_LANGUAGES)
+    print(
+        "Использование:\n"
+        "  linguafix dict list|add <слово>|remove <слово>\n"
+        f"  linguafix dict download <{languages}>\n"
+        "  linguafix dict import-file <путь>\n"
+        "  linguafix dict categories\n"
+        "  linguafix dict install <категория> [--lang ru]\n"
+        "  linguafix dict list-installed\n"
+        "  linguafix dict remove-category <категория>"
+    )
     return 2
+
+
+def _cmd_dict_extended(
+    action: str, args: argparse.Namespace, default_dir: Callable[[], Path]
+) -> int:
+    """Handle ``dict download`` / ``dict import-file`` (extended dictionaries)."""
+    from .config import load_config, save_config
+    from .dictionary import (
+        download_extended_dictionary,
+        extended_dictionary_path,
+        import_dictionary_file,
+    )
+
+    config = load_config()
+    directory = config.extended_dictionary_dir or str(default_dir())
+
+    if action == "import-file":
+        if not args.word:
+            print("Укажите путь к файлу: linguafix dict import-file ~/Downloads/ru-50k.txt")
+            return 2
+        # The language is inferred from the file name prefix (``ru-50k.txt`` ->
+        # ``ru``) unless an explicit --lang is given.
+        language = getattr(args, "lang", "") or Path(args.word).name.split("-")[0].split(".")[0]
+        if not language:
+            print("Не удалось определить язык: linguafix dict import-file <путь> --lang ru")
+            return 2
+        try:
+            count = import_dictionary_file(args.word, language, directory)
+        except FileNotFoundError:
+            print(f"Файл не найден: {args.word}")
+            return 1
+        except (OSError, ValueError) as exc:
+            print(f"Не удалось импортировать словарь: {exc}")
+            return 1
+        _remember_extended_dir(config, directory, save_config)
+        target = extended_dictionary_path(language, directory)
+        print(f"Импортировано {count} слов ({language}) в {target}.")
+        print("Перезапустите демон или нажмите хоткей перезагрузки конфигурации.")
+        return 0
+
+    if not args.word:
+        print("Укажите язык: linguafix dict download ru")
+        return 2
+    try:
+        target, count = download_extended_dictionary(args.word, directory)
+    except ValueError as exc:
+        print(str(exc))
+        return 2
+    except OSError as exc:
+        print(f"Не удалось скачать словарь: {exc}")
+        return 1
+    _remember_extended_dir(config, directory, save_config)
+    print(f"Скачано {count} слов ({args.word}) в {target}.")
+    print("Перезапустите демон или нажмите хоткей перезагрузки конфигурации.")
+    return 0
+
+
+def _remember_extended_dir(
+    config: Config, directory: str, save_config: Callable[[Config], Path]
+) -> None:
+    """Persist ``extended_dictionary_dir`` so the daemon loads the new list."""
+    config.extended_dictionary_dir = directory
+    save_config(config)
+
+
+def _cmd_dict_thematic(
+    action: str, args: argparse.Namespace, default_dir: Callable[[], Path]
+) -> int:
+    """Handle the thematic-dictionary actions (categories/install/...)."""
+    from .config import load_config, save_config
+    from .thematic import (
+        CATEGORIES,
+        category,
+        category_slugs,
+        disable_category,
+        download_category,
+        enable_category,
+        installed_category_slugs,
+    )
+
+    config = load_config()
+    directory = config.extended_dictionary_dir or str(default_dir())
+
+    if action == "categories":
+        enabled = set(config.installed_dict_categories)
+        print("Категории тематических словарей:")
+        for cat in CATEGORIES:
+            langs = ", ".join(cat.languages)
+            mark = " [установлена]" if cat.slug in enabled else ""
+            print(f"  {cat.slug:<12} {cat.title_ru} ({langs}){mark}")
+        print("\nУстановка: linguafix dict install <категория> --lang ru")
+        return 0
+
+    if action == "list-installed":
+        slugs = installed_category_slugs("ru", directory)
+        print("Включённые категории: " + ", ".join(config.installed_dict_categories))
+        if slugs:
+            print("Файлы на диске (ru): " + ", ".join(slugs))
+        else:
+            print("Тематические файлы ещё не скачаны.")
+        return 0
+
+    slug = (args.word or "").strip().lower()
+    if not slug:
+        print(f"Укажите категорию: linguafix dict {action} <{ '|'.join(category_slugs()) }>")
+        return 2
+    if category(slug) is None:
+        print(f"Неизвестная категория {slug!r}. Доступны: {', '.join(category_slugs())}.")
+        return 2
+
+    if action == "remove-category":
+        config.installed_dict_categories = disable_category(config.installed_dict_categories, slug)
+        save_config(config)
+        print(f"Категория {slug!r} отключена. Файл на диске сохранён.")
+        return 0
+
+    # action == "install"
+    language = (getattr(args, "lang", "") or "ru").strip().lower()
+    try:
+        target, count = download_category(slug, language, directory)
+    except ValueError as exc:
+        print(str(exc))
+        return 2
+    except OSError as exc:
+        print(f"Не удалось скачать категорию: {exc}")
+        return 1
+    config.installed_dict_categories = enable_category(config.installed_dict_categories, slug)
+    _remember_extended_dir(config, directory, save_config)
+    print(f"Установлено {count} слов ({slug}/{language}) в {target}.")
+    print("Категория подключена. Перезапустите демон или нажмите хоткей перезагрузки.")
+    return 0
 
 
 def config_path_for_dict() -> Path:
@@ -565,9 +743,35 @@ def build_parser() -> argparse.ArgumentParser:
     undo = subparsers.add_parser("undo", help="отменить последнее исправление")
     undo.set_defaults(func=cmd_undo)
 
+    hotkeys = subparsers.add_parser("hotkeys", help="показать действующие хоткеи")
+    hotkeys.set_defaults(func=cmd_hotkeys)
+
     dict_parser = subparsers.add_parser("dict", help="словарь слов, которые не исправлять")
-    dict_parser.add_argument("dict_action", choices=["list", "add", "remove"])
-    dict_parser.add_argument("word", nargs="?", help="слово для add/remove")
+    dict_parser.add_argument(
+        "dict_action",
+        choices=[
+            "list",
+            "add",
+            "remove",
+            "download",
+            "import-file",
+            "categories",
+            "install",
+            "list-installed",
+            "remove-category",
+        ],
+        help=(
+            "list/add/remove — словарь пользователя; download/import-file — базовые "
+            "расширенные словари; categories/install/list-installed/remove-category — "
+            "тематические словари"
+        ),
+    )
+    dict_parser.add_argument(
+        "word", nargs="?", help="слово (add/remove) или язык/путь (download/import-file)"
+    )
+    dict_parser.add_argument(
+        "--lang", default="", help="язык для import-file, если его нет в имени файла"
+    )
     dict_parser.set_defaults(func=cmd_dict)
 
     config = subparsers.add_parser("config", help="работа с конфигурацией")
