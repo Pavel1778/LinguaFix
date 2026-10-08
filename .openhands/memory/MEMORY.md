@@ -6,6 +6,7 @@
 - `[tool.coverage.run] omit = ["src/linguafix/gui/*"]` — the **core** CI job has no PyGObject, so GUI tests skip and their lines would report 0 % (gate fails). The dedicated GUI job uses `coverage-gui.rc` (no omit) with `--cov-fail-under=85`.
 - CI lints with `ruff check .` + `black --check .` **only — NOT isort**. `isort --check-only` already fails on `main` for `gui/state.py` and `tests/test_gui.py`; do not "fix" those (unrelated churn).
 - CI: Python 3.10/3.11/3.12, all green.
+- **CI mypy is `mypy --strict .` (includes tests).** Running only `mypy src/linguafix` misses `no-untyped-def` on untyped test helpers / monkeypatch args. Run `.venv/bin/python -m mypy --strict .` before pushing a new test module.
 - **Repo formatter is `black`, not `ruff format`.** `ruff format` rewrites an assert in `tests/test_data_sync.py` into a style `black --check` rejects → CI lint fails. Use `ruff check --fix` only; run `black src tests` to reformat.
 - CI has two test jobs: core (`--cov-fail-under=80`, `gui/*` omitted) and a GUI job under `xvfb-run` with `--cov-config=coverage-gui.rc --cov-fail-under=85`. Both runnable locally now.
 - **CI triggers are `push: [main]` and `pull_request: [main]` only.** The deploy branch `feat/linguafix-v0.2.0` gets no push CI; verify via `main` (identical tree after the merge) or open a PR.
@@ -14,7 +15,7 @@
 ## Key invariants (easy to regress)
 - Daemon tracks the current word as **scancodes** (`daemon._scancodes`), not just chars. `TextInjector.replace_text(backspace_count: int, new: str, layout: str)`; the daemon passes `len(self._scancodes)`. A string-based count reintroduces the `рhello` truncation bug.
 - **Boundary-Space fix (do not regress):** on a Space flush the Space is already on screen, so on-screen text is `buffer + " "`. The daemon deletes one extra char, types `converted + " "` (trailing space), records undo as `buffer + boundary_char`. Only Space is consumed/retyped (`injector.can_type` gates it — layout-invariant, typable by every backend); Enter/Tab stay after the word. The count/boundary mismatch was the real cause, not `trigger_settle_ms`.
-- `uinput` replace = two flushes: backspaces (one `syn`), sleep `backspace_settle_ms` (default **80**), replacement (second `syn`). Single-batch raced Chromium/Electron async Backspace.
+- `uinput` replace = two flushes: backspaces (one `syn`), sleep `backspace_settle_ms` (default **120** as of v0.2.5; was 80), replacement (second `syn`). Single-batch raced Chromium/Electron async Backspace.
 - **Key buffering during a fix:** the fix sleeps on the event-loop thread. `_handle_event` checks `_processing_buffer` and appends to `_deferred_events` (cap `_MAX_DEFERRED_EVENTS=50`). `_process_buffer`'s `finally` calls `_replay_deferred_events()` with `_replaying_events=True` (saved/restored, not cleared). Without this keys typed during the pause were dropped (`tests/test_input_buffer.py`).
 - Boundary flushes (Space/Enter/Tab/punct) sleep `trigger_settle_ms` (50) **before** deleting; only boundary flushes pass `boundary=True`. Idle fallback + hotkey do not.
 - Word-boundary triggers (`on_space`/`on_enter` on; `on_tab`/`on_punctuation` off) flush+fix in the same keystroke. `analysis_timeout` 0.8 is only the idle fallback.
