@@ -309,6 +309,22 @@ word is scored against the corpora whose *layout could have produced it*.
   the correction fires, even though the brand is absent from the frequency
   corpora. Without this, an unknown brand makes the detector stay silent.
   `dictionary_size` caps the bundled vocabulary (larger = more recall, more RAM).
+- **Extended and thematic dictionaries** (`extended_dictionary_dir`,
+  `installed_dict_categories`). Two opt-in layers on top of the bundled corpora.
+  The *base* extended list (`dict download`/`import-file`) is one `<lang>.txt`
+  file per language. The *thematic* lists (`dict install <category>`) are
+  professional vocabularies — `it`, `medicine`, `legal`, `finance`,
+  `engineering` — stored under `<extended_dictionary_dir>/thematic/<lang>/<slug>.txt`
+  and enabled by slug in `installed_dict_categories` (`base` is always on).
+  Both layers widen vocabulary **membership only**; n-gram scoring is unchanged,
+  so detection behaviour for already-known words stays identical while rarer
+  words are recognised. Priority is **user dictionary → thematic → base → T9**:
+  the user dictionary is checked first and is an absolute override, a thematic
+  word is accepted before the general corpus is consulted. The detector is given
+  the categories at construction and rebuilds its vocabularies when
+  `set_thematic_categories` is called on `reload_config`. Thematic files are
+  never bundled in the `.deb`; they are fetched from the GitHub Release
+  (`linguafix-dict-<slug>.tar.gz`) or the offline repository copy.
 - **Typo correction (T9)** (`typo_correction`, `typo_max_distance`,
   `typo_max_distance_long`, `typo_min_word_length`). A second, independent
   correction path, off by default. It runs only when `target_layout` returned
@@ -384,6 +400,7 @@ word. A word already corrected by the boundary is remembered in
 | `converter.py` | Character maps between layouts (`us`, `ru`, `uk`, `de`, `fr`) |
 | `detector.py` | Language detection, context, user dictionary, `target_layout` |
 | `dictionary.py` | User dictionary file, plus extended frequency dictionaries (`import-file`/`download`) |
+| `thematic.py` | Thematic (professional) dictionaries: categories, release/mirror download, offline fallback |
 | `typo.py` | T9: bounded Damerau-Levenshtein + `TypoCorrector` (opt-in) |
 | `text_expander.py` | Snippet expansion (trigger -> text) |
 | `selection_fix.py` | Convert the layout of already-selected text |

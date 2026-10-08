@@ -119,6 +119,27 @@ jobs:
           sha256sum *.deb | tee SHA256SUMS.txt
           cat SHA256SUMS.txt
 
+      # Build every thematic archive in the same way the release job does, and
+      # assert each contains the member ``dict install`` searches for. Without
+      # this a renamed category file would only fail at release time.
+      - name: Build thematic dictionary archives
+        run: bash scripts/build_dict_archives.sh dist/dict-archives
+
+      - name: Verify thematic archives are usable
+        run: |
+          set -euo pipefail
+          for archive in dist/dict-archives/linguafix-dict-*.tar.gz; do
+            slug="$(basename "${archive}" | sed -E 's/^linguafix-dict-(.*)\.tar\.gz$/\1/')"
+            for lang in ru en; do
+              member="${lang}-${slug}-1k.txt"
+              if ! tar -tzf "${archive}" | grep -q "/${member}$"; then
+                echo "::error::${archive} is missing ${member}"
+                exit 1
+              fi
+            done
+          done
+          echo "All thematic archives contain their ru/en members."
+
       - name: Upload .deb artifact
         uses: actions/upload-artifact@v4
         with:

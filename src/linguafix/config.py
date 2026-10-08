@@ -314,6 +314,29 @@ def _round_float(value: float, digits: int = 6) -> float:
     return round(value, digits)
 
 
+def _normalise_categories(values: object) -> list[str]:
+    """Coerce ``installed_dict_categories`` to a de-duplicated slug list.
+
+    Slugs are lower-cased and trimmed; ``base`` is always present so the general
+    frequency list is never accidentally disabled. Order is preserved so the
+    user's listing stays stable.
+    """
+    if isinstance(values, str):
+        raw_items: list[object] = [values]
+    elif isinstance(values, (list, tuple)):
+        raw_items = list(values)
+    else:
+        raw_items = []
+    categories: list[str] = []
+    for item in raw_items:
+        slug = str(item).strip().lower()
+        if slug and slug not in categories:
+            categories.append(slug)
+    if "base" not in categories:
+        categories.insert(0, "base")
+    return categories
+
+
 def load_default_stop_words() -> list[str]:
     """Load the bundled stop-word list, returning an empty list on failure."""
     try:
@@ -425,6 +448,11 @@ class Config:
     # languages without a big bundled corpus. Empty by default: nothing is
     # loaded unless the user runs ``linguafix dict download``/``import-file``.
     extended_dictionary_dir: str = ""
+    # Thematic (professional) dictionary categories the user has installed with
+    # ``linguafix dict install <category>``. ``base`` is the general frequency
+    # list shipped in the package; extra slugs add a domain vocabulary on top of
+    # it. Only category slugs are stored here -- never any typed text.
+    installed_dict_categories: list[str] = field(default_factory=lambda: ["base"])
     history_size: int = DEFAULT_HISTORY_SIZE
     quiet_hours_enabled: bool = False
     quiet_hours_start: str = "22:00"
@@ -645,6 +673,7 @@ class Config:
             raise ValueError(f"dictionary_size must be one of {VALID_DICTIONARY_SIZES}")
         self.dictionary_custom_path = str(self.dictionary_custom_path)
         self.extended_dictionary_dir = str(self.extended_dictionary_dir).strip()
+        self.installed_dict_categories = _normalise_categories(self.installed_dict_categories)
 
         self.history_size = int(self.history_size)
         if not 1 <= self.history_size <= 100:

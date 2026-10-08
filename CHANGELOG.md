@@ -25,6 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A `toggle_layout` hotkey (default `CTRL+SHIFT+T`) force-retypes the last word
   in the other layout, the manual reverse of a correction. Configurable as
   `hotkey_toggle_layout_last_word`.
+- **Thematic (professional) dictionaries.** `linguafix dict categories`,
+  `dict install <category> [--lang ru]`, `dict list-installed` and
+  `dict remove-category <category>` add domain vocabularies on top of the base
+  frequency list: `it`, `medicine`, `legal`, `finance`, `engineering` (ru + en).
+  Installed categories are recorded in `installed_dict_categories` (default
+  `["base"]`) and loaded as membership on top of the corpora. Detection priority
+  is **user dictionary → thematic → base → T9**. Thematic lists are **not**
+  bundled in the `.deb`; each is published as a `linguafix-dict-<slug>.tar.gz`
+  release asset, fetched first, then from the branch mirror, then from the
+  offline repository copy. The `/dictionaries` landing page lists the sections
+  with language, word count, size and licence (MIT).
 
 ### Changed
 

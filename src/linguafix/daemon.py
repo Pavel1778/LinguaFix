@@ -275,6 +275,7 @@ class LinguaFixDaemon:
             max_consecutive_consonants=config.max_consecutive_consonants,
             min_vowel_ratio=config.min_vowel_ratio,
             extended_dictionary_dir=config.extended_dictionary_dir,
+            thematic_categories=config.installed_dict_categories,
         )
         self.switcher = switcher or LayoutSwitcher(
             layouts=config.layouts,
@@ -1615,6 +1616,7 @@ class LinguaFixDaemon:
         self.detector.set_user_words(load_user_dictionary(new_config.dictionary_custom_path))
         # Pick up a dictionary the user just downloaded/imported on reload.
         self.detector.set_extended_dictionary_dir(new_config.extended_dictionary_dir)
+        self.detector.set_thematic_categories(new_config.installed_dict_categories)
         # The vocabularies may have changed, so any cached corrector is stale.
         self._typo_correctors.clear()
         self._punctuation = self._build_punctuation()

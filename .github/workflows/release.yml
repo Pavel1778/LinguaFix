@@ -57,6 +57,15 @@ jobs:
           cp dictionaries/*-50k.txt dist/dictionaries/
           cp dictionaries/README.md dist/dictionaries/README.md
 
+      - name: Stage thematic dictionary archives
+        run: |
+          # One archive per thematic category, so ``linguafix dict install
+          # <category>`` can fetch a single asset
+          # (releases/latest/download/linguafix-dict-<slug>.tar.gz) without the
+          # whole repository. The archive keeps the category folder layout, so
+          # the member name is ``<lang>-<slug>-1k.txt``.
+          bash scripts/build_dict_archives.sh dist/dict-archives
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -65,4 +74,5 @@ jobs:
             dist/*.tar.gz
             dist/SHA256SUMS.txt
             dist/dictionaries/*-50k.txt
+            dist/dict-archives/*.tar.gz
           generate_release_notes: true

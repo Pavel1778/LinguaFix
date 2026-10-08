@@ -62,6 +62,7 @@ _ALLOWED_CONFIG_KEYS = {
     "hotkey_reload_config",
     "hotkey_toggle_layout_last_word",
     "extended_dictionary_dir",
+    "installed_dict_categories",
     "hotkey_swallow",
     "hotkey_double_tap_ms",
     "undo_window_seconds",

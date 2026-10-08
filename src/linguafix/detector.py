@@ -132,6 +132,7 @@ class LanguageDetector:
         max_consecutive_consonants: int = 6,
         min_vowel_ratio: float = 0.15,
         extended_dictionary_dir: str = "",
+        thematic_categories: list[str] | None = None,
     ) -> None:
         self.converter = converter or LayoutConverter()
         self.min_word_length = min_word_length
@@ -148,6 +149,9 @@ class LanguageDetector:
         self._languages = languages
         self._dictionary_size = dictionary_size
         self._extended_dictionary_dir = extended_dictionary_dir
+        self._thematic_categories = [
+            c.strip().lower() for c in (thematic_categories or []) if c.strip()
+        ]
         self._user_words = {word.lower() for word in (user_words or []) if word.strip()}
         self._stop_words = {word.lower() for word in (stop_words or [])}
         self._vocabularies: dict[str, set[str]] = {}
@@ -215,16 +219,46 @@ class LanguageDetector:
         return data if isinstance(data, dict) else {}
 
     def _load_extended_words(self, language: str) -> set[str]:
-        """Read the optional extended dictionary for ``language``.
+        """Read the optional extended and thematic dictionaries for ``language``.
 
         A missing or empty directory yields an empty set and is silent: extended
-        dictionaries are opt-in, so their absence is the normal case.
+        dictionaries are opt-in, so their absence is the normal case. Thematic
+        (professional) lists are unioned on top of the general list, so a domain
+        term widens the vocabulary without changing n-gram scoring.
         """
         if not self._extended_dictionary_dir:
             return set()
         from .dictionary import load_extended_dictionary
 
-        return load_extended_dictionary(language, self._extended_dictionary_dir)
+        words = load_extended_dictionary(language, self._extended_dictionary_dir)
+        words |= self._load_thematic_words(language)
+        return words
+
+    def _load_thematic_words(self, language: str) -> set[str]:
+        """Read the installed thematic lists for ``language`` (may be empty)."""
+        if not self._thematic_categories or not self._extended_dictionary_dir:
+            return set()
+        from .thematic import load_thematic_words
+
+        words: set[str] = set()
+        for slug in self._thematic_categories:
+            words |= load_thematic_words(slug, language, self._extended_dictionary_dir)
+        return words
+
+    @property
+    def thematic_categories(self) -> list[str]:
+        """Return the installed thematic category slugs the detector loads."""
+        return list(self._thematic_categories)
+
+    def set_thematic_categories(self, categories: list[str]) -> None:
+        """Replace the thematic categories and reload the corpora."""
+        cleaned = [c.strip().lower() for c in categories if c.strip()]
+        if cleaned == self._thematic_categories:
+            return
+        self._thematic_categories = cleaned
+        self._vocabularies = {}
+        self._bigrams = {}
+        self._load_corpora()
 
     @property
     def stop_words(self) -> set[str]:

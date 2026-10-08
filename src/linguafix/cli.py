@@ -252,6 +252,9 @@ def cmd_dict(args: argparse.Namespace) -> int:
     if action in ("download", "import-file"):
         return _cmd_dict_extended(action, args, default_extended_dictionary_dir)
 
+    if action in ("categories", "install", "list-installed", "remove-category"):
+        return _cmd_dict_thematic(action, args, default_extended_dictionary_dir)
+
     path = config_path_for_dict()
     if action == "list":
         words = load_user_dictionary(str(path))
@@ -284,7 +287,11 @@ def cmd_dict(args: argparse.Namespace) -> int:
         "Использование:\n"
         "  linguafix dict list|add <слово>|remove <слово>\n"
         f"  linguafix dict download <{languages}>\n"
-        "  linguafix dict import-file <путь>"
+        "  linguafix dict import-file <путь>\n"
+        "  linguafix dict categories\n"
+        "  linguafix dict install <категория> [--lang ru]\n"
+        "  linguafix dict list-installed\n"
+        "  linguafix dict remove-category <категория>"
     )
     return 2
 
@@ -350,6 +357,74 @@ def _remember_extended_dir(
     """Persist ``extended_dictionary_dir`` so the daemon loads the new list."""
     config.extended_dictionary_dir = directory
     save_config(config)
+
+
+def _cmd_dict_thematic(
+    action: str, args: argparse.Namespace, default_dir: Callable[[], Path]
+) -> int:
+    """Handle the thematic-dictionary actions (categories/install/...)."""
+    from .config import load_config, save_config
+    from .thematic import (
+        CATEGORIES,
+        category,
+        category_slugs,
+        disable_category,
+        download_category,
+        enable_category,
+        installed_category_slugs,
+    )
+
+    config = load_config()
+    directory = config.extended_dictionary_dir or str(default_dir())
+
+    if action == "categories":
+        enabled = set(config.installed_dict_categories)
+        print("Категории тематических словарей:")
+        for cat in CATEGORIES:
+            langs = ", ".join(cat.languages)
+            mark = " [установлена]" if cat.slug in enabled else ""
+            print(f"  {cat.slug:<12} {cat.title_ru} ({langs}){mark}")
+        print("\nУстановка: linguafix dict install <категория> --lang ru")
+        return 0
+
+    if action == "list-installed":
+        slugs = installed_category_slugs("ru", directory)
+        print("Включённые категории: " + ", ".join(config.installed_dict_categories))
+        if slugs:
+            print("Файлы на диске (ru): " + ", ".join(slugs))
+        else:
+            print("Тематические файлы ещё не скачаны.")
+        return 0
+
+    slug = (args.word or "").strip().lower()
+    if not slug:
+        print(f"Укажите категорию: linguafix dict {action} <{ '|'.join(category_slugs()) }>")
+        return 2
+    if category(slug) is None:
+        print(f"Неизвестная категория {slug!r}. Доступны: {', '.join(category_slugs())}.")
+        return 2
+
+    if action == "remove-category":
+        config.installed_dict_categories = disable_category(config.installed_dict_categories, slug)
+        save_config(config)
+        print(f"Категория {slug!r} отключена. Файл на диске сохранён.")
+        return 0
+
+    # action == "install"
+    language = (getattr(args, "lang", "") or "ru").strip().lower()
+    try:
+        target, count = download_category(slug, language, directory)
+    except ValueError as exc:
+        print(str(exc))
+        return 2
+    except OSError as exc:
+        print(f"Не удалось скачать категорию: {exc}")
+        return 1
+    config.installed_dict_categories = enable_category(config.installed_dict_categories, slug)
+    _remember_extended_dir(config, directory, save_config)
+    print(f"Установлено {count} слов ({slug}/{language}) в {target}.")
+    print("Категория подключена. Перезапустите демон или нажмите хоткей перезагрузки.")
+    return 0
 
 
 def config_path_for_dict() -> Path:
@@ -674,8 +749,22 @@ def build_parser() -> argparse.ArgumentParser:
     dict_parser = subparsers.add_parser("dict", help="словарь слов, которые не исправлять")
     dict_parser.add_argument(
         "dict_action",
-        choices=["list", "add", "remove", "download", "import-file"],
-        help="list/add/remove — словарь пользователя; download/import-file — расширенные словари",
+        choices=[
+            "list",
+            "add",
+            "remove",
+            "download",
+            "import-file",
+            "categories",
+            "install",
+            "list-installed",
+            "remove-category",
+        ],
+        help=(
+            "list/add/remove — словарь пользователя; download/import-file — базовые "
+            "расширенные словари; categories/install/list-installed/remove-category — "
+            "тематические словари"
+        ),
     )
     dict_parser.add_argument(
         "word", nargs="?", help="слово (add/remove) или язык/путь (download/import-file)"

@@ -303,6 +303,27 @@ linguafix dict import-file ~/Downloads/ru-50k.txt --lang ru   # вручную
 конфигурации). Источник — [FrequencyWords](https://github.com/hermitdave/FrequencyWords)
 (лицензия MIT); зеркало списков лежит в репозитории в папке `dictionaries/`.
 
+### Тематические словари
+
+Кроме базового списка можно подключить профессиональную лексику по разделам:
+`it`, `medicine`, `legal`, `finance`, `engineering` (русский и английский).
+Разделы ставятся отдельно и **не** входят в `.deb`:
+
+```bash
+linguafix dict categories                 # список разделов
+linguafix dict install it --lang ru       # скачать и подключить
+linguafix dict list-installed             # что уже включено
+linguafix dict remove-category it         # отключить
+```
+
+Включённые разделы хранятся в `installed_dict_categories` (по умолчанию
+`["base"]`). Приоритет при детекции: **пользовательский словарь → тематический →
+базовый → T9**. Каждый раздел публикуется как ассет релиза
+`linguafix-dict-<категория>.tar.gz`; при установке он сначала тянется из релиза,
+затем из зеркала репозитория, затем из локальной копии — так `install` работает
+и офлайн. Каталог с разделами — на странице
+[`/dictionaries`](https://linguafix.layero.app/dictionaries).
+
 ### Ручной разворот раскладки
 
 Если слово *выглядит* правильным, но набрано не в той раскладке, авто-детектор
