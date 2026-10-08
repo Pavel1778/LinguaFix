@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from pathlib import Path
+
+import pytest
 
 from linguafix.logs import log_file_path, read_tail
 
@@ -36,7 +39,7 @@ def test_read_tail_missing_file_is_empty(tmp_path: Path) -> None:
     assert read_tail(tmp_path / "nope.log", 10) == []
 
 
-def test_log_file_path_is_under_state_dir(tmp_path: Path, monkeypatch) -> None:
+def test_log_file_path_is_under_state_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     assert log_file_path() == tmp_path / "linguafix" / "linguafix.log"
 
@@ -45,12 +48,12 @@ class _FakeStdout:
     def __init__(self, lines: list[str]) -> None:
         self._lines = iter(lines)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[str]:
         return self._lines
 
 
 class _FakePopen:
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args: object, **kwargs: object) -> None:
         self.stdout = _FakeStdout(["INFO a\n", "ERROR b\n"])
         self.terminated = False
 
@@ -61,7 +64,9 @@ class _FakePopen:
         return 0
 
 
-def test_follow_streams_and_filters(monkeypatch, capsys) -> None:
+def test_follow_streams_and_filters(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     from linguafix import logs
 
     monkeypatch.setattr(logs.subprocess, "Popen", _FakePopen)
@@ -70,10 +75,10 @@ def test_follow_streams_and_filters(monkeypatch, capsys) -> None:
     assert capsys.readouterr().out == "ERROR b\n"
 
 
-def test_follow_returns_one_when_tail_missing(monkeypatch) -> None:
+def test_follow_returns_one_when_tail_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     from linguafix import logs
 
-    def _boom(*args, **kwargs):
+    def _boom(*args: object, **kwargs: object) -> None:
         raise OSError("no tail")
 
     monkeypatch.setattr(logs.subprocess, "Popen", _boom)
