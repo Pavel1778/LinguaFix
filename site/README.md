@@ -48,11 +48,19 @@ site/
 
 ### Layero (зеркало для РФ)
 
+**Автоматически.** Workflow `.github/workflows/deploy-layero.yml` собирает и
+деплоит `site/` на Layero при каждом изменении лендинга в `main`. Нужен один
+секрет: получите API-токен в панели Layero и добавьте его в
+**Settings → Secrets and variables → Actions** под именем `LAYERO_TOKEN`. Без
+секрета шаг завершается предупреждением и не роняет сборку.
+
+**Вручную** (если нужно задеплоить из локальной машины):
+
 1. Зарегистрируйтесь на <https://layero.app> через GitHub.
 2. Установите CLI и войдите:
    ```bash
    npm i -g layero@latest   # либо используйте npx
-   layero login
+   layero login             # либо задайте LAYERO_TOKEN
    ```
 3. Задеплойте из папки `site/`:
    ```bash

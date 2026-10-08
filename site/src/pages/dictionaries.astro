@@ -1,24 +1,15 @@
 ---
-import fs from "node:fs";
-import path from "node:path";
 import Base from "../layouts/Base.astro";
 import Header from "../components/Header.astro";
 import Footer from "../components/Footer.astro";
-import { REPO } from "../consts";
 import { pick } from "../lib/site";
-
-// One row per shipped language. The lists are attached to every GitHub Release
-// (and bundled in the .deb), so the download links point at the stable
-// ``/releases/latest/download`` assets rather than a branch path that only
-// exists after a merge.
-const RAW = `${REPO}/releases/latest/download`;
-const languages = [
-  { code: "ru", title: "Русский" },
-  { code: "en", title: "English" },
-  { code: "uk", title: "Українська" },
-  { code: "de", title: "Deutsch" },
-  { code: "fr", title: "Français" },
-];
+import {
+  baseLanguages as languages,
+  categoryCards,
+  DICTIONARY_ASSET_BASE as RAW,
+  humanSize,
+  thematicWordTotal,
+} from "../lib/dictionaries";
 
 const title = pick("Расширенные словари — LinguaFix", "Extended dictionaries — LinguaFix");
 const description = pick(
@@ -30,98 +21,6 @@ const importCode = `linguafix dict download ru
 linguafix dict install it --lang ru
 # или вручную:
 linguafix dict import-file ~/Downloads/ru-50k.txt`;
-
-// Thematic categories. Sizes and word counts are read from the repository at
-// build time so the cards never drift from what is actually shipped. Each
-// category is published as one archive asset; the per-language files live
-// inside it, and ``dict install`` extracts just the requested one.
-type Category = {
-  slug: string;
-  title: string;
-  blurb: string;
-  license: string;
-};
-
-const categories: Category[] = [
-  {
-    slug: "it",
-    title: pick("IT / программирование", "IT / programming"),
-    blurb: pick(
-      "Языки, фреймворки, git, БД, сети, DevOps.",
-      "Languages, frameworks, git, databases, networks, DevOps.",
-    ),
-    license: "MIT",
-  },
-  {
-    slug: "medicine",
-    title: pick("Медицина и биология", "Medicine and biology"),
-    blurb: pick(
-      "Анатомия, болезни, препараты, диагностика.",
-      "Anatomy, diseases, drugs, diagnostics.",
-    ),
-    license: "MIT",
-  },
-  {
-    slug: "legal",
-    title: pick("Юриспруденция", "Law"),
-    blurb: pick("Кодексы, процессы, договоры, суд.", "Codes, proceedings, contracts, courts."),
-    license: "MIT",
-  },
-  {
-    slug: "finance",
-    title: pick("Финансы и бухгалтерия", "Finance and accounting"),
-    blurb: pick(
-      "Банки, налоги, отчётность, инвестиции.",
-      "Banking, taxes, reporting, investments.",
-    ),
-    license: "MIT",
-  },
-  {
-    slug: "engineering",
-    title: pick("Инженерия и строительство", "Engineering"),
-    blurb: pick(
-      "Сопромат, механизмы, материалы, ГОСТы.",
-      "Mechanics, materials, drawings, standards.",
-    ),
-    license: "MIT",
-  },
-];
-
-const dictRoot = path.resolve(process.cwd(), "..", "dictionaries");
-
-function humanSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function wordCount(file: string): number {
-  try {
-    return fs
-      .readFileSync(file, "utf-8")
-      .split("\n")
-      .filter((line) => line.trim().length > 0).length;
-  } catch {
-    return 0;
-  }
-}
-
-const categoryCards = categories.map((c) => {
-  const files = [
-    { lang: "ru", title: "Русский" },
-    { lang: "en", title: "English" },
-  ].map(({ lang, title }) => {
-    const file = path.join(dictRoot, c.slug, `${lang}-${c.slug}-1k.txt`);
-    let size = 0;
-    try {
-      size = fs.statSync(file).size;
-    } catch {
-      size = 0;
-    }
-    return { lang, title, size, words: wordCount(file) };
-  });
-  return { ...c, files };
-});
 ---
 
 <Base title={title} description={description}>
@@ -183,8 +82,8 @@ const categoryCards = categories.map((c) => {
         <p class="mt-3 text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
           {
             pick(
-              "Профессиональная лексика по разделам. Подключаются поверх базового словаря и не входят в .deb — ставятся одной командой.",
-              "Professional vocabulary by field. Loaded on top of the base list and not bundled in the .deb — install with one command.",
+              `Профессиональная лексика по разделам — ${thematicWordTotal.toLocaleString("ru-RU")} слов в 5 разделах. Подключаются поверх базового словаря и не входят в .deb — ставятся одной командой.`,
+              `Professional vocabulary by field — ${thematicWordTotal.toLocaleString("en-US")} words across 5 categories. Loaded on top of the base list and not bundled in the .deb — install with one command.`,
             )
           }
         </p>
@@ -194,12 +93,14 @@ const categoryCards = categories.map((c) => {
             categoryCards.map((cat) => (
               <div class="rounded-lg border border-[#e5e5e5] p-4 dark:border-[#3d3d3d]">
                 <div class="flex items-start justify-between gap-2">
-                  <h3 class="font-semibold">{cat.title}</h3>
+                  <h3 class="font-semibold">{pick(cat.title.ru, cat.title.en)}</h3>
                   <span class="shrink-0 rounded bg-[#fafafa] px-2 py-0.5 text-xs text-[#0a0a0a]/60 dark:bg-[#2d2d2d] dark:text-[#fafafa]/60">
                     {cat.license}
                   </span>
                 </div>
-                <p class="mt-2 text-sm text-[#0a0a0a]/70 dark:text-[#fafafa]/70">{cat.blurb}</p>
+                <p class="mt-2 text-sm text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
+                  {pick(cat.blurb.ru, cat.blurb.en)}
+                </p>
                 <ul class="mt-3 space-y-1 text-xs">
                   {cat.files.map((file) => (
                     <li class="flex items-center justify-between gap-2">
