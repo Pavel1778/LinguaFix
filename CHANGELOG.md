@@ -53,6 +53,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refreshes on open, so a background window does not keep probing
   `systemctl`/`g3kb-switch`/D-Bus.
 
+### Fixed
+
+- `apt remove --purge` now leaves no empty `/usr/lib/linguafix` directories
+  behind. The new `doctor` GUI check imports `linguafix.gui`; run as root, that
+  writes root-owned `gui/__pycache__` under `/usr/lib`, which dpkg does not
+  track. `postrm` now removes every nested `__pycache__` and prunes the
+  directories it leaves empty.
+
 ## [0.2.5] - 2026-10-08
 
 ### Fixed
