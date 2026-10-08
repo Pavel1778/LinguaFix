@@ -74,7 +74,7 @@
 - Tray (AppIndicator3) absent in dev; not a blocker.
 
 ## Repo / process
-- **v0.1.0–v0.2.2 all released (v0.2.2 is current).** `release.yml` builds `.deb`/sdist + `SHA256SUMS.txt` on a `v*.*.*` tag. **`main` holds the WHOLE project**: daemon + fix batches + landing page (`site/`) + logo/screenshots. `site/package-lock.json` is tracked; `site/.astro/`, `site/dist/`, `site/node_modules/` are gitignored — never commit them.
+- **Current release: v0.2.4** (tag + GitHub Release with `.deb`/sdist/SHA256SUMS). `release.yml` builds on a `v*.*.*` tag and runs smoke + zero-config on `debian:12`. **`main` holds the WHOLE project**: daemon + fix batches + landing page (`site/`) + logo/screenshots. `site/package-lock.json` is tracked; `site/.astro/`, `site/dist/`, `site/node_modules/` are gitignored.
 - **A version bump must touch the site too** or the deployed download link 404s: `site/src/consts.ts` (`VERSION`) and `site/src/layouts/Base.astro` (`softwareVersion`), plus `site/package.json`/`package-lock.json`. `tests/test_version_consistency.py` only checks `pyproject.toml`/`__init__.py`/CHANGELOG, so this is easy to miss. `scripts/build_deb.sh` reads the version from `pyproject.toml` itself.
 - **Work on a short-lived branch, merge to `main`, then delete it.** v0.2.2 went through `feat/v0.2.2-fixes` (PR #16, merge `e0bf334`). Only `main` exists now.
 - **`scripts/*_test.sh` quoting trap**: the inner container script is the argument to `bash -c` wrapped in **single quotes**; any single quote inside closes it silently. Use double quotes for grep patterns inside. Both smoke and zero-config pass on `debian:12`.
