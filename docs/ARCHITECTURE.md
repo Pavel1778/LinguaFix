@@ -335,7 +335,10 @@ short undo history.
 Hotkeys are matched in `daemon._parse_hotkey`. A chord such as `CTRL+F12` requires
 the modifier to be held; a **double tap** such as `SHIFT+SHIFT`, `CTRL+CTRL` or
 `ALT+ALT` fires when the same modifier is pressed twice within
-`hotkey_double_tap_ms` (default 300 ms) with nothing else in between. The default
+`hotkey_double_tap_ms` (default 2000 ms, accepted range 100-3000 ms) with
+nothing else in between. A generous default is deliberate: at typing speed two
+Shift presses made while capitalising can fall inside a short window, and each
+false match deletes and retypes text. The default
 fix hotkey is `SHIFT+SHIFT` because a laptop has no Pause key. Double taps are
 tracked separately from chords (`_double_tap_hotkeys`): the first tap arms the
 family, a matching second tap within the window fires the action and clears the

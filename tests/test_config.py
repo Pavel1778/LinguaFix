@@ -141,7 +141,7 @@ def test_new_field_defaults() -> None:
     assert config.hotkey_undo_last_fix == "SHIFT+BACKSPACE"
     assert config.hotkey_reload_config == "CTRL+SHIFT+R"
     assert config.hotkey_toggle_mode == ""
-    assert config.hotkey_double_tap_ms == 300
+    assert config.hotkey_double_tap_ms == 2000
     assert config.undo_window_seconds == 10
     assert config.undo_history_depth == 3
     assert config.confidence_threshold == 0.6

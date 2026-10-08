@@ -203,9 +203,11 @@ _WORD_BREAKERS: Final[frozenset[str]] = frozenset(
         "KEY_ESC",
     }
 )
-# Upper bound on keys queued while a replacement runs. Generous enough for a
-# fast burst, small enough that a stuck key cannot grow the queue without bound.
-_MAX_DEFERRED_EVENTS: Final[int] = 50
+# Keys pressed while a replacement is in flight are queued and replayed once it
+# finishes. The cap bounds the queue during a paste-like burst; it is generous
+# enough that a fast typist cannot overflow it and lose a key (which would
+# desynchronise the buffer from the screen).
+_MAX_DEFERRED_EVENTS: Final[int] = 200
 
 
 def _compile_skip_regex(pattern: str) -> re.Pattern[str] | None:
@@ -808,7 +810,12 @@ class LinguaFixDaemon:
         if last is not None and now - last <= window:
             # Consume the tap so a third press does not fire again immediately.
             self._last_modifier_tap.pop(family, None)
-            logger.debug("Double tap of %s matched hotkey %s", family, action)
+            logger.debug(
+                "Double tap of %s matched hotkey %s (gap=%dms)",
+                family,
+                action,
+                int((now - last) * 1000),
+            )
             self._run_hotkey(action)
         else:
             # Re-arm: replace any previously armed family so only the most
@@ -900,25 +907,36 @@ class LinguaFixDaemon:
 
     def _run_hotkey(self, action: str) -> None:
         """Execute the action bound to a hotkey."""
-        logger.info("Hotkey action: %s", action)
         if action == "fix":
-            # A Ctrl/Alt-based fix hotkey (``CTRL+F12``) suspended the word when
-            # the modifier was pressed; put it back so the fix can see it.
+            # A double Shift should not fire on an empty buffer: a late tap
+            # after a word was already flushed (or a phantom tap while nothing
+            # is being typed) must not delete the text before the caret. Check
+            # before logging or doing any work.
             self._restore_suspended_buffer()
             with self._lock:
-                length = len(self.buffer)
+                if (
+                    self._processing_buffer
+                    or self._replaying_events
+                    or (not self.buffer and not self._scancodes)
+                ):
+                    logger.debug("Explicit fix hotkey ignored: nothing to fix")
+                    return
             # Metadata only: the typed text itself is never logged.
+            logger.info("Hotkey action: %s", action)
+            with self._lock:
+                length = len(self.buffer)
             logger.debug("Explicit fix hotkey: buffer_len=%d", length)
             self._process_buffer(force=True)
-        elif action == "undo":
+            return
+        logger.info("Hotkey action: %s", action)
+        if action == "undo":
             self._undo_last_fix()
         elif action == "toggle_mode":
             self._cycle_mode()
         elif action == "reload":
             self.reload_config()
-        elif action == "selection_fix":
-            if self.config.selection_fix_enabled:
-                self.selection_fix.convert_selection()
+        elif action == "selection_fix" and self.config.selection_fix_enabled:
+            self.selection_fix.convert_selection()
 
     def _load_snippets(self, config: Config) -> None:
         """(Re)load the snippet file named by ``config``, best-effort."""

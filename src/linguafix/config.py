@@ -126,8 +126,16 @@ LEGACY_FIX_HOTKEY: Final[str] = "PAUSE"
 # The undo hotkey default. ``CTRL+Z`` collides with the application's own undo,
 # so the daemon uses ``SHIFT+BACKSPACE`` instead.
 DEFAULT_UNDO_HOTKEY: Final[str] = "SHIFT+BACKSPACE"
-# Maximum gap between the two taps of a double-tap hotkey.
-DEFAULT_DOUBLE_TAP_MS: Final[int] = 300
+# Maximum gap between the two taps of a double-tap hotkey. The default is
+# generous (2 s) on purpose: at typing speed two Shift presses made while
+# capitalising or reaching for the modifier can fall well inside a short
+# window, and each false match deletes and retypes text. A deliberate double
+# tap is still far below two seconds, so a real one never misses.
+DEFAULT_DOUBLE_TAP_MS: Final[int] = 2000
+# Accepted range for ``hotkey_double_tap_ms``. The upper bound is wide enough
+# for a user who wants a longer manual-fix window (the request was 2-3 s).
+MIN_DOUBLE_TAP_MS: Final[int] = 100
+MAX_DOUBLE_TAP_MS: Final[int] = 3000
 VALID_BACKENDS: Final[tuple[str, ...]] = ("auto", "uinput", "wtype", "xdotool")
 VALID_SWITCH_METHODS: Final[tuple[str, ...]] = ("auto", "g3kb-switch", "setxkbmap")
 VALID_LOG_LEVELS: Final[tuple[str, ...]] = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
@@ -518,8 +526,10 @@ class Config:
         self.hotkey_reload_config = normalise_hotkey(self.hotkey_reload_config)
 
         self.hotkey_double_tap_ms = int(self.hotkey_double_tap_ms)
-        if not 100 <= self.hotkey_double_tap_ms <= 1000:
-            raise ValueError("hotkey_double_tap_ms must be between 100 and 1000")
+        if not MIN_DOUBLE_TAP_MS <= self.hotkey_double_tap_ms <= MAX_DOUBLE_TAP_MS:
+            raise ValueError(
+                f"hotkey_double_tap_ms must be between {MIN_DOUBLE_TAP_MS} and {MAX_DOUBLE_TAP_MS}"
+            )
 
         self.undo_window_seconds = int(self.undo_window_seconds)
         if not 3 <= self.undo_window_seconds <= 60:

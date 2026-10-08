@@ -251,3 +251,105 @@ def test_super_between_shifts_cancels() -> None:
     time.sleep(0.02)
     tap(daemon, "KEY_LEFTSHIFT")
     assert _injector(daemon).replacements == []
+
+
+# --- false positives: Shift used for capitalisation must never fix ----------
+
+
+def test_default_double_tap_window_is_two_seconds() -> None:
+    """The default window is wide enough that a fast Shift+Shift for a capital
+    cannot fall through it (the ``рhello``-class false positive).
+    """
+    assert Config().hotkey_double_tap_ms == 2000
+
+
+def test_double_tap_window_accepts_up_to_three_seconds() -> None:
+    assert Config(hotkey_double_tap_ms=3000).hotkey_double_tap_ms == 3000
+    with pytest.raises(ValueError):
+        Config(hotkey_double_tap_ms=3001)
+    with pytest.raises(ValueError):
+        Config(hotkey_double_tap_ms=99)
+
+
+def test_capital_letter_between_shifts_is_not_a_fix() -> None:
+    """Typing ``Привет``: Shift for the capital, a letter, Shift again.
+
+    The letter clears the armed tap, so no fix may fire — this is the ordinary
+    typing path that produced phantom ``Hotkey action: fix`` lines.
+    """
+    daemon = make_daemon()
+    tap(daemon, "KEY_LEFTSHIFT")
+    tap(daemon, "KEY_P")
+    tap(daemon, "KEY_LEFTSHIFT")
+    tap(daemon, "KEY_R")
+    tap(daemon, "KEY_LEFTSHIFT")
+    tap(daemon, "KEY_I")
+    assert _injector(daemon).replacements == []
+
+
+def test_two_shifts_separated_by_letters_do_not_fix() -> None:
+    """Two Shift presses with a whole word typed in between are not a tap."""
+    daemon = make_daemon()
+    press(daemon, "ghbdtn")
+    tap(daemon, "KEY_LEFTSHIFT")
+    press(daemon, "hello")
+    tap(daemon, "KEY_LEFTSHIFT")
+    assert _injector(daemon).replacements == []
+
+
+def test_double_shift_with_empty_buffer_does_nothing(caplog: pytest.LogCaptureFixture) -> None:
+    """Two Shift taps with nothing typed must not run a fix, nor log one.
+
+    The daemon used to emit ``Hotkey action: fix`` even with an empty buffer,
+    which filled the journal with phantom lines during ordinary typing.
+    """
+    import logging
+
+    daemon = make_daemon()
+    with caplog.at_level(logging.INFO, logger="linguafix.daemon"):
+        tap(daemon, "KEY_LEFTSHIFT")
+        time.sleep(0.02)
+        tap(daemon, "KEY_LEFTSHIFT")
+    assert _injector(daemon).replacements == []
+    assert "Hotkey action: fix" not in caplog.text
+
+
+def test_double_shift_with_only_space_in_buffer_does_nothing() -> None:
+    """After a word was flushed by Space the buffer is empty: a late double
+    Shift must not delete the space that is already on screen."""
+    daemon = make_daemon()
+    press(daemon, "ghbdtn")
+    tap(daemon, "KEY_SPACE")
+    tap(daemon, "KEY_LEFTSHIFT")
+    time.sleep(0.02)
+    tap(daemon, "KEY_LEFTSHIFT")
+    # Only the boundary flush (word + space) may have happened.
+    assert _injector(daemon).replacements == [(7, "привет ", "ru")]
+
+
+def test_double_shift_during_a_fix_is_ignored() -> None:
+    """A second fix must not start while the first replacement is running.
+
+    The taps are queued for replay instead of running mid-fix (the buffer is
+    untouched, so nothing is replaced now).
+    """
+    daemon = make_daemon()
+    press(daemon, "ghbdtn")
+    # Pretend a fix is in flight (the daemon is inside _process_buffer).
+    daemon._processing_buffer = True
+    daemon._handle_event(make_event("KEY_LEFTSHIFT", 1))
+    daemon._handle_event(make_event("KEY_LEFTSHIFT", 0))
+    daemon._handle_event(make_event("KEY_LEFTSHIFT", 1))
+    daemon._handle_event(make_event("KEY_LEFTSHIFT", 0))
+    # The taps were deferred, not run: nothing was replaced.
+    assert _injector(daemon).replacements == []
+    assert len(daemon._deferred_events) == 4
+
+
+def test_run_hotkey_fix_is_a_noop_while_processing() -> None:
+    """The fix action checks the in-flight flag itself, not just the caller."""
+    daemon = make_daemon()
+    press(daemon, "ghbdtn")
+    daemon._processing_buffer = True
+    daemon._run_hotkey("fix")
+    assert _injector(daemon).replacements == []
