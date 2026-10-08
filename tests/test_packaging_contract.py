@@ -94,6 +94,17 @@ def test_postinst_reloads_systemd_user_daemon() -> None:
     assert "systemctl --user daemon-reload" in script
 
 
+def test_postrm_prunes_nested_bytecode_and_empty_dirs() -> None:
+    script = BUILD_DEB.read_text(encoding="utf-8")
+    # ``doctor`` imports ``linguafix.gui``; run as root (before a session
+    # exists) that writes root-owned ``gui/__pycache__`` under /usr/lib, which
+    # dpkg does not track. The purge must remove every nested ``__pycache__``
+    # and prune the now-empty package directories, or the zero-config test
+    # finds ``/usr/lib/linguafix`` leftovers after ``apt remove --purge``.
+    assert "find /usr/lib/linguafix -type d -name '__pycache__'" in script
+    assert "find /usr/lib/linguafix -depth -type d -empty" in script
+
+
 @pytest.mark.skipif(shutil.which("dpkg-deb") is None, reason="dpkg-deb not available")
 def test_deb_carries_css_and_unit(tmp_path: Path) -> None:
     """Build a throwaway .deb and assert the GUI CSS and unit are inside it."""

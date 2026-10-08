@@ -165,12 +165,18 @@ set -e
 
 case "${1:-}" in
     remove|purge)
-        # Running the CLI as root leaves root-owned bytecode under /usr/lib,
-        # which dpkg does not track. Drop it so a purge leaves nothing behind.
+        # Running the CLI (and ``doctor``) as root leaves root-owned bytecode
+        # under /usr/lib, which dpkg does not track. Drop it, then prune the
+        # directories it leaves empty, so a purge leaves nothing behind.
         if command -v py3clean >/dev/null 2>&1; then
             py3clean /usr/lib/linguafix >/dev/null 2>&1 || true
         fi
-        rm -rf /usr/lib/linguafix/linguafix/__pycache__
+        if [ -d /usr/lib/linguafix ]; then
+            find /usr/lib/linguafix -type d -name '__pycache__' \
+                -prune -exec rm -rf {} + 2>/dev/null || true
+            find /usr/lib/linguafix -depth -type d -empty \
+                -exec rmdir {} + 2>/dev/null || true
+        fi
         ;;
 esac
 
