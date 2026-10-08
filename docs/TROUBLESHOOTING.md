@@ -534,6 +534,34 @@ To diagnose, run the daemon in the foreground with `log_level = "DEBUG"` and
 watch the `Fixing buffer ... reason=...` lines, then report what you see with
 `linguafix collect-logs`.
 
+## A letter is left behind (`рhello` instead of `hello`)
+
+Symptom: after a correction the first (or last) character of the old word is
+still on screen — `руддщ` becomes `рhello` instead of `hello`, or a stray letter
+survives at the end of a fix.
+
+There are two distinct causes and LinguaFix addresses both.
+
+**1. The deletion count and the injection raced.** The Backspace batch and the
+replacement text are written as two separate flushes: the Backspaces go out with
+one `syn`, then `backspace_settle_ms` later the replacement follows with a second
+`syn`. The daemon counts *physical keys* (scancodes), not characters, so the
+number of Backspaces always equals the number of keys that produced the word —
+even if the compositor has not yet painted them. If your application still
+applies the deletion late, raise `backspace_settle_ms` (default 120 ms) in
+**Advanced**.
+
+**2. The buffer mixed two scripts inside one word.** If you switch layout
+mid-word you produce a token like `ghbdtnпривет`. Converting that token as a
+unit would damage the half that is already correct (`ghйпривет`). LinguaFix
+therefore refuses to rewrite a token that mixes Latin and Cyrillic; the space (or
+Enter) that ends the token flushes each half separately. If you see a
+half-converted token it means the two scripts were typed as one word — add the
+separator and each half is corrected on its own boundary.
+
+Both cases are pinned by tests: `tests/test_boundary_flush.py` for the deletion
+count and `tests/test_mixed_script_word.py` for the mixed-script rule.
+
 
 ## Backspace does not delete in the terminal (or deletes too much)
 

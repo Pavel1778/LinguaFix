@@ -5,6 +5,48 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.8.1] - 2026-10-08
+
+Hotfix for three defects reported after the 0.2.8 live test.
+
+### Fixed
+
+- **Config migrations now reach the file.** A migration applied on load (the
+  `CTRL+CTRL` undo hotkey, the `300 ms` double-tap window, the `gedit` →
+  `texteditor` exception) lived only in memory, so `linguafix config show` —
+  which reads the file — kept displaying the stale values while the daemon
+  logged the migrated ones. `load_config` now writes the migrated config back
+  atomically (temp file + `os.replace`) and logs
+  `Config: migrated and saved ...`. `linguafix config migrate [--dry-run]`
+  previews the change and `config show` warns when file and effective values
+  diverge. Deliberate user values (`mode`, `backspace_settle_ms`,
+  `min_word_length`, a hand-picked double-tap window) are never migrated.
+- **T9 no longer rewrites correct words ("T9-спам").** A typo pass now refuses a
+  word that is known in *any* loaded language (a name or loanword the frequency
+  corpus omitted, e.g. `саша`), a word already corrected within
+  `typo_debounce_seconds` (default 5 s), and a "correction" that would replace a
+  plausible current-language word with a less plausible one (`суток` → `сутак`).
+  In `mode = "manual"` the automatic T9 pass is silent by default; set
+  `typo_in_manual = true` to restore it. The explicit fix hotkey is unaffected.
+- **A mixed-script buffer is never rewritten as one word.** Text containing both
+  Latin and Cyrillic (`ghbdtnпривет`) is left for the separator between the two
+  scripts to flush, so a fast typist no longer gets `ghйпривет`.
+
+### Added
+
+- Seven new thematic dictionary categories — `science`, `business`,
+  `electronics`, `media`, `education`, `gaming`, `sport` (ru + en, ~150 words
+  each), on top of the original five. Each ships as a
+  `linguafix-dict-<slug>.tar.gz` release asset and is listed on the landing
+  page. Install with `linguafix dict install <category> --lang ru`.
+
+### Changed
+
+- `site/layero.json` is confirmed as the Layero build config; the root
+  `layero.json` added by the previous session was removed (Layero reads the
+  project config, and the change was based on a misdiagnosis of a Layero
+  infrastructure incident).
+
 ## [0.2.8] - 2026-10-08
 
 ### Added

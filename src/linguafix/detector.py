@@ -102,6 +102,17 @@ def _alphabet_of(word: str) -> str:
     return "other"
 
 
+def _has_mixed_script_word(text: str) -> bool:
+    """Return ``True`` when a single word mixes Latin and Cyrillic letters.
+
+    ``ghbdtnпривет`` mixes both scripts inside one token: converting it as a
+    unit produces garbage (``ghйпривет``) because only one of the two halves is
+    on the wrong layout. A buffer whose scripts occupy separate words
+    (``привет hello``) is fine and can still be converted as a whole.
+    """
+    return any(_has_cyrillic(word) and _has_latin(word) for word in WORD_RE.findall(text))
+
+
 class LanguageDetector:
     """Detect the language of a buffer and decide whether it should be fixed.
 
@@ -341,6 +352,24 @@ class LanguageDetector:
         """
         return list(self._vocabulary_order.get(language, []))
 
+    def has_mixed_script(self, text: str) -> bool:
+        """Return ``True`` when a single word of ``text`` mixes both scripts."""
+        return _has_mixed_script_word(text)
+
+    def is_known_word_any_language(self, word: str) -> bool:
+        """Return ``True`` when ``word`` is a known word of *any* loaded language.
+
+        A word that is valid in another loaded language (a name, a loanword, a
+        technical term) must not be "corrected" as if it were a typo of the
+        current one. With ``en``+``ru`` loaded this protects words such as
+        ``саша``/``фото`` that the small frequency corpus omits but the other
+        language's corpus happens to contain.
+        """
+        lowered = word.lower()
+        if lowered in self._user_words:
+            return True
+        return any(lowered in vocab for vocab in self._vocabularies.values())
+
     def is_stop_word(self, text: str) -> bool:
         """Return ``True`` if ``text`` contains any configured stop word.
 
@@ -491,6 +520,11 @@ class LanguageDetector:
         """
         words = [w for w in WORD_RE.findall(text) if len(w) >= self.min_word_length]
         if not words:
+            return None
+
+        # A word mixing both scripts cannot be attributed to one language: the
+        # majority-script heuristic would flip a half that is already right.
+        if _has_mixed_script_word(text):
             return None
 
         totals = dict.fromkeys(self._vocabularies, 0.0)
@@ -691,6 +725,15 @@ class LanguageDetector:
             )
             return taught
 
+        # A buffer that mixes Latin and Cyrillic within one word is not a layout
+        # mistake we can repair as a unit: converting the whole thing produces
+        # garbage (``ghbdtnпривет`` -> ``ghйпривет``). The two scripts were typed
+        # as separate words; the separator between them will flush each half.
+        # Convert as a unit only when each script occupies its own word.
+        if _has_mixed_script_word(stripped):
+            logger.debug("detect(len=%d): mixed-script word; skipping", len(stripped))
+            return None
+
         # False-positive guards. They only ever prevent a conversion; a taught
         # word was already handled above, so this cannot suppress an intended fix.
         if self._should_guard(stripped, current_layout):
@@ -815,8 +858,11 @@ class LanguageDetector:
         if self._should_guard_structure_only(stripped):
             return False
 
+        # A buffer whose scripts occupy separate words is always wrong as a
+        # whole. A *word* mixing both scripts is not fixable as a unit, so it is
+        # left for the separator between the two scripts to flush.
         if _has_cyrillic(stripped) and _has_latin(stripped):
-            return True
+            return not _has_mixed_script_word(stripped)
 
         if current_layout is None:
             return self.detect(stripped) is not None

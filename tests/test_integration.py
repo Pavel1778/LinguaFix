@@ -200,8 +200,20 @@ def test_auto_repeat_is_ignored_for_letters(daemon: LinguaFixDaemon) -> None:
     assert daemon.buffer == "g"
 
 
-def test_mixed_script_buffer_is_fixed(daemon: LinguaFixDaemon) -> None:
+def test_mixed_script_word_is_left_alone(daemon: LinguaFixDaemon) -> None:
+    # A single token mixing both scripts cannot be repaired as a unit; the
+    # separator between the two halves flushes each of them instead.
     daemon.buffer = "приветhello"
+    daemon.last_key_time = time.time()
+    daemon._process_buffer()
+    injector = daemon.injector
+    assert isinstance(injector, FakeInjector)
+    assert injector.replacements == []
+
+
+def test_mixed_script_words_are_fixed(daemon: LinguaFixDaemon) -> None:
+    # Scripts in separate words: the whole buffer can be converted as a unit.
+    daemon.buffer = "привет hello"
     daemon.last_key_time = time.time()
     daemon._process_buffer()
     injector = daemon.injector

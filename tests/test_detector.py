@@ -55,8 +55,11 @@ def test_detect_returns_none_for_ambiguous(detector: LanguageDetector, text: str
     assert detector.detect(text) is None
 
 
-def test_detect_mixed_prefers_dominant(detector: LanguageDetector) -> None:
-    assert detector.detect("приветhello") == "ru"
+def test_detect_mixed_word_is_skipped(detector: LanguageDetector) -> None:
+    # A single token that mixes scripts cannot be attributed to one language:
+    # only one half is on the wrong layout, so guessing would damage the other.
+    assert detector.detect("приветhello") is None
+    assert detector.detect("ghbdtnпривет") is None
 
 
 def test_detect_short_words_ignored(detector: LanguageDetector) -> None:
@@ -128,9 +131,15 @@ def test_should_fix_false_for_correct_layout(detector: LanguageDetector) -> None
     assert detector.should_fix("hello", "us") is False
 
 
-def test_should_fix_true_for_mixed_alphabets(detector: LanguageDetector) -> None:
-    assert detector.should_fix("приветhello", "ru") is True
-    assert detector.should_fix("helloПривет", "us") is True
+def test_should_fix_mixed_alphabets_depends_on_word_boundary(
+    detector: LanguageDetector,
+) -> None:
+    # Scripts in separate words: fixable as a unit.
+    assert detector.should_fix("привет hello", "ru") is True
+    assert detector.should_fix("hello Привет", "us") is True
+    # Both scripts inside one token: left for the separator to flush.
+    assert detector.should_fix("приветhello", "ru") is False
+    assert detector.should_fix("helloПривет", "us") is False
 
 
 def test_should_fix_false_for_stop_word(detector: LanguageDetector) -> None:

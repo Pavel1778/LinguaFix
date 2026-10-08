@@ -8,13 +8,14 @@ import {
   categoryCards,
   DICTIONARY_ASSET_BASE as RAW,
   humanSize,
+  thematicCategories,
   thematicWordTotal,
 } from "../lib/dictionaries";
 
 const title = pick("Расширенные словари — LinguaFix", "Extended dictionaries — LinguaFix");
 const description = pick(
-  "Базовые и тематические словари LinguaFix: IT, медицина, юриспруденция, финансы, инженерия. Подключение одной командой linguafix dict install.",
-  "Base and thematic dictionaries for LinguaFix: IT, medicine, law, finance, engineering. Install with a single linguafix dict install command.",
+  "Базовые и тематические словари LinguaFix: IT, медицина, юриспруденция, финансы, инженерия, наука, бизнес, электроника, медиа, образование, игры и спорт. Подключение одной командой linguafix dict install.",
+  "Base and thematic dictionaries for LinguaFix: IT, medicine, law, finance, engineering, science, business, electronics, media, education, gaming and sport. Install with a single linguafix dict install command.",
 );
 
 const importCode = `linguafix dict download ru
@@ -82,8 +83,8 @@ linguafix dict import-file ~/Downloads/ru-50k.txt`;
         <p class="mt-3 text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
           {
             pick(
-              `Профессиональная лексика по разделам — ${thematicWordTotal.toLocaleString("ru-RU")} слов в 5 разделах. Подключаются поверх базового словаря и не входят в .deb — ставятся одной командой.`,
-              `Professional vocabulary by field — ${thematicWordTotal.toLocaleString("en-US")} words across 5 categories. Loaded on top of the base list and not bundled in the .deb — install with one command.`,
+              `Профессиональная лексика по разделам — ${thematicWordTotal.toLocaleString("ru-RU")} слов в ${thematicCategories.length} разделах. Подключаются поверх базового словаря и не входят в .deb — ставятся одной командой.`,
+              `Professional vocabulary by field — ${thematicWordTotal.toLocaleString("en-US")} words across ${thematicCategories.length} categories. Loaded on top of the base list and not bundled in the .deb — install with one command.`,
             )
           }
         </p>

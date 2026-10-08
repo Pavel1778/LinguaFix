@@ -33,6 +33,13 @@ the base list.
 | `legal` | ru, en | `legal/ru-legal-1k.txt`, `legal/en-legal-1k.txt` |
 | `finance` | ru, en | `finance/ru-finance-1k.txt`, `finance/en-finance-1k.txt` |
 | `engineering` | ru, en | `engineering/ru-engineering-1k.txt`, `engineering/en-engineering-1k.txt` |
+| `science` | ru, en | `science/ru-science-1k.txt`, `science/en-science-1k.txt` |
+| `business` | ru, en | `business/ru-business-1k.txt`, `business/en-business-1k.txt` |
+| `electronics` | ru, en | `electronics/ru-electronics-1k.txt`, `electronics/en-electronics-1k.txt` |
+| `media` | ru, en | `media/ru-media-1k.txt`, `media/en-media-1k.txt` |
+| `education` | ru, en | `education/ru-education-1k.txt`, `education/en-education-1k.txt` |
+| `gaming` | ru, en | `gaming/ru-gaming-1k.txt`, `gaming/en-gaming-1k.txt` |
+| `sport` | ru, en | `sport/ru-sport-1k.txt`, `sport/en-sport-1k.txt` |
 
 Every thematic list is curated by hand for this project and released under the
 MIT License (see the repository `LICENSE`); the per-category `README.md` records

@@ -22,7 +22,8 @@ else:  # pragma: no cover - exercised on 3.10 only
 from linguafix import __version__
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CHANGELOG_HEADING = re.compile(r"^## \[(\d+\.\d+\.\d+)\]", re.MULTILINE)
+# Allow an optional fourth component for hotfix releases (``0.2.8.1``).
+CHANGELOG_HEADING = re.compile(r"^## \[(\d+\.\d+\.\d+(?:\.\d+)?)\]", re.MULTILINE)
 
 
 def _pyproject_version() -> str:
@@ -50,7 +51,7 @@ def test_version_matches_changelog() -> None:
 # the example makes ``apt install ./linguafix_<old>_all.deb`` fail with
 # "no such file", which is exactly what a first-time user hits.
 _INSTALL_DOCS = ("README.md", "docs/INSTALL.md", "docs/TESTING.md")
-_DEB_EXAMPLE = re.compile(r"linguafix_(\d+\.\d+\.\d+)_all\.deb")
+_DEB_EXAMPLE = re.compile(r"linguafix_(\d+\.\d+\.\d+(?:\.\d+)?)_all\.deb")
 
 
 def test_install_docs_use_current_version() -> None:

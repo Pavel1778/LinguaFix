@@ -222,6 +222,14 @@ reading process will meet in practice:
 - **Exact deletion count.** The daemon counts physical keys, not characters, so
   the number of Backspaces always matches what is on screen even under very fast
   typing.
+- **No mixed-script rewrites.** A single token that mixes Latin and Cyrillic
+  (``ghbdtnпривет``, ``приветhello``) cannot be attributed to one language:
+  only one half is on the wrong layout, so converting the token as a unit would
+  damage the half that is already correct (``ghйпривет``). `target_layout` and
+  `detect` return `None` for such a token (`_has_mixed_script_word`) and the T9
+  pass skips it too; the separator between the two scripts flushes each half on
+  its own boundary. Scripts that occupy *separate* words (``привет hello``) are
+  still converted as a whole, which is what makes the guard safe.
 - **No same-layout rewrites.** A layout correction must move to a *different*
   layout. If `target_layout` ever returns the current layout, the daemon refuses
   the replacement (and logs a warning): deleting and retyping the word in place
@@ -314,7 +322,8 @@ word is scored against the corpora whose *layout could have produced it*.
   The *base* extended list (`dict download`/`import-file`) is one `<lang>.txt`
   file per language. The *thematic* lists (`dict install <category>`) are
   professional vocabularies — `it`, `medicine`, `legal`, `finance`,
-  `engineering` — stored under `<extended_dictionary_dir>/thematic/<lang>/<slug>.txt`
+  `engineering`, `science`, `business`, `electronics`, `media`, `education`,
+  `gaming`, `sport` — stored under `<extended_dictionary_dir>/thematic/<lang>/<slug>.txt`
   and enabled by slug in `installed_dict_categories` (`base` is always on).
   Both layers widen vocabulary **membership only**; n-gram scoring is unchanged,
   so detection behaviour for already-known words stays identical while rarer

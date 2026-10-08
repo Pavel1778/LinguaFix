@@ -95,6 +95,8 @@ _ALLOWED_CONFIG_KEYS = {
     "typo_max_distance_long",
     "typo_long_word_threshold",
     "typo_top1_ratio_strict",
+    "typo_debounce_seconds",
+    "typo_in_manual",
     "punctuation_correction",
     "punctuation_dashes",
     "punctuation_ellipsis",

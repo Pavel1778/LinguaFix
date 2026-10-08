@@ -114,17 +114,33 @@ def test_typo_is_left_alone_when_disabled() -> None:
     assert _injector(daemon).replacements == []
 
 
-def test_typo_runs_in_manual_mode() -> None:
-    """T9 is opt-in and layout-neutral, so it must not be gated by ``mode``.
+def test_typo_is_silent_in_manual_mode_by_default() -> None:
+    """Manual mode means "don't rewrite automatically", so T9 must stay quiet.
 
-    ``mode = "manual"`` governs *layout* switching only. A user who turns on
-    ``typo_correction`` in manual mode still expects typos to be fixed (the
-    correction stays in the current layout, so it never switches anything).
+    The user reported "T9-спам в manual": with ``typo_correction`` on, manual
+    mode still auto-rewrote words. Manual now suppresses the automatic T9 pass
+    (the layout pass was already suppressed); the explicit hotkey still works.
     """
     daemon = _make_daemon(typo_correction=True, mode="manual")
     _press(daemon, "langauge")
     _press(daemon, " ")
+    assert _injector(daemon).replacements == []
+
+
+def test_typo_runs_in_manual_mode_when_explicitly_enabled() -> None:
+    """``typo_in_manual = true`` restores the old automatic T9-in-manual opt-in."""
+    daemon = _make_daemon(typo_correction=True, mode="manual", typo_in_manual=True)
+    _press(daemon, "langauge")
+    _press(daemon, " ")
     assert _injector(daemon).replacements == [(9, "language ", "us")]
+
+
+def test_typo_still_runs_on_explicit_fix_in_manual_mode() -> None:
+    """The hotkey is an explicit request, so manual mode must not block it."""
+    daemon = _make_daemon(typo_correction=True, mode="manual")
+    _press(daemon, "langauge")
+    daemon._process_buffer(force=True)
+    assert _injector(daemon).replacements == [(8, "language", "us")]
 
 
 def test_layout_fix_is_still_suppressed_in_manual_mode() -> None:

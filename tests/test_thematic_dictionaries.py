@@ -69,6 +69,25 @@ def test_category_slugs_are_unique() -> None:
     assert "base" not in slugs  # base is the general list, not a thematic one
 
 
+def test_expected_category_set_is_shipped() -> None:
+    """v0.2.8.1 adds seven professional categories to the original five."""
+    expected = {
+        "it",
+        "medicine",
+        "legal",
+        "finance",
+        "engineering",
+        "science",
+        "business",
+        "electronics",
+        "media",
+        "education",
+        "gaming",
+        "sport",
+    }
+    assert set(category_slugs()) == expected
+
+
 # --- Download / offline fallback ------------------------------------------
 
 

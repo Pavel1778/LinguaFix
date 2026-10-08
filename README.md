@@ -108,7 +108,7 @@ Caramba Switcher for Windows.
 ### Для пользователей: пакет .deb (ничего настраивать не нужно)
 
 ```bash
-sudo apt install ./linguafix_0.2.8_all.deb
+sudo apt install ./linguafix_0.2.8.1_all.deb
 ```
 
 Пакет **самодостаточен**: он ставит udev-правило с `TAG+="uaccess"`, включает
@@ -306,7 +306,8 @@ linguafix dict import-file ~/Downloads/ru-50k.txt --lang ru   # вручную
 ### Тематические словари
 
 Кроме базового списка можно подключить профессиональную лексику по разделам:
-`it`, `medicine`, `legal`, `finance`, `engineering` (русский и английский).
+`it`, `medicine`, `legal`, `finance`, `engineering`, `science`, `business`,
+`electronics`, `media`, `education`, `gaming`, `sport` (русский и английский).
 Разделы ставятся отдельно и **не** входят в `.deb`:
 
 ```bash

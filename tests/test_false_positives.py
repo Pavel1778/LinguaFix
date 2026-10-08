@@ -87,9 +87,12 @@ def test_plausibility_guard_can_be_disabled() -> None:
         identifier_guard=False,
     )
     # With every guard off, the reported phrase converts again: this proves the
-    # guards, not some other change, are what suppress it.
-    assert guarded.target_layout("сb cj,jq?ye;yjn/g/", "ru") is None
-    assert unguarded.target_layout("сb cj,jq?ye;yjn/g/", "ru") is not None
+    # guards, not some other change, are what suppress it. (A pure-Cyrillic
+    # sample is used because a mixed-script token is skipped by a separate,
+    # independent rule that stays on even when these guards are disabled.)
+    sample = "ыв сл,дж?ые;ынп/g/"
+    assert guarded.target_layout(sample, "ru") is None
+    assert unguarded.target_layout(sample, "ru") is not None
 
 
 def test_structural_boundary_guard_ignores_urls() -> None:

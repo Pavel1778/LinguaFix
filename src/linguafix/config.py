@@ -112,6 +112,15 @@ DEFAULT_TYPO_LONG_WORD_THRESHOLD: Final[int] = 6
 # Kept modest on purpose: even ``прветт`` -> ``привет`` only beats ``проект``
 # by ~25x in the corpus, so a 100x bar would reject that flagship example.
 DEFAULT_TYPO_TOP1_RATIO_STRICT: Final[float] = 10.0
+# Seconds during which the same word is not typo-corrected again. The daemon
+# may see the same on-screen word twice (a boundary flush then a late idle
+# flush), and re-correcting it would rewrite already-correct text.
+DEFAULT_TYPO_DEBOUNCE_SECONDS: Final[float] = 5.0
+# T9 stays opt-in in every mode, but in ``manual`` the user is deliberately not
+# asking for automatic rewriting, so a wrong T9 guess is especially unwelcome.
+# Off here means manual mode fixes typos only on the explicit hotkey; auto and
+# hybrid keep honouring ``typo_correction``.
+DEFAULT_TYPO_IN_MANUAL: Final[bool] = False
 # Punctuation cleanup. Off by default: rewriting punctuation inside code,
 # formulas or URLs does more harm than good, so the user opts in. The
 # sub-flags stay on so enabling the master switch is useful out of the box.
@@ -465,6 +474,8 @@ class Config:
     typo_max_distance_long: int = DEFAULT_TYPO_MAX_DISTANCE_LONG
     typo_long_word_threshold: int = DEFAULT_TYPO_LONG_WORD_THRESHOLD
     typo_top1_ratio_strict: float = DEFAULT_TYPO_TOP1_RATIO_STRICT
+    typo_debounce_seconds: float = DEFAULT_TYPO_DEBOUNCE_SECONDS
+    typo_in_manual: bool = DEFAULT_TYPO_IN_MANUAL
 
     # --- punctuation cleanup ----------------------------------------------
     punctuation_correction: bool = DEFAULT_PUNCTUATION_CORRECTION
@@ -699,6 +710,10 @@ class Config:
         self.typo_top1_ratio_strict = _round_float(float(self.typo_top1_ratio_strict))
         if self.typo_top1_ratio_strict < 1.0:
             raise ValueError("typo_top1_ratio_strict must be >= 1.0")
+        self.typo_debounce_seconds = _round_float(float(self.typo_debounce_seconds))
+        if self.typo_debounce_seconds < 0:
+            raise ValueError("typo_debounce_seconds must be >= 0")
+        self.typo_in_manual = bool(self.typo_in_manual)
 
         # --- punctuation cleanup -------------------------------------------
         self.punctuation_correction = bool(self.punctuation_correction)

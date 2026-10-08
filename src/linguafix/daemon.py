@@ -338,6 +338,9 @@ class LinguaFixDaemon:
         # T9: one corrector per language, built lazily from the detector's
         # vocabulary the first time a typo is checked.
         self._typo_correctors: dict[str, TypoCorrector] = {}
+        # Lower-cased word -> monotonic time it was last typo-corrected, so the
+        # same on-screen word is not rewritten twice (the "T9-спам" report).
+        self._typo_recent: dict[str, float] = {}
         self._punctuation = PunctuationCorrector()
         # Text expansion (snippets). Loaded once here and re-loaded on reload.
         self._expander = TextExpander()
@@ -1006,23 +1009,57 @@ class LinguaFixDaemon:
                 self._notify()
         return True
 
-    def _typo_correction(self, buffer: str, current: str) -> str | None:
+    def _typo_correction(self, buffer: str, current: str, *, force: bool = False) -> str | None:
         """Return a single-word typo correction for ``buffer``, or ``None``.
 
         Only a plain letter word in the language the user is typing is
-        considered, and only when T9 is enabled. A taught word and any word with
-        a structural separator are never touched, so a brand or a path cannot be
-        "corrected" into a dictionary word.
+        considered, and only when T9 is enabled. A taught word, a word in the
+        current language's vocabulary, and any word with a structural separator
+        are never touched, so a correct word, a brand or a path cannot be
+        "corrected" into a different dictionary word.
+
+        Args:
+            buffer: The word to check.
+            current: The layout the word was typed in.
+            force: The user asked explicitly (hotkey). A forced check bypasses
+                the manual-mode gate and the debounce, because the user is
+                deliberately re-examining the word.
+
+        Returns:
+            The corrected word, or ``None`` when no confident fix exists.
         """
         if not self.config.typo_correction:
+            return None
+        if self.config.mode == "manual" and not (force or self.config.typo_in_manual):
+            # In manual mode the user is not asking for automatic rewriting, so
+            # an unsolicited T9 guess is exactly the "T9-спам" they reported.
+            # Auto/hybrid keep honouring ``typo_correction``.
             return None
         word = buffer.strip()
         if len(word) < self.config.typo_min_word_length or not word.isalpha():
             return None
         if self.detector.is_user_word(word) or _INTERNAL_SEPARATOR_RE.search(word):
             return None
+        # A word mixing scripts is not a typo: only one half is on the wrong
+        # layout, and "correcting" it would damage the other half.
+        if self.detector.has_mixed_script(word):
+            return None
         language = self.detector.language_for_layout(current)
         if language is None:
+            return None
+        # A word already in the vocabulary is correct: never rewrite it. This is
+        # the second guard against spam — the daemon may re-see an on-screen word
+        # that a previous pass already fixed, and re-correcting it would damage
+        # text that is now right.
+        if word.lower() in self.detector.vocabulary(language):
+            return None
+        # A word that is valid in any loaded language (a name, a loanword, a
+        # technical term the frequency corpus omitted) is not a typo. Without
+        # this the small corpus makes T9 rewrite correct but rare words.
+        if self.detector.is_known_word_any_language(word):
+            return None
+        if not force and self._typo_recently_applied(word):
+            logger.debug("T9: %r was corrected recently; not repeating", word)
             return None
         corrector = self._typo_correctors.get(language)
         if corrector is None:
@@ -1038,10 +1075,40 @@ class LinguaFixDaemon:
         suggestion = corrector.suggest(word)
         if suggestion is None or suggestion == word:
             return None
+        # A "correction" that turns a real current-language word into another
+        # real word is a risky guess (``суток`` -> ``сутак``), not a typo fix.
+        # The flagships are absent from the corpus and so are not caught above,
+        # hence this last guard: refuse when the typed word is plausible as a
+        # current-language word while the suggestion is not more so.
+        if (
+            not force
+            and self.detector._word_is_plausible(word, language)
+            and not self.detector._word_is_plausible(suggestion, language)
+        ):
+            logger.debug("T9: %r is plausible; refusing the guess %r", word, suggestion)
+            return None
         # Preserve the user's capitalisation (``Teh`` -> ``The``).
         if word[0].isupper():
             suggestion = suggestion[:1].upper() + suggestion[1:]
         return suggestion
+
+    def _typo_recently_applied(self, word: str) -> bool:
+        """Return whether ``word`` was typo-corrected within the debounce window."""
+        if self.config.typo_debounce_seconds <= 0:
+            return False
+        last = self._typo_recent.get(word.lower())
+        if last is None:
+            return False
+        if time.monotonic() - last < self.config.typo_debounce_seconds:
+            return True
+        self._typo_recent.pop(word.lower(), None)
+        return False
+
+    def _remember_typo(self, word: str) -> None:
+        """Record ``word`` as just corrected, for the debounce window."""
+        if self.config.typo_debounce_seconds <= 0:
+            return
+        self._typo_recent[word.lower()] = time.monotonic()
 
     def _build_punctuation(self) -> PunctuationCorrector:
         """Build a corrector from the current config (rules are config-driven)."""
@@ -1460,11 +1527,12 @@ class LinguaFixDaemon:
             # Layout detection found nothing. A separate, opt-in step then looks
             # for a single-character typo in the language the user is typing;
             # that fix stays in the current layout.
-            corrected = self._typo_correction(buffer, current)
+            corrected = self._typo_correction(buffer, current, force=force)
             if corrected is not None:
                 converted = corrected
                 target = current
                 reason = "typo"
+                self._remember_typo(buffer.strip())
             else:
                 # Neither layout detection nor typo correction applied. A final
                 # opt-in pass fixes punctuation (dashes, ellipsis, spacing),

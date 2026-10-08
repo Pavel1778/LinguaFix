@@ -1,6 +1,6 @@
 {
   "name": "linguafix-site",
-  "version": "0.2.8",
+  "version": "0.2.8.1",
   "private": true,
   "type": "module",
   "description": "Landing page for LinguaFix",

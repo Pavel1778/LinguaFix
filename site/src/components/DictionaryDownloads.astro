@@ -12,7 +12,7 @@ import {
 } from "../lib/dictionaries";
 
 const showAll = Astro.props.all !== false;
-const shownCategories = showAll ? categoryCards : categoryCards.slice(0, 3);
+const shownCategories = showAll ? categoryCards : categoryCards.slice(0, 6);
 ---
 
 <section id="dictionaries" class="border-t border-[#e5e5e5] py-16 sm:py-20 dark:border-[#3d3d3d]">
@@ -60,8 +60,8 @@ const shownCategories = showAll ? categoryCards : categoryCards.slice(0, 3);
     <p class="mt-2 text-sm text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
       {
         pick(
-          "Тематическая лексика для IT, медицины, юриспруденции, финансов и инженерии. Ставится одной командой, не входит в .deb.",
-          "Domain vocabulary for IT, medicine, law, finance and engineering. Installed with one command, not bundled in the .deb.",
+          "Тематическая лексика для IT, медицины, юриспруденции, финансов, инженерии, науки, бизнеса, электроники, медиа, образования, игр и спорта. Ставится одной командой, не входит в .deb.",
+          "Domain vocabulary for IT, medicine, law, finance, engineering, science, business, electronics, media, education, gaming and sport. Installed with one command, not bundled in the .deb.",
         )
       }
     </p>

@@ -56,6 +56,13 @@ CATEGORIES: Final[tuple[DictionaryCategory, ...]] = (
     DictionaryCategory("legal", "Юриспруденция", "Law", ("ru", "en")),
     DictionaryCategory("finance", "Финансы и бухгалтерия", "Finance and accounting", ("ru", "en")),
     DictionaryCategory("engineering", "Инженерия и строительство", "Engineering", ("ru", "en")),
+    DictionaryCategory("science", "Наука", "Science", ("ru", "en")),
+    DictionaryCategory("business", "Бизнес и менеджмент", "Business and management", ("ru", "en")),
+    DictionaryCategory("electronics", "Электроника", "Electronics", ("ru", "en")),
+    DictionaryCategory("media", "Медиа и журналистика", "Media and journalism", ("ru", "en")),
+    DictionaryCategory("education", "Образование", "Education", ("ru", "en")),
+    DictionaryCategory("gaming", "Игры и киберспорт", "Gaming and esports", ("ru", "en")),
+    DictionaryCategory("sport", "Спорт", "Sport", ("ru", "en")),
 )
 
 _CATEGORY_BY_SLUG: Final[dict[str, DictionaryCategory]] = {c.slug: c for c in CATEGORIES}

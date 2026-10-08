@@ -75,6 +75,69 @@ export const thematicCategories: ThematicCategory[] = [
     },
     license: "MIT",
   },
+  {
+    slug: "science",
+    title: { ru: "Наука", en: "Science" },
+    blurb: {
+      ru: "Физика, химия, математика, биология, астрономия.",
+      en: "Physics, chemistry, mathematics, biology, astronomy.",
+    },
+    license: "MIT",
+  },
+  {
+    slug: "business",
+    title: { ru: "Бизнес и менеджмент", en: "Business and management" },
+    blurb: {
+      ru: "Менеджмент, маркетинг, продажи, финансы, HR.",
+      en: "Management, marketing, sales, finance, HR.",
+    },
+    license: "MIT",
+  },
+  {
+    slug: "electronics",
+    title: { ru: "Электроника", en: "Electronics" },
+    blurb: {
+      ru: "Схемы, компоненты, микроконтроллеры, Arduino, RTOS.",
+      en: "Circuits, components, microcontrollers, Arduino, RTOS.",
+    },
+    license: "MIT",
+  },
+  {
+    slug: "media",
+    title: { ru: "Медиа и журналистика", en: "Media and journalism" },
+    blurb: {
+      ru: "Журналистика, редактура, жанры, издательство.",
+      en: "Journalism, editing, genres, publishing.",
+    },
+    license: "MIT",
+  },
+  {
+    slug: "education",
+    title: { ru: "Образование", en: "Education" },
+    blurb: {
+      ru: "Педагогика, методика, статистика, ML-термины.",
+      en: "Pedagogy, methodology, statistics, ML terms.",
+    },
+    license: "MIT",
+  },
+  {
+    slug: "gaming",
+    title: { ru: "Игры и киберспорт", en: "Gaming and esports" },
+    blurb: {
+      ru: "Жанры, движки, игровой жаргон, киберспорт.",
+      en: "Genres, engines, gaming jargon, esports.",
+    },
+    license: "MIT",
+  },
+  {
+    slug: "sport",
+    title: { ru: "Спорт", en: "Sport" },
+    blurb: {
+      ru: "Виды спорта, термины, правила, инвентарь.",
+      en: "Sports, terms, rules, equipment.",
+    },
+    license: "MIT",
+  },
 ];
 
 const dictRoot = path.resolve(process.cwd(), "..", "dictionaries");

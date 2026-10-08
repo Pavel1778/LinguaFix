@@ -55,6 +55,13 @@ SMOKE_IMAGE=ubuntu:22.04 make smoke-test    # Python 3.10 path (tomli)
   first; otherwise Chromium/Electron coalesce the fast Backspaces and the first
   character survives (`руддщ ` -> `рhello`). Only boundary flushes pass
   `boundary=True`; the idle fallback and hotkey must not pay this pause.
+- A single token mixing Latin and Cyrillic (`ghbdtnпривет`) is **never** rewritten
+  as a unit: only one half is on the wrong layout, so converting the token
+  damages the correct half (`ghйпривет`). `detector._has_mixed_script_word`
+  gates `target_layout`, `detect`, `should_fix` and the daemon's T9 pass; the
+  separator between the two scripts flushes each half on its own boundary.
+  Scripts in *separate* words (`привет hello`) are still converted as a whole —
+  `tests/test_mixed_script_word.py` pins both directions.
 - A double-tap modifier hotkey fires only when no *other* modifier family is
   held, so `Ctrl+Shift+Shift` is treated as a chord, not a fix.
 - Word-boundary triggers (`on_space`, `on_enter`, `on_tab`, `on_punctuation`)
