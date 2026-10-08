@@ -30,6 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The GUI tab icons now fall back to text when a symbolic icon is missing from
   the theme, instead of failing to draw the tab.
+- The two desktop notifications (correction and update-available) had been
+  corrupted into mojibake by an earlier edit; they are readable again. A test
+  now fails on double-encoded UTF-8 anywhere in the tracked sources.
+- The install examples in `README.md`, `docs/INSTALL.md` and `docs/TESTING.md`
+  named an old package version (`0.2.0`/`0.2.1`), so copying them failed with
+  "no such file"; they match the current release and a test pins them to it.
 
 ## [0.2.7] - 2026-10-08
 
