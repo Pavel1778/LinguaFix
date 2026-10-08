@@ -29,7 +29,6 @@ from .switcher import LayoutSwitcher
 logger = logging.getLogger(__name__)
 
 LOCK_FILE_NAME = "daemon.lock"
-START_TIMEOUT = 5.0
 
 # Russian user-facing strings (English duplicates live in the README).
 MSG_NOT_RUNNING = "LinguaFix не запущен."
@@ -90,30 +89,18 @@ def cmd_start(args: argparse.Namespace) -> int:
         daemon = LinguaFixDaemon(config, dry_run=args.dry_run)
         return daemon.run()
 
-    command = [sys.executable, "-m", "linguafix", "start", "--foreground"]
-    if args.dry_run:
-        command.append("--dry-run")
-    subprocess.Popen(
-        command,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        stdin=subprocess.DEVNULL,
-        start_new_session=True,
-    )
-    deadline = time.time() + START_TIMEOUT
-    while time.time() < deadline:
-        pid = _read_pid()
-        if pid is not None:
-            # The daemon writes the lock before it discovers devices, so a fast
-            # failure (no keyboard devices, bad config) briefly looks like a
-            # successful start. Wait a moment and re-check before claiming
-            # success, so ``start`` never lies about a daemon that just died.
-            time.sleep(0.4)
-            if _pid_alive(pid):
-                print(MSG_STARTED)
-                return 0
-        time.sleep(0.1)
-    print("Не удалось запустить LinguaFix. Смотрите логи: ~/.local/state/linguafix/")
+    # Delegate to the shared control module so ``start``, ``status`` and the GUI
+    # toggle agree on one definition of "running" (the lock file, or the systemd
+    # unit). The previous hand-rolled spawn/poll could report a start that the
+    # very next ``status`` denied; one implementation cannot disagree with itself.
+    from .daemon_control import last_error, start
+
+    if start(dry_run=args.dry_run):
+        print(MSG_STARTED)
+        return 0
+    reason = last_error()
+    print("Не удалось запустить LinguaFix." + (f" {reason}" if reason else ""))
+    print("Смотрите логи: ~/.local/state/linguafix/")
     return 1
 
 
@@ -164,12 +151,18 @@ def cmd_restart(_args: argparse.Namespace) -> int:
 
 def cmd_status(_args: argparse.Namespace) -> int:
     """Print the daemon status and runtime environment."""
+    from .daemon_control import is_running
+
     config = load_config()
     pid = _read_pid()
-    if pid is None:
-        print(MSG_NOT_RUNNING)
+    # Use the same "running" definition as ``stop`` and the GUI toggle (the lock
+    # file, or an active systemd user unit). Reading only the lock file would
+    # report "not running" for a service daemon whose lock was not written yet,
+    # disagreeing with the very next ``stop``.
+    if is_running():
+        print(f"LinguaFix запущен (PID {pid})." if pid else "LinguaFix запущен (systemd).")
     else:
-        print(f"LinguaFix запущен (PID {pid}).")
+        print(MSG_NOT_RUNNING)
 
     switcher = LayoutSwitcher(layouts=config.layouts, switch_method=config.switch_method)
     injector = TextInjector(backend=config.backend)
@@ -320,6 +313,45 @@ def cmd_import(args: argparse.Namespace) -> int:
     return 0
 
 
+def _typo_correction_for_cli(
+    text: str, current: str, detector: LanguageDetector, config: Config
+) -> str | None:
+    """Return a T9 correction for a single word, or ``None``.
+
+    Mirrors ``LinguaFixDaemon._typo_correction`` so ``linguafix fix`` agrees
+    with what the daemon would do to the same word: only an alpha word in the
+    language the current layout types, only when T9 is enabled, and never a
+    word the user taught or one with a structural separator.
+    """
+    from .daemon import _INTERNAL_SEPARATOR_RE
+    from .typo import TypoCorrector
+
+    if not config.typo_correction:
+        return None
+    word = text.strip()
+    if len(word) < config.typo_min_word_length or not word.isalpha():
+        return None
+    if detector.is_user_word(word) or _INTERNAL_SEPARATOR_RE.search(word):
+        return None
+    language = detector.language_for_layout(current)
+    if language is None:
+        return None
+    corrector = TypoCorrector(
+        detector.ordered_vocabulary(language),
+        max_distance=config.typo_max_distance,
+        min_length=config.typo_min_word_length,
+        long_word_threshold=config.typo_long_word_threshold,
+        long_word_max_distance=config.typo_max_distance_long,
+        top1_ratio_strict=config.typo_top1_ratio_strict,
+    )
+    suggestion = corrector.suggest(word)
+    if suggestion is None or suggestion == word:
+        return None
+    if word[0].isupper():
+        suggestion = suggestion[:1].upper() + suggestion[1:]
+    return suggestion
+
+
 def cmd_fix(args: argparse.Namespace) -> int:
     """Manually correct a piece of text."""
     config = load_config()
@@ -343,21 +375,34 @@ def cmd_fix(args: argparse.Namespace) -> int:
     current = switcher.get_current_layout(force=True)
     target = detector.target_layout(text, current)
     if target is None:
-        print(f"Исправление не требуется (раскладка {current}).")
-        return 0
+        # Layout detection found nothing. Mirror the daemon's opt-in typo pass:
+        # a single-word typo in the language the current layout types is fixed
+        # in place, so ``fix --text "превет"`` gives ``привет`` when T9 is on.
+        corrected = _typo_correction_for_cli(text, current, detector, config)
+        if corrected is None:
+            print(f"Исправление не требуется (раскладка {current}).")
+            return 0
+        # A typo fix never changes the layout, so the target stays ``current``.
+        converted, target, kind = corrected, current, "typo"
+    else:
+        converted = converter.convert(text, current, target)
+        kind = "layout"
 
-    converted = converter.convert(text, current, target)
     # Keep the dry-run contract identical to the daemon: report the intended
     # action to the logger as well as to stdout, then do not touch anything.
-    logger.info("fix: %d chars, %s -> %s", len(text), current, target)
-    print(f"{text} -> {converted} ({current} -> {target})")
+    logger.info("fix (%s): %d chars, %s -> %s", kind, len(text), current, target)
+    if kind == "typo":
+        print(f"{text} -> {converted} (typo)")
+    else:
+        print(f"{text} -> {converted} ({current} -> {target})")
     if args.dry_run:
         logger.info("Dry run: skipping layout switch and text replacement")
         print("Режим --dry-run: изменения не применены.")
         return 0
     if args.apply:
-        switcher.switch_to(target)
-        time.sleep(0.05)
+        if kind == "layout":
+            switcher.switch_to(target)
+            time.sleep(0.05)
         if not injector.replace_text(len(text), converted, target):
             print("Не удалось применить исправление.")
             return 1

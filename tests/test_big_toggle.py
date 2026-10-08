@@ -39,7 +39,7 @@ def test_button_builds_with_power_glyph() -> None:
     from linguafix.gui.widgets.big_toggle import BigToggle
 
     button = BigToggle()
-    assert button.icon_name == "power-symbolic"
+    assert button.icon_name == "system-shutdown-symbolic"
     assert button.state == "off"
 
 

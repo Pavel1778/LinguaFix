@@ -15,7 +15,10 @@ STATE_BUSY = "busy"
 
 # The power glyph from the Adwaita icon theme, as in the GNOME quick-settings
 # power button: a thin symbolic symbol, never a coloured pictogram.
-ICON_NAME = "power-symbolic"
+# ``system-shutdown-symbolic`` is the name Adwaita actually ships (verified
+# against adwaita-icon-theme 48); ``power-symbolic`` does not exist and rendered
+# as a "broken image" placeholder.
+ICON_NAME = "system-shutdown-symbolic"
 
 
 class BigToggle(Gtk.Box):

@@ -82,6 +82,9 @@ def test_collect_logs_command_failure(
 def test_status_when_not_running(
     isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from linguafix import daemon_control
+
+    monkeypatch.setattr(daemon_control, "is_running", lambda: False)
     monkeypatch.setattr(cli, "_read_pid", lambda: None)
     assert cli.main(["status"]) == 0
     assert "не запущен" in capsys.readouterr().out
@@ -90,9 +93,28 @@ def test_status_when_not_running(
 def test_status_when_running(
     isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from linguafix import daemon_control
+
+    monkeypatch.setattr(daemon_control, "is_running", lambda: True)
     monkeypatch.setattr(cli, "_read_pid", lambda: 4242)
     assert cli.main(["status"]) == 0
     assert "4242" in capsys.readouterr().out
+
+
+def test_status_agrees_with_is_running_for_a_service_daemon(
+    isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A service daemon without a lock file is still "running" (systemd active).
+
+    ``status`` must use the same definition as ``stop``; reading only the lock
+    file made the two disagree.
+    """
+    from linguafix import daemon_control
+
+    monkeypatch.setattr(daemon_control, "is_running", lambda: True)
+    monkeypatch.setattr(cli, "_read_pid", lambda: None)
+    assert cli.main(["status"]) == 0
+    assert "запущен" in capsys.readouterr().out
 
 
 def test_stop_when_not_running(
@@ -387,36 +409,31 @@ def test_cmd_gui_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cli.cmd_gui(argparse.Namespace()) == 0
 
 
-def test_start_detached_reports_success_when_alive(
+def test_start_detached_delegates_to_daemon_control(
     isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    class _Popen:
-        def __init__(self, *_args: object, **_kwargs: object) -> None:
-            pass
+    """``start`` must use the shared control module, not its own spawn/poll."""
+    from linguafix import daemon_control
 
-    monkeypatch.setattr(cli.subprocess, "Popen", _Popen)
-    monkeypatch.setattr(cli, "_read_pid", lambda: 4242)
-    monkeypatch.setattr(cli, "_pid_alive", lambda pid: True)
-    monkeypatch.setattr(cli.time, "sleep", lambda _s: None)
+    started: list[bool] = []
+    monkeypatch.setattr(daemon_control, "start", lambda dry_run=False: started.append(True) or True)
     assert cli.cmd_start(argparse.Namespace(foreground=False, dry_run=False)) == 0
+    assert started == [True]
     assert "запущен" in capsys.readouterr().out
 
 
 def test_start_detached_reports_failure_when_daemon_dies(
     isolated_env: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A daemon that never comes up must not print success."""
+    """A daemon that never comes up must not print success, and must say why."""
+    from linguafix import daemon_control
 
-    class _Popen:
-        def __init__(self, *_args: object, **_kwargs: object) -> None:
-            pass
-
-    monkeypatch.setattr(cli.subprocess, "Popen", _Popen)
-    monkeypatch.setattr(cli, "_read_pid", lambda: None)
-    monkeypatch.setattr(cli, "START_TIMEOUT", 0.01)
-    monkeypatch.setattr(cli.time, "sleep", lambda _s: None)
+    monkeypatch.setattr(daemon_control, "start", lambda dry_run=False: False)
+    monkeypatch.setattr(daemon_control, "last_error", lambda: "демон завершился сразу")
     assert cli.cmd_start(argparse.Namespace(foreground=False, dry_run=False)) == 1
-    assert "Не удалось запустить" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Не удалось запустить" in out
+    assert "демон завершился сразу" in out
 
 
 def test_mode_show_and_set(isolated_env: Path, capsys: pytest.CaptureFixture[str]) -> None:

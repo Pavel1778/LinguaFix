@@ -259,6 +259,30 @@ def test_undo_history_depth_is_bounded() -> None:
     assert daemon._undo_history[0][1] == "second"
 
 
+def test_hotkey_fixes_taught_short_word_below_min_length() -> None:
+    """A taught 1-char token is resolved by the explicit hotkey.
+
+    The hotkey is the user saying "I mean this word", so it may reach a taught
+    token that the normal ``min_word_length`` guard would drop (``ы`` -> ``s``).
+    """
+    daemon = make_daemon(mode="manual", hotkey_fix_last_word="PAUSE")
+    daemon.switcher.current = "ru"
+    daemon.detector.set_user_words(["s"])  # the converted (English) form
+    press(daemon, "s")  # KEY_S in the ru layout renders as "ы"
+    assert daemon.buffer == "ы"
+    tap(daemon, "KEY_PAUSE")
+    assert _injector(daemon).replacements == [(1, "s", "us")]
+
+
+def test_short_word_without_taught_conversion_is_ignored() -> None:
+    # Guard against the fix above leaking: the same hotkey must not rewrite a
+    # short word whose conversion is not in the user dictionary.
+    daemon = make_daemon(mode="manual", hotkey_fix_last_word="PAUSE")
+    press(daemon, "s")
+    tap(daemon, "KEY_PAUSE")
+    assert _injector(daemon).replacements == []
+
+
 def test_reload_config_refreshes_hotkeys(monkeypatch: pytest.MonkeyPatch) -> None:
     daemon = make_daemon(hotkey_fix_last_word="PAUSE")
     new_config = Config(hotkey_fix_last_word="F9")

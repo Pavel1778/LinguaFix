@@ -1218,7 +1218,18 @@ class LinguaFixDaemon:
                 backspace_count,
                 len(buffer),
             )
-        if not buffer or len(buffer) < self.config.min_word_length:
+        if not buffer:
+            return
+        # The explicit hotkey may resolve a taught short token (``ы`` -> ``s``),
+        # which the length guard below would otherwise drop before the detector
+        # ever sees it. ``forced_taught_layout`` only matches a conversion the
+        # user taught, so no arbitrary short guess slips through.
+        forced_taught = (
+            force
+            and len(buffer) < self.config.min_word_length
+            and self.detector.forced_taught_layout(buffer, self.switcher.get_current_layout())
+        )
+        if len(buffer) < self.config.min_word_length and not forced_taught:
             return
 
         if self.detector.is_stop_word(buffer):

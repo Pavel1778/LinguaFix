@@ -299,6 +299,20 @@ class LanguageDetector:
                 return layout
         return None
 
+    def forced_taught_layout(self, text: str, current_layout: str) -> str | None:
+        """Return a taught-conversion target for ``text``, ignoring word length.
+
+        A normal fix skips words shorter than ``min_word_length`` to avoid
+        noise, but the user's explicit hotkey should still resolve a taught
+        short token (``ы`` -> ``s``). Only a conversion whose result is in the
+        user dictionary qualifies, so the length guard is never widened to
+        arbitrary guesses.
+        """
+        stripped = text.strip()
+        if not stripped or stripped.lower() in self._user_words:
+            return None
+        return self._taught_conversion(stripped, current_layout)
+
     def _bigram_score(self, word: str, language: str) -> float:
         """Return the average log-probability of ``word`` in ``language``."""
         model = self._bigrams.get(language, {})

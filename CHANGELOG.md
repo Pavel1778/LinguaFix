@@ -14,6 +14,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   minute), which hung the whole check; the timeout bounds that. A regression
   test asserts every job keeps a timeout.
 
+## [0.2.4] - 2026-10-04
+
+### Fixed
+
+- The big power button now uses `system-shutdown-symbolic`. The old name
+  `power-symbolic` does not exist in adwaita-icon-theme 48, so the button
+  rendered as a broken-image placeholder. A new `tests/test_icons_exist.py`
+  scans every `icon_name` in the GUI and asserts it exists in the installed
+  icon theme.
+- `linguafix fix` now applies the opt-in typo corrector when layout detection
+  finds nothing, matching the daemon; `linguafix fix --text "превет"` gives
+  `привет` when `typo_correction` is on.
+- `linguafix status` now uses the same "running" definition as `stop` and the
+  GUI (the flock PID lock, or an active systemd user unit), so a service daemon
+  without a lock file is no longer reported as not running.
+- `linguafix start` delegates to the shared control module instead of spawning
+  and polling on its own, so `start` and the next `status` can no longer
+  disagree.
+- The manual-fix hotkey now resolves a taught short token (`ы` -> `s`) even when
+  it is below `min_word_length`; only a conversion present in the user
+  dictionary qualifies.
+
 ## [0.2.3] - 2026-10-07
 
 ### Added
