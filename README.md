@@ -63,8 +63,9 @@ Caramba Switcher for Windows.
 - 🛡️ Стоп-слова для защиты паролей и логинов
 - ⚙️ Настраиваемые таймауты, языки и backend'ы
 - 🧩 CLI: `start`, `stop`, `restart`, `kill`, `status`, `config`, `fix`, `dict`,
-  `export`, `import`, `doctor`, `collect-logs`
+  `export`, `import`, `doctor`, `collect-logs`, `logs`
 - 🩺 `linguafix doctor` — самодиагностика окружения с таблицей ✅/❌ и подсказками
+- 📜 `linguafix logs` — показать журнал демона (`-n`, `-f`, `--level`)
 - 📦 `linguafix collect-logs` — один tarball со всей диагностикой для баг-репорта
 - 🔁 Горячая перезагрузка конфига по `SIGHUP`
 - 🧪 Флаг `--dry-run` — анализ без изменения текста (отладка и тесты)
@@ -143,6 +144,8 @@ linguafix config path                  # путь к config.toml
 linguafix export ~/lf-backup.json      # бэкап настроек, словаря и сниппетов
 linguafix import ~/lf-backup.json      # восстановить из бэкапа
 linguafix restart                      # перезапустить демон
+linguafix logs -n 50                   # последние 50 строк журнала
+linguafix logs -f --level DEBUG        # следить за журналом, только DEBUG
 linguafix collect-logs                 # собрать архив для баг-репорта
 systemctl --user status linguafix.service
 ```
@@ -374,6 +377,8 @@ Wine); свои приложения можно добавить в GUI (вкл�
 | Переключает, но не заменяет текст | Смените `backend` на `uinput` |
 | Исправляет то, что не нужно | Включены проверки `plausibility_check`, `structural_boundaries`, `identifier_guard`; добавьте строку в `custom_skip_regex` — подробнее [TROUBLESHOOTING: ложные срабатывания](docs/TROUBLESHOOTING.md#a-string-i-typed-is-corrected-wrongly-false-positive) |
 | Нужно вернуть последнее исправление | Хоткей undo (`CTRL+Z`) или кнопка **«Отменить последнее исправление»** в GUI |
+| Хочу посмотреть журнал | `linguafix logs -f --level DEBUG` — набранный текст в журнал не попадает |
+| Кнопка «включить» показывает битый значок | Обновите тему иконок или переустановите пакет: LinguaFix рисует символ питания сам, если темы нет |
 | Не работает в терминале | Попробуйте `backend = "uinput"` |
 | Нет иконки в трее | Установите `python3-gi gir1.2-appindicator3-0.1` |
 | Сообщаете о баге | Приложите `linguafix collect-logs` — в архиве нет набранного текста |

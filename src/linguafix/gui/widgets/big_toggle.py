@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
+from typing import Any
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
+
+logger = logging.getLogger(__name__)
 
 STATE_OFF = "off"
 STATE_ON = "on"
@@ -19,6 +23,64 @@ STATE_BUSY = "busy"
 # against adwaita-icon-theme 48); ``power-symbolic`` does not exist and rendered
 # as a "broken image" placeholder.
 ICON_NAME = "system-shutdown-symbolic"
+
+
+def theme_has_icon(icon_name: str = ICON_NAME) -> bool:
+    """Return whether the active icon theme can resolve ``icon_name``.
+
+    Returns ``True`` when the check cannot be made (no display, no GTK), so the
+    caller keeps the theme icon rather than swapping in the fallback for an
+    environment we could not inspect.
+    """
+    try:
+        from gi.repository import Gdk, Gtk  # local import: optional dependency
+
+        display = Gdk.Display.get_default()
+        if display is None:
+            return True
+        return bool(Gtk.IconTheme.get_for_display(display).has_icon(icon_name))
+    except (ImportError, ValueError, AttributeError):  # pragma: no cover - no display
+        return True
+
+
+class PowerGlyph(Gtk.DrawingArea):
+    """A theme-independent power glyph, drawn with Cairo.
+
+    Used only when the icon theme cannot resolve :data:`ICON_NAME` (for example
+    a user theme that does not inherit Adwaita). Drawing the glyph ourselves
+    guarantees the button is never a "broken image" placeholder, and reading the
+    widget colour keeps it in step with the light/dark theme.
+    """
+
+    def __init__(self, size: int = 64) -> None:
+        super().__init__()
+        self.set_content_width(size)
+        self.set_content_height(size)
+        self.set_draw_func(self._draw)
+
+    def _draw(self, _area: Gtk.DrawingArea, cr: Any, width: int, height: int) -> None:
+        import math
+
+        red = green = blue = 0.5
+        alpha = 1.0
+        color = self.get_color()
+        if color is not None:
+            red, green, blue, alpha = color.red, color.green, color.blue, color.alpha
+        cr.set_source_rgba(red, green, blue, alpha)
+        cx, cy = width / 2.0, height / 2.0
+        # A ring with a gap at the top (the classic power symbol), plus the
+        # vertical bar through the gap.
+        radius = min(width, height) * 0.32
+        cr.set_line_width(max(1.0, min(width, height) * 0.09))
+        cr.set_line_cap(1)  # cairo.LINE_CAP_ROUND
+        gap = math.radians(38)
+        start = -math.pi / 2 + gap
+        end = -math.pi / 2 - gap + 2 * math.pi
+        cr.arc(cx, cy, radius, start, end)
+        cr.stroke()
+        cr.move_to(cx, cy - radius * 1.35)
+        cr.line_to(cx, cy - radius * 0.15)
+        cr.stroke()
 
 
 class BigToggle(Gtk.Box):
@@ -50,8 +112,7 @@ class BigToggle(Gtk.Box):
         self._button.set_accessible_role(Gtk.AccessibleRole.TOGGLE_BUTTON)
         self._button.connect("clicked", self._on_clicked)
 
-        self._icon = Gtk.Image.new_from_icon_name(ICON_NAME)
-        self._icon.set_pixel_size(64)
+        self._icon = self._build_icon()
         self._spinner = Gtk.Spinner()
         self._spinner.set_size_request(64, 64)
 
@@ -78,6 +139,15 @@ class BigToggle(Gtk.Box):
     def icon_name(self) -> str:
         """Return the icon name used for the power glyph."""
         return ICON_NAME
+
+    def _build_icon(self) -> Gtk.Widget:
+        """Return the theme icon, or a drawn fallback when the theme lacks it."""
+        if theme_has_icon(ICON_NAME):
+            image = Gtk.Image.new_from_icon_name(ICON_NAME)
+            image.set_pixel_size(64)
+            return image
+        logger.info("Icon theme has no %s; using the drawn power glyph", ICON_NAME)
+        return PowerGlyph(64)
 
     def _sync_motion_preference(self) -> None:
         """Drop the transitions when the system asks for reduced motion."""

@@ -11,6 +11,7 @@ runs without a display; it is skipped when the Adwaita theme is not installed.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -79,3 +80,19 @@ def test_the_power_glyph_is_the_one_adwaita_ships() -> None:
     from linguafix.gui.widgets.big_toggle import ICON_NAME
 
     assert ICON_NAME == "system-shutdown-symbolic"
+
+
+def test_big_toggle_falls_back_to_drawn_glyph(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When the theme lacks the icon name, the button draws the glyph itself.
+
+    A user theme that does not inherit Adwaita made ``new_from_icon_name`` show
+    a broken-image placeholder; the fallback guarantees a real power symbol.
+    Needs a display, like the other GUI tests (CI runs them under ``xvfb-run``).
+    """
+    if not _gi_available() or not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        pytest.skip("GTK4 or display unavailable")
+    from linguafix.gui.widgets import big_toggle
+
+    monkeypatch.setattr(big_toggle, "theme_has_icon", lambda *a, **k: False)
+    button = big_toggle.BigToggle()
+    assert isinstance(button._icon, big_toggle.PowerGlyph)

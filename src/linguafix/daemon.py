@@ -892,6 +892,10 @@ class LinguaFixDaemon:
             # A Ctrl/Alt-based fix hotkey (``CTRL+F12``) suspended the word when
             # the modifier was pressed; put it back so the fix can see it.
             self._restore_suspended_buffer()
+            with self._lock:
+                length = len(self.buffer)
+            # Metadata only: the typed text itself is never logged.
+            logger.debug("Explicit fix hotkey: buffer_len=%d", length)
             self._process_buffer(force=True)
         elif action == "undo":
             self._undo_last_fix()
@@ -1284,6 +1288,7 @@ class LinguaFixDaemon:
             if corrected is not None:
                 converted = corrected
                 target = current
+                reason = "typo"
             else:
                 # Neither layout detection nor typo correction applied. A final
                 # opt-in pass fixes punctuation (dashes, ellipsis, spacing),
@@ -1293,7 +1298,18 @@ class LinguaFixDaemon:
                     return
                 converted = punctuated
                 target = current
+                reason = "punctuation"
         else:
+            reason = "layout"
+            if target == current:
+                # A layout fix must move to a *different* layout. The detector
+                # returning the current one is a bug; deleting and retyping in
+                # place would deform the text for no reason, so refuse it.
+                logger.warning(
+                    "Detector chose the current layout (%s); skipping to avoid deforming the buffer",
+                    current,
+                )
+                return
             converted = self.converter.convert(buffer, current, target)
         if converted == buffer:
             return
@@ -1313,7 +1329,13 @@ class LinguaFixDaemon:
 
         # Log metadata only: never write the typed text itself to disk, so the
         # log stays free of passwords and other sensitive input.
-        logger.info("Fixing buffer of length %d (%s -> %s)", len(buffer), current, target)
+        logger.info(
+            "Fixing buffer of length %d (%s -> %s) reason=%s",
+            len(buffer),
+            current,
+            target,
+            reason,
+        )
         if self.dry_run:
             logger.info("Dry run: skipping layout switch and text replacement")
             return

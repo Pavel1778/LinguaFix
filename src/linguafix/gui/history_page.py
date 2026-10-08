@@ -20,7 +20,7 @@ from gi.repository import Adw, GLib, Gtk  # noqa: E402
 from .async_utils import run_in_background  # noqa: E402
 from .state import GuiState  # noqa: E402
 
-REFRESH_MS = 2000
+REFRESH_MS = 3000
 MAX_ROWS = 20
 
 
@@ -75,9 +75,16 @@ class HistoryPage(Gtk.Box):
 
         self.refresh()
         GLib.timeout_add(REFRESH_MS, self._tick)
+        # Refresh the moment the page is shown, so opening the tab gives a fresh
+        # list even though the background poll is paused while it is hidden.
+        self.connect("map", lambda _widget: self.refresh())
 
     def _tick(self) -> bool:
-        self.refresh()
+        # Only poll while this page is actually visible. A hidden page that kept
+        # refreshing signalled the daemon every few seconds (the ``Received
+        # SIGUSR2`` log spam) and rewrote the snapshot file for nothing.
+        if self.get_mapped():
+            self.refresh()
         return True
 
     def refresh(self) -> None:

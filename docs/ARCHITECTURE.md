@@ -80,7 +80,7 @@ in time) and leave the first character behind — the `рhello` symptom, where
 `руддщ` was deleted but the leading `р` survived.
 
 The uinput backend also flushes the deletion and the replacement as two separate
-`syn` batches, with an optional pause (`backspace_settle_ms`, default 50 ms)
+`syn` batches, with an optional pause (`backspace_settle_ms`, default 120 ms)
 between them. Chromium and Electron applications process Backspace
 asynchronously, so typing into the same batch can race the deletion. The pause
 lets the compositor apply the deletion before the new text arrives. The
@@ -222,6 +222,12 @@ reading process will meet in practice:
 - **Exact deletion count.** The daemon counts physical keys, not characters, so
   the number of Backspaces always matches what is on screen even under very fast
   typing.
+- **No same-layout rewrites.** A layout correction must move to a *different*
+  layout. If `target_layout` ever returns the current layout, the daemon refuses
+  the replacement (and logs a warning): deleting and retyping the word in place
+  would be a pure deformation, not a fix. The `Fixing buffer ... reason=...` log
+  line records whether the replacement was a layout fix, a typo fix or a
+  punctuation clean-up.
 - **Races.** The buffer is snapshotted and cleared under a lock, but the lock is
   released before the slow switch/inject, so keys pressed during a fix are
   buffered for the next pass instead of being dropped.

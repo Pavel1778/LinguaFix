@@ -836,6 +836,29 @@ def test_history_page_undo_asks_daemon(gui_state: Any, monkeypatch: pytest.Monke
     assert calls == ["undo"]
 
 
+def test_history_page_does_not_poll_while_hidden(
+    gui_state: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A hidden History tab must not signal the daemon every tick.
+
+    ``read_history`` sends ``SIGUSR2`` to the daemon; an unattended 2 s poll from
+    a background tab spammed the daemon's log, so the poll is paused unless the
+    page is mapped.
+    """
+    calls: list[int] = []
+    monkeypatch.setattr(gui_state, "read_history", lambda: calls.append(1) or [])
+    from linguafix.gui.history_page import HistoryPage
+
+    class _Toasts:
+        def add_toast(self, _t: object) -> None:
+            pass
+
+    page = HistoryPage(gui_state, _Toasts())
+    baseline = len(calls)
+    page._tick()
+    assert len(calls) == baseline
+
+
 def test_home_page_quiet_hours_indicator(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(gui_state, "in_quiet_hours", lambda: True)
     from linguafix.gui.home_page import HomePage

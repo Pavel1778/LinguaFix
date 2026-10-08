@@ -513,6 +513,24 @@ def cmd_doctor(_args: argparse.Namespace) -> int:
     return run_doctor()
 
 
+def cmd_logs(args: argparse.Namespace) -> int:
+    """Print (or follow) the daemon log."""
+    from .logs import follow, log_file_path, read_tail
+
+    path = log_file_path()
+    lines = int(args.lines)
+    level = args.level
+    if args.follow:
+        return follow(path, lines, level)
+    if not path.exists():
+        print(f"Лог не найден: {path}")
+        print("Запустите демон: linguafix start")
+        return 0
+    for line in read_tail(path, lines, level):
+        print(line)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level argument parser."""
     parser = argparse.ArgumentParser(
@@ -589,6 +607,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="каталог для архива (по умолчанию — домашний каталог)",
     )
     collect.set_defaults(func=cmd_collect_logs)
+
+    logs = subparsers.add_parser("logs", help="показать журнал демона")
+    logs.add_argument(
+        "-n",
+        "--lines",
+        type=int,
+        default=50,
+        metavar="N",
+        help="сколько последних строк показать (по умолчанию 50)",
+    )
+    logs.add_argument(
+        "-f",
+        "--follow",
+        action="store_true",
+        help="следить за журналом в реальном времени",
+    )
+    logs.add_argument(
+        "--level",
+        default=None,
+        metavar="LEVEL",
+        help="показывать только строки этого уровня (DEBUG/INFO/WARNING/ERROR)",
+    )
+    logs.set_defaults(func=cmd_logs)
 
     install = subparsers.add_parser("install-autostart", help="включить автозапуск")
     install.set_defaults(func=cmd_install_autostart)

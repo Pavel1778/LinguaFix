@@ -462,11 +462,36 @@ manual fix still works. The GUI home tab shows a line explaining the pause.
 
 ## The "История" tab is empty
 
-The history is refreshed on demand: the GUI asks the daemon (SIGUSR2) to write
-`~/.cache/linguafix/history.json` and then reads it. An empty tab means no fix
-has been made yet, or the daemon is not running (the last snapshot is shown
-otherwise). The file holds metadata only — word length, layouts, timestamp —
-never the typed text.
+The history is refreshed on demand: while the tab is visible the GUI asks the
+daemon (SIGUSR2) to write `~/.cache/linguafix/history.json` and then reads it.
+The poll is paused while the tab is hidden, so a background window does not
+signal the daemon every few seconds. An empty tab means no fix has been made
+yet, or the daemon is not running (the last snapshot is shown otherwise). The
+file holds metadata only — word length, layouts, timestamp — never the typed
+text.
+
+## Text looks deformed while typing fast
+
+Symptom: characters are duplicated, dropped or reordered while you type quickly
+(for example `нет` becomes `ннет`, or `базу и` becomes `byar b`).
+
+This is a race between the synthetic Backspace batch and the replacement text:
+the application must apply the deletion before the new characters arrive, and a
+layout correction must actually move to another layout.
+
+What LinguaFix does about it:
+
+- `backspace_settle_ms` (default 120 ms) is the pause between the Backspace
+  batch and the retyped text; raise it if your application is slow.
+- A correction that stays in the same layout is refused — it is never a real
+  fix, only a source of deformation.
+- Keys pressed during a replacement are queued and replayed afterwards, in
+  order.
+
+To diagnose, run the daemon in the foreground with `log_level = "DEBUG"` and
+watch the `Fixing buffer ... reason=...` lines, then report what you see with
+`linguafix collect-logs`.
+
 
 ## Backspace does not delete in the terminal (or deletes too much)
 

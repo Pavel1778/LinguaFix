@@ -291,3 +291,38 @@ def test_reload_config_refreshes_hotkeys(monkeypatch: pytest.MonkeyPatch) -> Non
     assert daemon.config.hotkey_fix_last_word == "F9"
     assert daemon._hotkeys["fix"] is not None
     assert daemon._hotkeys["fix"][1] == int(evdev.ecodes.KEY_F9)
+
+
+def test_double_shift_fixes_taught_brand() -> None:
+    """Double Shift resolves a taught brand (``муксуд`` -> ``vercel``).
+
+    The user teaches ``vercel``; typing the Cyrillic layout rendering of that
+    brand must be corrected by the explicit fix hotkey, which is a double tap of
+    Shift by default.
+    """
+    daemon = make_daemon(mode="manual", hotkey_fix_last_word="SHIFT+SHIFT")
+    daemon.switcher.current = "ru"
+    daemon.detector.set_user_words(["vercel"])
+    # Type the physical keys of "vercel"; the ru layout renders "муксуд".
+    for char in "vercel":
+        press(daemon, char)
+    assert daemon.buffer == "муксуд"
+    # Two Shift taps inside the double-tap window.
+    tap(daemon, "KEY_LEFTSHIFT")
+    daemon._handle_event(make_event("KEY_LEFTSHIFT", 1))
+    daemon._handle_event(make_event("KEY_LEFTSHIFT", 0))
+    assert _injector(daemon).replacements == [(6, "vercel", "us")]
+
+
+def test_same_layout_layout_fix_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A detector that returns the *current* layout must not deform the text.
+
+    Layout correction only ever moves to a different layout; if the detector
+    returns the current one, deleting and retyping in place would corrupt the
+    buffer for no benefit, so the daemon refuses it.
+    """
+    daemon = make_daemon(mode="auto")
+    monkeypatch.setattr(daemon.detector, "target_layout", lambda *a, **k: "us")
+    press(daemon, "ghbdtn")  # switcher.current is "us"
+    tap(daemon, "KEY_SPACE")
+    assert _injector(daemon).replacements == []

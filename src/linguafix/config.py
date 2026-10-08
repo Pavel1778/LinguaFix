@@ -45,7 +45,7 @@ FAST_TYPING_INTERVAL: Final[float] = 0.5
 SLOW_TYPING_INTERVAL: Final[float] = 1.0
 DEFAULT_MIN_WORD_LENGTH: Final[int] = 3
 DEFAULT_MAX_BUFFER_SIZE: Final[int] = 200
-DEFAULT_BACKSPACE_SETTLE_MS: Final[int] = 80
+DEFAULT_BACKSPACE_SETTLE_MS: Final[int] = 120
 # Pause after a word-boundary key (Space/Enter/Tab) before the deletion is sent.
 # The boundary key that triggered the flush is still being processed by the
 # compositor when the daemon starts erasing; without this pause Chromium and
@@ -649,8 +649,37 @@ class Config:
         try:
             return cls(**filtered)
         except (TypeError, ValueError) as exc:
-            logger.warning("Invalid configuration value (%s); falling back to defaults", exc)
-            return cls()
+            # One bad value must not reset the whole file. Drop only the keys
+            # that fail validation and keep the rest, so a hand-edited typo (or
+            # a value from a newer version) cannot silently wipe the user's
+            # settings back to defaults.
+            logger.warning("Invalid configuration value (%s); dropping invalid keys", exc)
+            return cls(**cls._drop_invalid(filtered))
+
+    @classmethod
+    def _drop_invalid(cls, values: dict[str, Any]) -> dict[str, Any]:
+        """Return ``values`` with the keys that fail validation removed."""
+        subset = dict(values)
+        while subset:
+            try:
+                cls(**subset)
+                break
+            except (TypeError, ValueError):
+                removed = False
+                for key in list(subset):
+                    trial = {k: v for k, v in subset.items() if k != key}
+                    try:
+                        cls(**trial)
+                    except (TypeError, ValueError):
+                        continue
+                    del subset[key]
+                    removed = True
+                    break
+                if not removed:
+                    # No single key is the culprit (a cross-field conflict);
+                    # give up on the values rather than guess.
+                    return {}
+        return subset
 
     def to_dict(self) -> dict[str, Any]:
         """Return a plain ``dict`` representation suitable for TOML dumping."""

@@ -14,6 +14,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   minute), which hung the whole check; the timeout bounds that. A regression
   test asserts every job keeps a timeout.
 
+## [0.2.5] - 2026-10-08
+
+### Fixed
+
+- The History tab no longer signals the daemon every 2 seconds (`Received
+  SIGUSR2` log spam). The GUI polled the history snapshot regardless of which
+  tab was visible; it now pauses while the page is hidden and refreshes on open.
+- A layout correction can no longer rewrite text in the *same* layout. If the
+  detector returned the current layout, the daemon deleted and retyped the word
+  in place, which could deform it (the reported `Fixing buffer of length N (ru
+  -> ru)`); such a fix is now refused and logged with `reason=`.
+- One invalid value in `config.toml` no longer resets *every* setting to its
+  default. `Config.from_dict` now drops only the offending keys, so a hand-edited
+  typo cannot silently turn `typo_correction` (or anything else) back off.
+- The big power button falls back to a Cairo-drawn glyph when the active icon
+  theme cannot resolve `system-shutdown-symbolic`, so it is never a broken-image
+  placeholder on a non-Adwaita theme.
+- The default `backspace_settle_ms` is now 120 ms (was 80 ms), giving Chromium
+  and Electron more time to apply the synthetic Backspaces before the
+  replacement characters arrive.
+
+### Added
+
+- `linguafix logs [-n N] [-f] [--level LEVEL]` prints (or follows) the daemon
+  log, with an optional level filter.
+- The `Fixing buffer ...` log line now carries `reason=layout|typo|punctuation`,
+  so a correction can be told apart from a typo fix without guessing.
+
+
 ## [0.2.4] - 2026-10-04
 
 ### Fixed

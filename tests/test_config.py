@@ -26,7 +26,7 @@ def test_defaults() -> None:
     assert config.on_tab is False
     assert config.on_punctuation is False
     assert config.punctuation_chars == ".!?,;:"
-    assert config.backspace_settle_ms == 80
+    assert config.backspace_settle_ms == 120
     assert config.trigger_settle_ms == 50
     assert isinstance(config.stop_words, list)
     assert "password" in config.stop_words
@@ -274,3 +274,30 @@ def test_from_dict_ignores_unknown_keys() -> None:
 def test_from_dict_bad_types_fall_back() -> None:
     config = Config.from_dict({"analysis_timeout": "not-a-number"})
     assert config.analysis_timeout == 0.8
+
+
+def test_from_dict_keeps_valid_keys_when_one_is_invalid() -> None:
+    # Regression: a single invalid value used to reset *every* setting to its
+    # default, silently wiping a hand-edited config (e.g. turning T9 back off).
+    config = Config.from_dict({"typo_correction": True, "mode": "bogus"})
+    assert config.typo_correction is True
+    assert config.mode == "auto"
+
+
+def test_reinstall_preserves_config(tmp_config_path: Path) -> None:
+    """A reinstall reloads the existing file; it must not rewrite defaults.
+
+    The ``.deb`` postrm only removes the config on ``purge``, so a plain
+    reinstall must keep whatever the user saved.
+    """
+    config = Config()
+    config.typo_correction = True
+    config.mode = "hybrid"
+    save_config(config, tmp_config_path)
+    before = tmp_config_path.read_text(encoding="utf-8")
+
+    loaded = load_config(tmp_config_path)
+    assert loaded.typo_correction is True
+    assert loaded.mode == "hybrid"
+    # Loading alone must not rewrite the file.
+    assert tmp_config_path.read_text(encoding="utf-8") == before
