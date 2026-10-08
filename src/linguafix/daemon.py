@@ -3,7 +3,7 @@
 The daemon listens to raw keyboard events from ``/dev/input/event*`` devices and
 tracks the word currently being typed as a sequence of *physical keys*
 (evdev scancodes), together with the characters those keys produced. When the
-user presses a word boundary ÔÇö Space or Enter by default ÔÇö the word is analysed
+user presses a word boundary — Space or Enter by default — the word is analysed
 immediately; when it was typed in the wrong layout it is rewritten and the
 layout is switched.
 
@@ -12,7 +12,7 @@ replacement reliable: the number of Backspaces always equals the number of keys
 the user actually pressed, so the deletion cannot drift from what is on screen
 even when the user types very fast. A character buffer can desynchronise from
 the screen (a key the daemon did not process in time) and leave a stray first
-character behind, the ``ĐÇhello`` symptom.
+character behind, the ``рhello`` symptom.
 
 The main loop uses :mod:`selectors` rather than a blocking ``read_loop`` so it
 can observe the idle fallback timeout, handle signals and serve several
@@ -181,12 +181,12 @@ _MODE_CYCLE: Final[tuple[str, ...]] = ("auto", "hybrid", "manual")
 _DOUBLE_TAP_MODIFIERS: Final[frozenset[str]] = frozenset({"shift", "ctrl", "alt"})
 # Modifier keys that begin a chord and therefore abandon the word being typed:
 # Ctrl+C, Alt+Tab and friends move or copy the text, so the buffer must not be
-# corrected afterwards. Shift is excluded ÔÇö it is part of normal typing.
+# corrected afterwards. Shift is excluded — it is part of normal typing.
 _BUFFER_RESET_KEYS: Final[frozenset[str]] = frozenset(
     {"KEY_LEFTCTRL", "KEY_RIGHTCTRL", "KEY_LEFTALT", "KEY_RIGHTALT"}
 )
 # Keys that carry no printable character but that we must not treat as a
-# continuation of the current word either (arrow keys, Delete, Home, ÔÇŽ). A key
+# continuation of the current word either (arrow keys, Delete, Home, …). A key
 # in this set ends the word without flushing it.
 _WORD_BREAKERS: Final[frozenset[str]] = frozenset(
     {
@@ -306,7 +306,7 @@ class LinguaFixDaemon:
         # Successful fixes eligible for undo: (monotonic time, original text,
         # original layout, backspace count, history id).
         self._undo_history: list[tuple[float, str, str, int, int]] = []
-        # Recent corrections for the GUI "đśĐüĐéđżĐÇđŞĐĆ" tab: metadata only, newest
+        # Recent corrections for the GUI "История" tab: metadata only, newest
         # last. ``id`` is an opaque handle the GUI passes back to undo; the
         # typed text is never stored here.
         self._fix_history: list[dict[str, object]] = []
@@ -1179,9 +1179,9 @@ class LinguaFixDaemon:
     def _toggle_last_word_layout(self) -> bool:
         """Force the last word into the other layout, regardless of correctness.
 
-        This is the manual reverse conversion (feature A): ``đ┐ĐÇđŞđ▓đÁĐé`` becomes
-        ``ghbdtn`` even though ``đ┐ĐÇđŞđ▓đÁĐé`` is a perfectly good word. No detector
-        runs ÔÇö the word is simply converted through :class:`LayoutConverter`.
+        This is the manual reverse conversion (feature A): ``привет`` becomes
+        ``ghbdtn`` even though ``привет`` is a perfectly good word. No detector
+        runs — the word is simply converted through :class:`LayoutConverter`.
         The live buffer is used when present; otherwise the word remembered from
         the most recent flush is converted, so the hotkey still works right
         after a Space already consumed and cleared the word.
@@ -1263,7 +1263,7 @@ class LinguaFixDaemon:
         Pressing Ctrl/Alt begins a chord (``Ctrl+C``, ``Alt+Tab``): the word
         typed before it must not be corrected once the chord is over. The word is
         *suspended* rather than dropped, so a Ctrl-based fix hotkey such as
-        ``CTRL+F12`` ÔÇö and the ``CTRL+CTRL`` double tap ÔÇö can still reach it. Any
+        ``CTRL+F12`` — and the ``CTRL+CTRL`` double tap — can still reach it. Any
         ordinary key pressed afterwards abandons it (see ``_drop_suspended``).
         """
         if value != 1:
@@ -1312,7 +1312,7 @@ class LinguaFixDaemon:
                 ``"\\n"`` or ``"\\t"``). It is already on screen right after the
                 word; when the corrected text stays in the same layout the
                 replacement consumes and retypes it, so it is not stranded in
-                front of the corrected word (the ``ĐÇhello`` symptom).
+                front of the corrected word (the ``рhello`` symptom).
         """
         # Capture the text so a traceback can be scrubbed of it before logging.
         with self._lock:
@@ -1377,7 +1377,7 @@ class LinguaFixDaemon:
         # non-empty buffer, so an empty hotkey flush does not erase the memory.
         self._last_flushed_word = buffer
         self._last_flushed_corrected = False
-        # The explicit hotkey may resolve a taught short token (``Đő`` -> ``s``),
+        # The explicit hotkey may resolve a taught short token (``ы`` -> ``s``),
         # which the length guard below would otherwise drop before the detector
         # ever sees it. ``forced_taught_layout`` only matches a conversion the
         # user taught, so no arbitrary short guess slips through.
@@ -1388,7 +1388,7 @@ class LinguaFixDaemon:
         )
         # A 1-2 character token the user explicitly asks to fix: the ordinary
         # detector never sees it (below ``min_word_length``), so the hotkey
-        # resolves an unambiguous conversion (``ĐäĐé`` -> ``an``) itself.
+        # resolves an unambiguous conversion (``фт`` -> ``an``) itself.
         forced_short: str | None = None
         if force and len(buffer) < self.config.min_word_length:
             forced_short = self.detector.forced_short_layout(
@@ -1510,7 +1510,7 @@ class LinguaFixDaemon:
         # When the flush came from a word-boundary key (Space/Enter/Tab), that
         # key is still being processed by the compositor. Deleting immediately
         # races it: Chromium/Electron coalesce the fast synthetic Backspaces and
-        # the first character survives (``ĐÇĐâđ┤đ┤Đë `` -> ``ĐÇhello``). A short pause
+        # the first character survives (``руддщ `` -> ``рhello``). A short pause
         # lets the boundary settle first. The idle fallback and an explicit
         # hotkey do not need it.
         if boundary and self.config.trigger_settle_ms > 0:
@@ -1527,7 +1527,7 @@ class LinguaFixDaemon:
         # Space is consumed and retyped: the replacement deletes one extra
         # character and types the corrected word followed by the Space again.
         # That is what stops the Space from being stranded in front of the word
-        # (``hello`` -> ``ĐÇhello``). Enter/Tab keep their place after the
+        # (``hello`` -> ``рhello``). Enter/Tab keep their place after the
         # corrected text, because deleting them without being able to retype
         # them would silently drop the user's newline or tab.
         replacement = converted
@@ -1570,7 +1570,7 @@ class LinguaFixDaemon:
                     "notify-send",
                     "--app-name=LinguaFix",
                     "LinguaFix",
-                    "đáđ░Đüđ║đ╗đ░đ┤đ║đ░ đŞĐüđ┐ĐÇđ░đ▓đ╗đÁđŻđ░",
+                    "Раскладка исправлена",
                 ],
                 check=False,
                 capture_output=True,
@@ -1655,7 +1655,7 @@ class LinguaFixDaemon:
             " dry-run=on" if self.dry_run else "",
         )
         # Log the effective hotkeys so the user can see exactly which chords are
-        # bound. Binding names only ÔÇö never typed text. The undo default is
+        # bound. Binding names only — never typed text. The undo default is
         # ``SHIFT+BACKSPACE`` because ``CTRL+Z`` collides with the application's
         # own undo (the daemon cannot swallow it: the keyboard is not grabbed).
         logger.info(
@@ -1854,7 +1854,7 @@ class LinguaFixDaemon:
                     "notify-send",
                     "--app-name=LinguaFix",
                     "LinguaFix",
-                    f"đöđżĐüĐéĐâđ┐đŻđ░ đ▓đÁĐÇĐüđŞĐĆ {latest}",
+                    f"Доступна версия {latest}",
                 ],
                 check=False,
                 capture_output=True,
