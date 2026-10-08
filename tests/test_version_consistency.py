@@ -44,3 +44,20 @@ def test_version_matches_pyproject() -> None:
 
 def test_version_matches_changelog() -> None:
     assert __version__ == _changelog_version()
+
+
+# Docs that a user follows to install a downloaded package. A stale version in
+# the example makes ``apt install ./linguafix_<old>_all.deb`` fail with
+# "no such file", which is exactly what a first-time user hits.
+_INSTALL_DOCS = ("README.md", "docs/INSTALL.md", "docs/TESTING.md")
+_DEB_EXAMPLE = re.compile(r"linguafix_(\d+\.\d+\.\d+)_all\.deb")
+
+
+def test_install_docs_use_current_version() -> None:
+    stale: list[str] = []
+    for name in _INSTALL_DOCS:
+        text = (REPO_ROOT / name).read_text(encoding="utf-8")
+        for match in _DEB_EXAMPLE.finditer(text):
+            if match.group(1) != __version__:
+                stale.append(f"{name}: {match.group(0)}")
+    assert not stale, "Install docs reference an old package version:\n" + "\n".join(stale)

@@ -108,7 +108,7 @@ Caramba Switcher for Windows.
 ### Для пользователей: пакет .deb (ничего настраивать не нужно)
 
 ```bash
-sudo apt install ./linguafix_0.2.1_all.deb
+sudo apt install ./linguafix_0.2.8_all.deb
 ```
 
 Пакет **самодостаточен**: он ставит udev-правило с `TAG+="uaccess"`, включает
