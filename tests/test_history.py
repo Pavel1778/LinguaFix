@@ -254,3 +254,31 @@ def test_persist_config_does_not_clobber_other_fields(
     reloaded = load_config()
     assert reloaded.typo_correction is True  # not clobbered by the stale copy
     assert reloaded.mode == "manual"  # the daemon's own change was applied
+
+
+def test_history_reader_never_signals_the_daemon(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Root cause of the 2 s ``Received SIGUSR2`` spam.
+
+    The old GUI ``read_history`` called ``daemon_control.request_history`` (a
+    SIGUSR2) on every 2-3 s poll tick. The daemon now writes ``history.json`` on
+    change, so the GUI reader must stay a pure file read: if it ever sends a
+    signal again, the spam returns. This pins the reader itself, independent of
+    whether a GTK display is available.
+    """
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    from linguafix.gui import state as gui_state
+
+    # The GUI state module must not even import the signalling helper, so a
+    # future edit cannot quietly reintroduce the poll-time signal.
+    assert not hasattr(gui_state, "request_history")
+    assert not hasattr(gui_state, "daemon_request_history")
+    source = (Path(gui_state.__file__)).read_text(encoding="utf-8")
+    assert "request_history" not in source
+
+    sentinel = [{"length": 3, "source": "us", "target": "ru"}]
+    monkeypatch.setattr(gui_state, "daemon_read_history", lambda: sentinel)
+    assert (
+        gui_state.GuiState.read_history(gui_state.GuiState.__new__(gui_state.GuiState)) == sentinel
+    )

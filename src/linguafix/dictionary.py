@@ -122,6 +122,31 @@ _UPSTREAM_RAW: Final[dict[str, str]] = {
 }
 _DOWNLOAD_TIMEOUT: Final[float] = 30.0
 
+# A copy of each bundled list ships inside the installed package (under
+# ``linguafix/data/dictionaries``) and inside the ``.deb``. When the network
+# mirror and the upstream source are both unreachable, ``dict download`` copies
+# this local file instead of failing — so the command always works offline.
+_BUNDLED_DATA_DIR: Final[Path] = Path(__file__).resolve().parent / "data" / "dictionaries"
+_RELEASE_ASSET_BASE: Final[str] = "https://github.com/Pavel1778/LinguaFix/releases/latest/download/"
+
+
+def bundled_dictionary_source(language: str) -> Path | None:
+    """Return the path of the locally shipped word list, or ``None``.
+
+    The file is looked up next to the package data (``data/dictionaries``) and
+    in the source tree (``dictionaries/`` at the repository root), so the
+    fallback works both from an installed ``.deb`` and a checkout.
+    """
+    name = f"{language.strip().lower()}{BUNDLED_DICTIONARY_SUFFIX}"
+    candidates = [
+        _BUNDLED_DATA_DIR / name,
+        Path(__file__).resolve().parent.parent.parent / "dictionaries" / name,
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
 
 def default_extended_dictionary_dir() -> Path:
     """Return the default directory for extended dictionaries.
@@ -224,14 +249,18 @@ def import_dictionary_file(source: str, language: str, directory: str = "") -> i
 def download_extended_dictionary(language: str, directory: str = "") -> tuple[Path, int]:
     """Download the top-50k word list for ``language`` into ``directory``.
 
-    Tries the project mirror first, then the upstream FrequencyWords source.
+    Sources are tried in order: the project's GitHub Release asset, the
+    repository mirror, then the upstream FrequencyWords source. When every
+    network source fails the locally shipped copy is used instead, so the
+    command still succeeds offline.
 
     Returns:
         ``(path, word_count)``.
 
     Raises:
         ValueError: ``language`` is not one of the supported dictionaries.
-        urllib.error.URLError: Both sources could not be reached.
+        urllib.error.URLError: No source could be reached *and* no local copy
+            is available.
     """
     import urllib.error
     import urllib.request
@@ -241,10 +270,12 @@ def download_extended_dictionary(language: str, directory: str = "") -> tuple[Pa
         supported = ", ".join(BUNDLED_DICTIONARY_LANGUAGES)
         raise ValueError(f"unsupported language {lang!r}; choose one of: {supported}")
 
-    urls = [_BUNDLED_RAW_BASE + f"{lang}{BUNDLED_DICTIONARY_SUFFIX}"]
+    file_name = f"{lang}{BUNDLED_DICTIONARY_SUFFIX}"
+    urls = [_RELEASE_ASSET_BASE + file_name, _BUNDLED_RAW_BASE + file_name]
     if lang in _UPSTREAM_RAW:
         urls.append(_UPSTREAM_RAW[lang])
 
+    destination = extended_dictionary_path(lang, directory)
     last_error: Exception | None = None
     for url in urls:
         try:
@@ -254,9 +285,21 @@ def download_extended_dictionary(language: str, directory: str = "") -> tuple[Pa
             last_error = exc
             logger.debug("Dictionary download failed from %s", url, exc_info=True)
             continue
-        destination = extended_dictionary_path(lang, directory)
         count = _write_words(text.splitlines(), destination)
         logger.info("Downloaded %d words for language %s", count, lang)
         return destination, count
+
+    # Network is unavailable. Fall back to the list shipped with the package.
+    local_source = bundled_dictionary_source(lang)
+    if local_source is not None:
+        try:
+            text = local_source.read_text(encoding="utf-8")
+        except OSError as exc:
+            last_error = exc
+        else:
+            count = _write_words(text.splitlines(), destination)
+            logger.info("Installed bundled %d words for language %s", count, lang)
+            return destination, count
+
     assert last_error is not None
     raise last_error

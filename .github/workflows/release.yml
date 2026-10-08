@@ -48,6 +48,15 @@ jobs:
           sha256sum *.deb *.tar.gz > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
+      - name: Stage dictionary assets
+        run: |
+          # Ship the frequency dictionaries as standalone release assets so they
+          # can be downloaded directly (and so ``linguafix dict download`` finds
+          # them at the stable /releases/latest/download/<lang>-50k.txt URL).
+          mkdir -p dist/dictionaries
+          cp dictionaries/*-50k.txt dist/dictionaries/
+          cp dictionaries/README.md dist/dictionaries/README.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -55,4 +64,5 @@ jobs:
             dist/*.deb
             dist/*.tar.gz
             dist/SHA256SUMS.txt
+            dist/dictionaries/*-50k.txt
           generate_release_notes: true

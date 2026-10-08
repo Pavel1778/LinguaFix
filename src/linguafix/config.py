@@ -146,6 +146,10 @@ DEFAULT_DOUBLE_TAP_MS: Final[int] = 2000
 # for a user who wants a longer manual-fix window (the request was 2-3 s).
 MIN_DOUBLE_TAP_MS: Final[int] = 100
 MAX_DOUBLE_TAP_MS: Final[int] = 3000
+# The pre-0.2.8 double-tap window. 300 ms is too short: two Shift presses made
+# while capitalising can fall outside it and a deliberate double tap is easy to
+# miss. A config still on the old value migrates to the wider default.
+LEGACY_DOUBLE_TAP_MS: Final[int] = 300
 VALID_BACKENDS: Final[tuple[str, ...]] = ("auto", "uinput", "wtype", "xdotool")
 VALID_SWITCH_METHODS: Final[tuple[str, ...]] = ("auto", "g3kb-switch", "setxkbmap")
 VALID_LOG_LEVELS: Final[tuple[str, ...]] = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
@@ -567,6 +571,16 @@ class Config:
         self.hotkey_toggle_layout_last_word = normalise_hotkey(self.hotkey_toggle_layout_last_word)
 
         self.hotkey_double_tap_ms = int(self.hotkey_double_tap_ms)
+        # The pre-0.2.8 default of 300 ms is too short to reliably catch a
+        # deliberate double tap; a config still on it migrates to the wider
+        # default. Any other value is a deliberate choice and is kept.
+        if self.hotkey_double_tap_ms == LEGACY_DOUBLE_TAP_MS:
+            logger.info(
+                "Migrating hotkey_double_tap_ms %d -> %d (old default)",
+                LEGACY_DOUBLE_TAP_MS,
+                DEFAULT_DOUBLE_TAP_MS,
+            )
+            self.hotkey_double_tap_ms = DEFAULT_DOUBLE_TAP_MS
         if not MIN_DOUBLE_TAP_MS <= self.hotkey_double_tap_ms <= MAX_DOUBLE_TAP_MS:
             raise ValueError(
                 f"hotkey_double_tap_ms must be between {MIN_DOUBLE_TAP_MS} and {MAX_DOUBLE_TAP_MS}"
@@ -611,6 +625,17 @@ class Config:
         self.exceptions_apps = [
             str(app).strip() for app in self.exceptions_apps if str(app).strip()
         ]
+        # ``gedit`` was dropped from the default exception list in 0.2.8: it is
+        # not installed on Debian 13 / GNOME 48, where GNOME Text Editor
+        # (``org.gnome.TextEditor`` -> ``texteditor``) took its place. A config
+        # still carrying the old default entry is upgraded, so the text editor
+        # is actually excepted; an entry the user added on top of the default is
+        # kept.
+        if "gedit" in self.exceptions_apps and "texteditor" not in self.exceptions_apps:
+            logger.info("Migrating exceptions_apps: gedit -> texteditor")
+            self.exceptions_apps = [
+                "texteditor" if app == "gedit" else app for app in self.exceptions_apps
+            ]
         self.exceptions_force_in_manual = [
             str(app).strip() for app in self.exceptions_force_in_manual if str(app).strip()
         ]

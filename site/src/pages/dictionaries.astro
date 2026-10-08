@@ -5,9 +5,11 @@ import Footer from "../components/Footer.astro";
 import { REPO } from "../consts";
 import { pick } from "../lib/site";
 
-// One row per shipped language. The files live in the repository under
-// ``dictionaries/`` and can be imported with ``linguafix dict import-file``.
-const RAW = `${REPO}/raw/main/dictionaries`;
+// One row per shipped language. The lists are attached to every GitHub Release
+// (and bundled in the .deb), so the download links point at the stable
+// ``/releases/latest/download`` assets rather than a branch path that only
+// exists after a merge.
+const RAW = `${REPO}/releases/latest/download`;
 const languages = [
   { code: "ru", title: "Русский" },
   { code: "en", title: "English" },

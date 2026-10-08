@@ -114,6 +114,27 @@ def test_typo_is_left_alone_when_disabled() -> None:
     assert _injector(daemon).replacements == []
 
 
+def test_typo_runs_in_manual_mode() -> None:
+    """T9 is opt-in and layout-neutral, so it must not be gated by ``mode``.
+
+    ``mode = "manual"`` governs *layout* switching only. A user who turns on
+    ``typo_correction`` in manual mode still expects typos to be fixed (the
+    correction stays in the current layout, so it never switches anything).
+    """
+    daemon = _make_daemon(typo_correction=True, mode="manual")
+    _press(daemon, "langauge")
+    _press(daemon, " ")
+    assert _injector(daemon).replacements == [(9, "language ", "us")]
+
+
+def test_layout_fix_is_still_suppressed_in_manual_mode() -> None:
+    """Manual mode must keep suppressing *automatic layout* fixes."""
+    daemon = _make_daemon(typo_correction=True, mode="manual")
+    _press(daemon, "ghbdtn")  # wrong-layout word: would be fixed automatically
+    _press(daemon, " ")
+    assert _injector(daemon).replacements == []
+
+
 def test_correct_word_is_not_touched() -> None:
     daemon = _make_daemon(typo_correction=True)
     _press(daemon, "language")

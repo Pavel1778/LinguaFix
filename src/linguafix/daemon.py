@@ -1422,12 +1422,13 @@ class LinguaFixDaemon:
         ):
             return
 
-        # In manual mode nothing is corrected unless the user forces it (hotkey)
-        # or the focused application is on the force list. Clearing the buffer
-        # above means the decision never leaves stale text behind.
-        if not force and not self._should_fix_buffer():
-            logger.debug("Mode %s: skipping automatic correction", self.config.mode)
-            return
+        # In manual mode no *automatic layout* correction happens unless the
+        # user forces it (hotkey) or the focused application is on the force
+        # list. The layout-neutral passes below (T9 typo, punctuation) stay
+        # opt-in and are *not* gated here: they never switch layout, so a user
+        # who enabled them in manual mode still expects them to run. Clearing
+        # the buffer above means the decision never leaves stale text behind.
+        layout_allowed = force or self._should_fix_buffer()
 
         if self.config.ignore_all_caps and buffer.isupper():
             logger.debug("Buffer is all caps; skipping")
@@ -1439,15 +1440,21 @@ class LinguaFixDaemon:
 
         neighbor = self._last_word or None
         current = self.switcher.get_current_layout()
-        # The hotkey may have resolved an unambiguous short-word conversion
-        # itself; the ordinary detector would only see a below-min-length token.
-        target = forced_short or self.detector.target_layout(buffer, current, neighbor)
-        # The detector returning the current layout is not a layout fix — it
-        # means the text already belongs to the active layout. Treat it as "no
-        # layout correction" and fall through to the opt-in typo pass, instead
-        # of retyping the buffer in place (which would deform it for nothing).
-        if target == current:
-            target = None
+        # When the mode forbids an automatic layout switch (manual, or an
+        # excepted app), skip the detector entirely: only the layout-neutral
+        # passes below may act, and they never need a target layout.
+        target: str | None = None
+        if layout_allowed:
+            # The hotkey may have resolved an unambiguous short-word conversion
+            # itself; the ordinary detector would only see a below-min-length token.
+            target = forced_short or self.detector.target_layout(buffer, current, neighbor)
+            # The detector returning the current layout is not a layout fix — it
+            # means the text already belongs to the active layout. Treat it as
+            # "no layout correction" and fall through to the opt-in typo pass,
+            # instead of retyping the buffer in place (which would deform it for
+            # nothing).
+            if target == current:
+                target = None
         if target is None:
             # Layout detection found nothing. A separate, opt-in step then looks
             # for a single-character typo in the language the user is typing;

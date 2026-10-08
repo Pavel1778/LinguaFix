@@ -16,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scoring is unchanged, so already-correct words keep their verdict while rarer
   words are recognised. Lists mirror FrequencyWords (MIT) under the repository's
   `dictionaries/` folder. A new landing-page section links them.
+- `dict download` now tries the stable
+  `releases/latest/download/<lang>-50k.txt` asset first, then the branch mirror,
+  then upstream, and finally copies a locally shipped list — so it succeeds with
+  no network. Every list is attached to each GitHub Release and bundled in the
+  `.deb` (`linguafix/data/dictionaries/`), and the landing page links the
+  release assets rather than a branch path.
 - A `toggle_layout` hotkey (default `CTRL+SHIFT+T`) force-retypes the last word
   in the other layout, the manual reverse of a correction. Configurable as
   `hotkey_toggle_layout_last_word`.
@@ -25,6 +31,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The undo hotkey default (`SHIFT+BACKSPACE`) and the new toggle hotkey are shown
   by `linguafix hotkeys` and the GUI. A stale `CTRL+CTRL` value left by an older
   install is migrated to the default on load and the change is logged.
+- A config still on the pre-0.2.8 double-tap window (`hotkey_double_tap_ms = 300`)
+  is widened to the current default (2000 ms): 300 ms is too short to catch a
+  deliberate double tap reliably. Any other value is treated as a deliberate
+  choice and kept.
+- A config still carrying the old default exception `gedit` (not installed on
+  Debian 13 / GNOME 48) is migrated to `texteditor` (GNOME Text Editor) on load,
+  so the current default text editor is actually excepted.
+- In `manual` mode the layout-neutral passes (notably T9 typo correction) now
+  run: previously `mode = "manual"` gated *every* automatic correction, so the
+  opt-in T9 pass never fired (`langauge` → `language` did nothing). Only the
+  layout switch stays manual.
 
 ### Fixed
 
