@@ -806,19 +806,83 @@ class Config:
 
 
 def _write_default(path: Path, config: Config) -> None:
-    """Write ``config`` to ``path`` creating parent directories as needed."""
+    """Write ``config`` to ``path`` atomically, creating parent directories.
+
+    A temporary file in the same directory is written first and then
+    ``os.replace``d over the target, so a crash or a full disk can never leave a
+    half-written config behind (which ``load_config`` would then treat as
+    corrupt and back up).
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(tomli_w.dumps(config.to_dict()), encoding="utf-8")
+    payload = tomli_w.dumps(config.to_dict())
+    tmp = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    try:
+        tmp.write_text(payload, encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
-def load_config(path: Path | None = None) -> Config:
+def _migrations_for(data: dict[str, Any], config: Config) -> list[tuple[str, Any, Any]]:
+    """Return ``(field, old, new)`` for every value a load migrated.
+
+    A field is compared in its *flattened* form, the same shape
+    :meth:`Config.from_dict` sees, so a value grouped under ``[hotkeys]`` or
+    written as a section-prefixed key is recognised. A field the file does not
+    mention is a default (not a migration) and is skipped, which keeps a
+    hand-written config from being rewritten just because it omits fields.
+    """
+    flat = _flatten_sections(data)
+    changes: list[tuple[str, Any, Any]] = []
+    for key, value in config.to_dict().items():
+        if key not in flat:
+            continue
+        old = flat[key]
+        if old != value:
+            changes.append((key, old, value))
+    return changes
+
+
+def _migrate_to_file(target: Path, raw: dict[str, Any], config: Config) -> None:
+    """Rewrite ``target`` when loading ``raw`` changed any field value.
+
+    Migrations (legacy hotkey defaults, ``analysis_timeout`` rounding, the
+    ``gedit`` -> ``texteditor`` exception) are applied in memory by
+    :meth:`Config.validate`. Without this the file keeps the old values, so
+    ``linguafix config show`` and the next start both see stale settings while
+    the running daemon uses the migrated ones — the reported bug.
+    """
+    changes = _migrations_for(raw, config)
+    if not changes:
+        return
+    try:
+        _write_default(target, config)
+    except OSError:
+        logger.warning("Could not persist migrated configuration to %s", target, exc_info=True)
+        return
+    logger.info(
+        "Config: migrated and saved to %s: %s",
+        target,
+        ", ".join(f"{field} {old!r} -> {new!r}" for field, old, new in sorted(changes)),
+    )
+
+
+def load_config(path: Path | None = None, *, persist_migrations: bool = True) -> Config:
     """Load the configuration, creating a default file when missing.
 
     A corrupted file is moved aside (``config.toml.corrupt-<timestamp>``) and
     defaults are returned instead of raising.
 
+    When a value is migrated in memory (a legacy default replaced, a float
+    rounded), the migrated config is written back to ``path`` so the file and
+    the running daemon never disagree (``config show`` reads the file).
+
     Args:
         path: Optional explicit path, defaults to :func:`config_path`.
+        persist_migrations: Write the migrated config back to disk. ``False``
+            is for callers that must not touch the file (the ``config migrate
+            --dry-run`` preview and tests that inspect migration in memory).
 
     Returns:
         A validated :class:`Config` instance.
@@ -845,7 +909,27 @@ def load_config(path: Path | None = None) -> Config:
             logger.warning("Could not back up corrupted config", exc_info=True)
         return Config()
 
-    return Config.from_dict(data)
+    config = Config.from_dict(data)
+    if persist_migrations:
+        _migrate_to_file(target, data, config)
+    return config
+
+
+def preview_migrations(path: Path | None = None) -> list[tuple[str, Any, Any]]:
+    """Return ``(field, old, new)`` for every value a load would migrate.
+
+    Reads the file and applies migrations in memory without writing anything,
+    so ``linguafix config migrate --dry-run`` can show exactly what a real load
+    would save.
+    """
+    target = path or config_path()
+    if not target.exists():
+        return []
+    try:
+        data = tomllib.loads(target.read_bytes().decode("utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+        return []
+    return _migrations_for(data, Config.from_dict(data))
 
 
 def save_config(config: Config, path: Path | None = None) -> Path:

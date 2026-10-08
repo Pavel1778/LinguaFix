@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from linguafix import cli
+from linguafix.config import config_path
 
 
 @pytest.fixture
@@ -196,6 +197,47 @@ def test_config_show(isolated_env: Path, capsys: pytest.CaptureFixture[str]) -> 
 def test_config_reset(isolated_env: Path, capsys: pytest.CaptureFixture[str]) -> None:
     assert cli.main(["config", "reset"]) == 0
     assert "сброшена" in capsys.readouterr().out
+
+
+def test_config_migrate_dry_run_shows_pending(
+    isolated_env: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        'hotkey_undo_last_fix = "CTRL+CTRL"\nhotkey_double_tap_ms = 300\n', encoding="utf-8"
+    )
+    assert cli.main(["config", "migrate", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "hotkey_undo_last_fix" in out
+    assert "CTRL+CTRL" in out
+    # Nothing written by a dry run.
+    assert "CTRL+CTRL" in path.read_text(encoding="utf-8")
+
+
+def test_config_migrate_writes_and_show_reflects(
+    isolated_env: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        'hotkey_undo_last_fix = "CTRL+CTRL"\nhotkey_double_tap_ms = 300\n', encoding="utf-8"
+    )
+    assert cli.main(["config", "migrate"]) == 0
+    capsys.readouterr()
+    assert "CTRL+CTRL" not in path.read_text(encoding="utf-8")
+    # show reads the file, so it now shows the migrated value.
+    assert cli.main(["config", "show"]) == 0
+    assert "SHIFT+BACKSPACE" in capsys.readouterr().out
+
+
+def test_config_migrate_reports_nothing_to_do(
+    isolated_env: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cli.main(["config", "reset"])
+    capsys.readouterr()
+    assert cli.main(["config", "migrate"]) == 0
+    assert "не требуются" in capsys.readouterr().out
 
 
 def test_fix_reports_no_change(

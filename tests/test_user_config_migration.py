@@ -148,3 +148,68 @@ def test_migrated_config_round_trips(tmp_path: Path) -> None:
     reloaded = load_config(path)
     assert reloaded.hotkey_double_tap_ms == 2000
     assert reloaded.mode == "manual"
+
+
+def test_migration_persists_to_file(tmp_path: Path) -> None:
+    """A plain ``load_config`` must write the migrated values to disk.
+
+    The user reported the opposite: the daemon logged the migrated hotkeys but
+    ``config show`` (which reads the file) still showed ``CTRL+CTRL`` / ``300``.
+    The file is the source of truth for every tool except the running daemon, so
+    loading has to persist the migration, not only apply it in memory.
+    """
+    path = tmp_path / "config.toml"
+    path.write_text(USER_CONFIG_V027, encoding="utf-8")
+    load_config(path)  # one ordinary load, nothing else
+    text = path.read_text(encoding="utf-8")
+    assert "CTRL+CTRL" not in text
+    assert "hotkey_undo_last_fix = 'SHIFT+BACKSPACE'" in text.replace('"', "'")
+    assert "hotkey_double_tap_ms = 2000" in text
+    assert "0.7000000000000001" not in text
+    assert "gedit" not in text
+    # The user's deliberate choices are untouched on disk.
+    assert 'mode = "manual"' in text
+    assert "backspace_settle_ms = 80" in text
+    assert "min_word_length = 3" in text
+
+
+def test_second_load_does_not_rewrite(tmp_path: Path) -> None:
+    """Once migrated, a load is a no-op — no rewrite loop, no churn."""
+    path = tmp_path / "config.toml"
+    path.write_text(USER_CONFIG_V027, encoding="utf-8")
+    load_config(path)
+    first = path.read_text(encoding="utf-8")
+    load_config(path)
+    assert path.read_text(encoding="utf-8") == first
+
+
+def test_preview_migrations_lists_changes_without_writing(tmp_path: Path) -> None:
+    """``config migrate --dry-run`` needs the list; the file must stay put."""
+    from linguafix.config import preview_migrations
+
+    path = tmp_path / "config.toml"
+    path.write_text(USER_CONFIG_V027, encoding="utf-8")
+    before = path.read_text(encoding="utf-8")
+    changes = {field: (old, new) for field, old, new in preview_migrations(path)}
+    assert changes["hotkey_undo_last_fix"] == ("CTRL+CTRL", "SHIFT+BACKSPACE")
+    assert changes["hotkey_double_tap_ms"] == (300, 2000)
+    assert changes["analysis_timeout"] == (0.7000000000000001, 0.7)
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_load_without_persist_leaves_the_file_alone(tmp_path: Path) -> None:
+    """``persist_migrations=False`` migrates in memory only (dry-run path)."""
+    path = tmp_path / "config.toml"
+    path.write_text(USER_CONFIG_V027, encoding="utf-8")
+    before = path.read_text(encoding="utf-8")
+    config = load_config(path, persist_migrations=False)
+    assert config.hotkey_double_tap_ms == 2000
+    assert path.read_text(encoding="utf-8") == before
+
+
+def test_atomic_write_leaves_no_temp_file(tmp_path: Path) -> None:
+    """The atomic write must not leave ``.config.toml.tmp-*`` behind."""
+    path = tmp_path / "config.toml"
+    path.write_text(USER_CONFIG_V027, encoding="utf-8")
+    load_config(path)
+    assert list(tmp_path.glob(".*tmp*")) == []

@@ -19,7 +19,14 @@ from pathlib import Path
 
 from . import __version__
 from .collect_logs import collect_logs
-from .config import Config, cache_dir, config_path, load_config, save_config
+from .config import (
+    Config,
+    cache_dir,
+    config_path,
+    load_config,
+    preview_migrations,
+    save_config,
+)
 from .converter import LayoutConverter
 from .detector import LanguageDetector
 from .dictionary import load_user_dictionary
@@ -435,12 +442,40 @@ def config_path_for_dict() -> Path:
 
 
 def cmd_config(args: argparse.Namespace) -> int:
-    """Show, edit or reset the configuration file."""
+    """Show, edit, reset or migrate the configuration file."""
     if args.config_action == "show":
         path = config_path()
         if not path.exists():
             save_config(Config())
+        # Loading applies migrations in memory *and* persists them, so what is
+        # printed is what the daemon will actually use.
+        load_config(path)
         print(path.read_text(encoding="utf-8"))
+        pending = preview_migrations(path)
+        if pending:
+            # Only reachable when the file could not be rewritten (read-only
+            # config dir): the runtime differs from the file, so say so instead
+            # of silently disagreeing with the daemon.
+            print("Предупреждение: значения в файле отличаются от действующих:")
+            for field, old, new in pending:
+                print(f"  {field}: {old!r} -> {new!r} (не сохранено)")
+            print("Проверьте права на каталог конфигурации.")
+        return 0
+    if args.config_action == "migrate":
+        path = config_path()
+        changes = preview_migrations(path)
+        if not changes:
+            print("Миграции не требуются: конфигурация актуальна.")
+            return 0
+        if args.dry_run:
+            print("Будут применены и сохранены:")
+            for field, old, new in changes:
+                print(f"  {field}: {old!r} -> {new!r}")
+            return 0
+        load_config(path)
+        print(f"Миграции применены и сохранены в {path}:")
+        for field, old, new in changes:
+            print(f"  {field}: {old!r} -> {new!r}")
         return 0
     if args.config_action == "edit":
         editor = os.environ.get("EDITOR", "nano")
@@ -775,7 +810,12 @@ def build_parser() -> argparse.ArgumentParser:
     dict_parser.set_defaults(func=cmd_dict)
 
     config = subparsers.add_parser("config", help="работа с конфигурацией")
-    config.add_argument("config_action", choices=["show", "edit", "reset", "path"])
+    config.add_argument("config_action", choices=["show", "edit", "reset", "path", "migrate"])
+    config.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="для migrate: показать изменения, ничего не записывать",
+    )
     config.set_defaults(func=cmd_config)
 
     export = subparsers.add_parser("export", help="сохранить настройки в файл (JSON)")
