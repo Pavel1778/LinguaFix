@@ -60,6 +60,8 @@ _ALLOWED_CONFIG_KEYS = {
     "hotkey_undo_last_fix",
     "hotkey_toggle_mode",
     "hotkey_reload_config",
+    "hotkey_toggle_layout_last_word",
+    "extended_dictionary_dir",
     "hotkey_swallow",
     "hotkey_double_tap_ms",
     "undo_window_seconds",

@@ -57,3 +57,22 @@ yarn
 cargo
 gradle
 maven
+# Common Russian 3-letter function words (prepositions, conjunctions and
+# pronouns). They are already correct when typed in Cyrillic, so correcting a
+# wrong-layout rendering of them (for example ``lkz`` for ``для``) is noise;
+# listing them keeps the automatic pass from touching them. Two-letter
+# prepositions (``в``, ``на``, ``с``, ``к``) are below ``min_word_length``
+# already and need no entry here.
+для
+без
+над
+под
+при
+про
+что
+как
+это
+все
+или
+она
+они

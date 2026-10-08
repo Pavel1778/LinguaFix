@@ -1,0 +1,106 @@
+---
+import Base from "../layouts/Base.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import { REPO } from "../consts";
+import { pick } from "../lib/site";
+
+// One row per shipped language. The files live in the repository under
+// ``dictionaries/`` and can be imported with ``linguafix dict import-file``.
+const RAW = `${REPO}/raw/main/dictionaries`;
+const languages = [
+  { code: "ru", title: "Русский" },
+  { code: "en", title: "English" },
+  { code: "uk", title: "Українська" },
+  { code: "de", title: "Deutsch" },
+  { code: "fr", title: "Français" },
+];
+
+const title = pick("Расширенные словари — LinguaFix", "Extended dictionaries — LinguaFix");
+const description = pick(
+  "Скачайте дополнительные словари частотных слов для LinguaFix и подключите их командой linguafix dict import-file. Источник — FrequencyWords (MIT).",
+  "Download additional frequency dictionaries for LinguaFix and load them with linguafix dict import-file. Source: FrequencyWords (MIT).",
+);
+
+const importCode = `linguafix dict download ru
+# или вручную:
+linguafix dict import-file ~/Downloads/ru-50k.txt`;
+---
+
+<Base title={title} description={description}>
+  <Header />
+  <main>
+    <section class="border-b border-[#e5e5e5] py-16 sm:py-20 dark:border-[#3d3d3d]">
+      <div class="container-page mx-auto max-w-3xl">
+        <h1 class="text-center text-3xl font-bold tracking-tight sm:text-4xl">
+          {pick("Расширенные словари", "Extended dictionaries")}
+        </h1>
+        <p class="mx-auto mt-4 max-w-2xl text-center text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
+          {
+            pick(
+              "Дополнительные списки частотных слов расширяют словарь LinguaFix: больше настоящих слов распознаётся, меньше лишних исправлений. Это отдельно от пользовательского словаря — ничего общего с текстом, который вы набираете.",
+              "Extra frequency word lists widen LinguaFix's vocabulary: more real words are recognised and fewer corrections are wrong. This is separate from the user dictionary and never touches the text you type.",
+            )
+          }
+        </p>
+      </div>
+    </section>
+
+    <section class="py-16 sm:py-20">
+      <div class="container-page mx-auto max-w-3xl">
+        <div class="overflow-hidden rounded-lg border border-[#e5e5e5] dark:border-[#3d3d3d]">
+          <table class="w-full text-left text-sm">
+            <thead class="bg-[#fafafa] dark:bg-[#2d2d2d]">
+              <tr>
+                <th class="px-4 py-3 font-semibold">{pick("Язык", "Language")}</th>
+                <th class="px-4 py-3 font-semibold">{pick("Файл", "File")}</th>
+                <th class="px-4 py-3 font-semibold">{pick("Скачать", "Download")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {
+                languages.map((entry) => (
+                  <tr class="border-t border-[#e5e5e5] dark:border-[#3d3d3d]">
+                    <td class="px-4 py-3">{entry.title}</td>
+                    <td class="px-4 py-3 font-mono text-xs">{entry.code}-50k.txt</td>
+                    <td class="px-4 py-3">
+                      <a
+                        class="text-[#1c71d8] underline dark:text-[#3584e4]"
+                        href={`${RAW}/${entry.code}-50k.txt`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        {entry.code}-50k.txt
+                      </a>
+                    </td>
+                  </tr>
+                ))
+              }
+            </tbody>
+          </table>
+        </div>
+
+        <h2 class="mt-12 text-2xl font-bold">{pick("Как подключить", "How to load")}</h2>
+        <p class="mt-3 text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
+          {
+            pick(
+              "Скачайте файл и импортируйте его — или просто попросите LinguaFix скачать словарь самостоятельно.",
+              "Download a file and import it — or let LinguaFix download the dictionary for you.",
+            )
+          }
+        </p>
+        <pre class="mt-4 overflow-x-auto rounded-lg bg-[#1e1e1e] p-4 text-xs text-[#fafafa]"><code>{importCode}</code></pre>
+
+        <p class="mt-8 text-xs text-[#0a0a0a]/60 dark:text-[#fafafa]/60">
+          {
+            pick(
+              "Источник словарей: FrequencyWords (hermitdave/FrequencyWords), лицензия MIT. Файлы в репозитории содержат только столбец слов.",
+              "Dictionary source: FrequencyWords (hermitdave/FrequencyWords), MIT licence. The repository files keep only the word column.",
+            )
+          }
+        </p>
+      </div>
+    </section>
+  </main>
+  <Footer />
+</Base>

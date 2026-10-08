@@ -5,6 +5,32 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.8] - 2026-10-08
+
+### Added
+
+- `linguafix dict download <lang>` and `linguafix dict import-file <path>` load
+  extended frequency word lists (`ru`, `en`, `uk`, `de`, `fr`) into
+  `$XDG_DATA_HOME/linguafix/dictionaries/<lang>.txt`. The detector reads them in
+  addition to the bundled corpora, widening vocabulary membership only — n-gram
+  scoring is unchanged, so already-correct words keep their verdict while rarer
+  words are recognised. Lists mirror FrequencyWords (MIT) under the repository's
+  `dictionaries/` folder. A new landing-page section links them.
+- A `toggle_layout` hotkey (default `CTRL+SHIFT+T`) force-retypes the last word
+  in the other layout, the manual reverse of a correction. Configurable as
+  `hotkey_toggle_layout_last_word`.
+
+### Changed
+
+- The undo hotkey default (`SHIFT+BACKSPACE`) and the new toggle hotkey are shown
+  by `linguafix hotkeys` and the GUI. A stale `CTRL+CTRL` value left by an older
+  install is migrated to the default on load and the change is logged.
+
+### Fixed
+
+- The GUI tab icons now fall back to text when a symbolic icon is missing from
+  the theme, instead of failing to draw the tab.
+
 ## [0.2.7] - 2026-10-08
 
 ### Fixed

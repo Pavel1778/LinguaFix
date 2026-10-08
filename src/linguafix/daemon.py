@@ -3,7 +3,7 @@
 The daemon listens to raw keyboard events from ``/dev/input/event*`` devices and
 tracks the word currently being typed as a sequence of *physical keys*
 (evdev scancodes), together with the characters those keys produced. When the
-user presses a word boundary — Space or Enter by default — the word is analysed
+user presses a word boundary ÔÇö Space or Enter by default ÔÇö the word is analysed
 immediately; when it was typed in the wrong layout it is rewritten and the
 layout is switched.
 
@@ -12,7 +12,7 @@ replacement reliable: the number of Backspaces always equals the number of keys
 the user actually pressed, so the deletion cannot drift from what is on screen
 even when the user types very fast. A character buffer can desynchronise from
 the screen (a key the daemon did not process in time) and leave a stray first
-character behind, the ``рhello`` symptom.
+character behind, the ``ĐÇhello`` symptom.
 
 The main loop uses :mod:`selectors` rather than a blocking ``read_loop`` so it
 can observe the idle fallback timeout, handle signals and serve several
@@ -181,12 +181,12 @@ _MODE_CYCLE: Final[tuple[str, ...]] = ("auto", "hybrid", "manual")
 _DOUBLE_TAP_MODIFIERS: Final[frozenset[str]] = frozenset({"shift", "ctrl", "alt"})
 # Modifier keys that begin a chord and therefore abandon the word being typed:
 # Ctrl+C, Alt+Tab and friends move or copy the text, so the buffer must not be
-# corrected afterwards. Shift is excluded — it is part of normal typing.
+# corrected afterwards. Shift is excluded ÔÇö it is part of normal typing.
 _BUFFER_RESET_KEYS: Final[frozenset[str]] = frozenset(
     {"KEY_LEFTCTRL", "KEY_RIGHTCTRL", "KEY_LEFTALT", "KEY_RIGHTALT"}
 )
 # Keys that carry no printable character but that we must not treat as a
-# continuation of the current word either (arrow keys, Delete, Home, …). A key
+# continuation of the current word either (arrow keys, Delete, Home, ÔÇŽ). A key
 # in this set ends the word without flushing it.
 _WORD_BREAKERS: Final[frozenset[str]] = frozenset(
     {
@@ -274,6 +274,7 @@ class LinguaFixDaemon:
             plausibility_floor=config.plausibility_floor,
             max_consecutive_consonants=config.max_consecutive_consonants,
             min_vowel_ratio=config.min_vowel_ratio,
+            extended_dictionary_dir=config.extended_dictionary_dir,
         )
         self.switcher = switcher or LayoutSwitcher(
             layouts=config.layouts,
@@ -292,6 +293,7 @@ class LinguaFixDaemon:
             "toggle_mode": self._parse_hotkey(config.hotkey_toggle_mode),
             "reload": self._parse_hotkey(config.hotkey_reload_config),
             "selection_fix": self._parse_hotkey(config.selection_fix_hotkey),
+            "toggle_layout": self._parse_hotkey(config.hotkey_toggle_layout_last_word),
         }
         # Modifier families currently held down, used to match hotkeys.
         self._held_modifiers: set[str] = set()
@@ -304,7 +306,7 @@ class LinguaFixDaemon:
         # Successful fixes eligible for undo: (monotonic time, original text,
         # original layout, backspace count, history id).
         self._undo_history: list[tuple[float, str, str, int, int]] = []
-        # Recent corrections for the GUI "История" tab: metadata only, newest
+        # Recent corrections for the GUI "đśĐüĐéđżĐÇđŞĐĆ" tab: metadata only, newest
         # last. ``id`` is an opaque handle the GUI passes back to undo; the
         # typed text is never stored here.
         self._fix_history: list[dict[str, object]] = []
@@ -317,6 +319,16 @@ class LinguaFixDaemon:
         self._skip_regex = _compile_skip_regex(config.custom_skip_regex)
         self._excepted_apps = {app.lower() for app in config.exceptions_apps}
         self._last_word: str = ""
+        # The last non-empty word that was flushed (by a boundary or the idle
+        # fallback), regardless of whether a correction was applied. The manual
+        # reverse-conversion hotkey and a late double Shift use it when the live
+        # buffer is empty because Space already consumed and cleared the word.
+        # ``_last_flushed_word`` holds the *on-screen* text after the flush, so
+        # the toggle converts what the user actually sees; ``_last_flushed_corrected``
+        # records whether a correction was already applied, so a late double
+        # Shift does not re-fix (and thereby revert) an already-corrected word.
+        self._last_flushed_word: str = ""
+        self._last_flushed_corrected: bool = False
         self.detector.set_context_weight(config.context_weight if config.context_analysis else 0.0)
         self.detector.set_dictionary_size(config.dictionary_size)
         user_words = load_user_dictionary(config.dictionary_custom_path)
@@ -510,8 +522,10 @@ class LinguaFixDaemon:
 
     def _handle_history(self, _signum: int, _frame: object) -> None:
         # Only set a flag: writing the snapshot allocates and must run on the
-        # event-loop thread, never inside the signal handler.
-        logger.info("Received SIGUSR2; scheduling history snapshot")
+        # event-loop thread, never inside the signal handler. Logged at DEBUG:
+        # the GUI used to poll with SIGUSR2 every couple of seconds, which
+        # filled the journal with INFO lines (the "SIGUSR2 spam" report).
+        logger.debug("Received SIGUSR2; scheduling history snapshot")
         self._history_requested = True
 
     def _write_history_snapshot(self, history: list[dict[str, object]] | None = None) -> None:
@@ -914,19 +928,28 @@ class LinguaFixDaemon:
             # before logging or doing any work.
             self._restore_suspended_buffer()
             with self._lock:
-                if (
-                    self._processing_buffer
-                    or self._replaying_events
-                    or (not self.buffer and not self._scancodes)
-                ):
-                    logger.debug("Explicit fix hotkey ignored: nothing to fix")
+                if self._processing_buffer or self._replaying_events:
+                    logger.debug("Explicit fix hotkey ignored: a fix is already in flight")
                     return
-            # Metadata only: the typed text itself is never logged.
-            logger.info("Hotkey action: %s", action)
-            with self._lock:
-                length = len(self.buffer)
-            logger.debug("Explicit fix hotkey: buffer_len=%d", length)
-            self._process_buffer(force=True)
+                has_buffer = bool(self.buffer or self._scancodes)
+            if has_buffer:
+                # Metadata only: the typed text itself is never logged.
+                logger.info("Hotkey action: %s", action)
+                with self._lock:
+                    length = len(self.buffer)
+                logger.debug("Explicit fix hotkey: buffer_len=%d", length)
+                self._process_buffer(force=True)
+                return
+            # The live buffer is empty because a boundary (Space/Enter) already
+            # consumed and cleared the word. In manual mode nothing was fixed,
+            # so let the hotkey reach back and fix the word just typed — this is
+            # the "double Shift does nothing after Space" complaint. When that
+            # word was already corrected, do nothing (re-fixing would revert it).
+            if self._last_flushed_word and not self._last_flushed_corrected:
+                logger.info("Hotkey action: %s (last word)", action)
+                self._force_fix_memory_word()
+            else:
+                logger.debug("Explicit fix hotkey ignored: nothing to fix")
             return
         logger.info("Hotkey action: %s", action)
         if action == "undo":
@@ -937,6 +960,25 @@ class LinguaFixDaemon:
             self.reload_config()
         elif action == "selection_fix" and self.config.selection_fix_enabled:
             self.selection_fix.convert_selection()
+        elif action == "toggle_layout":
+            self._toggle_last_word_layout()
+
+    def _force_fix_memory_word(self) -> None:
+        """Force a fix of the most recently flushed word.
+
+        The word is no longer in the live buffer (a boundary cleared it), and
+        its physical scancodes are gone, so the buffer is seeded with the text
+        and a synthetic scancode count. ``_process_buffer`` deletes exactly that
+        many characters and retypes the corrected word, matching the on-screen
+        word.
+        """
+        word = self._last_flushed_word
+        if not word:
+            return
+        with self._lock:
+            self.buffer = word
+            self._scancodes = [0] * len(word)
+        self._process_buffer(force=True)
 
     def _load_snippets(self, config: Config) -> None:
         """(Re)load the snippet file named by ``config``, best-effort."""
@@ -1134,6 +1176,67 @@ class LinguaFixDaemon:
             self._notify()
         return True
 
+    def _toggle_last_word_layout(self) -> bool:
+        """Force the last word into the other layout, regardless of correctness.
+
+        This is the manual reverse conversion (feature A): ``đ┐ĐÇđŞđ▓đÁĐé`` becomes
+        ``ghbdtn`` even though ``đ┐ĐÇđŞđ▓đÁĐé`` is a perfectly good word. No detector
+        runs ÔÇö the word is simply converted through :class:`LayoutConverter`.
+        The live buffer is used when present; otherwise the word remembered from
+        the most recent flush is converted, so the hotkey still works right
+        after a Space already consumed and cleared the word.
+
+        Returns:
+            ``True`` when a conversion was applied (or the dry run would have).
+        """
+        with self._lock:
+            if self.buffer:
+                word = self.buffer.strip()
+                backspace_count = len(self._scancodes)
+                from_buffer = True
+            else:
+                word = self._last_flushed_word
+                backspace_count = len(word)
+                from_buffer = False
+        if not word:
+            logger.debug("Toggle-layout hotkey ignored: no word to convert")
+            return False
+
+        current = self.switcher.get_current_layout()
+        others = [layout for layout in self.config.layouts if layout != current]
+        if not others:
+            logger.debug("Toggle-layout hotkey ignored: no other layout configured")
+            return False
+        target = others[0]
+        converted = self.converter.convert(word, current, target)
+        if converted == word:
+            logger.debug("Toggle-layout hotkey: conversion is a no-op; skipping")
+            return False
+
+        logger.info("Manual layout toggle of length %d (%s -> %s)", len(word), current, target)
+        if self.dry_run:
+            logger.info("Dry run: skipping layout switch and text replacement")
+            return True
+        if self._shutdown_requested:
+            logger.info("Shutdown requested; skipping replacement")
+            return False
+
+        self.switcher.switch_to(target)
+        time.sleep(0.05)
+        if not self.injector.replace_text(backspace_count, converted, target):
+            logger.warning("Manual layout toggle failed to replace text")
+            return False
+        self._record_undo(word, current, backspace_count, source=current, target=target)
+        # The on-screen word is now the converted one; keep the memory in step
+        # so pressing the hotkey again flips it back.
+        with self._lock:
+            if from_buffer:
+                self.buffer = ""
+                self._scancodes = []
+            self._last_flushed_word = converted
+            self._last_flushed_corrected = False
+        return True
+
     def _key_to_char(self, code: int) -> str | None:
         """Translate a keycode into the character for the active layout."""
         pair = self._code_to_pair.get(code)
@@ -1160,7 +1263,7 @@ class LinguaFixDaemon:
         Pressing Ctrl/Alt begins a chord (``Ctrl+C``, ``Alt+Tab``): the word
         typed before it must not be corrected once the chord is over. The word is
         *suspended* rather than dropped, so a Ctrl-based fix hotkey such as
-        ``CTRL+F12`` — and the ``CTRL+CTRL`` double tap — can still reach it. Any
+        ``CTRL+F12`` ÔÇö and the ``CTRL+CTRL`` double tap ÔÇö can still reach it. Any
         ordinary key pressed afterwards abandons it (see ``_drop_suspended``).
         """
         if value != 1:
@@ -1209,7 +1312,7 @@ class LinguaFixDaemon:
                 ``"\\n"`` or ``"\\t"``). It is already on screen right after the
                 word; when the corrected text stays in the same layout the
                 replacement consumes and retypes it, so it is not stranded in
-                front of the corrected word (the ``рhello`` symptom).
+                front of the corrected word (the ``ĐÇhello`` symptom).
         """
         # Capture the text so a traceback can be scrubbed of it before logging.
         with self._lock:
@@ -1268,7 +1371,13 @@ class LinguaFixDaemon:
             )
         if not buffer:
             return
-        # The explicit hotkey may resolve a taught short token (``ы`` -> ``s``),
+        # Remember the on-screen word for a later manual reverse conversion or a
+        # late double Shift. It is the text as typed; a successful correction
+        # below overwrites it with the corrected form. Recorded only for a
+        # non-empty buffer, so an empty hotkey flush does not erase the memory.
+        self._last_flushed_word = buffer
+        self._last_flushed_corrected = False
+        # The explicit hotkey may resolve a taught short token (``Đő`` -> ``s``),
         # which the length guard below would otherwise drop before the detector
         # ever sees it. ``forced_taught_layout`` only matches a conversion the
         # user taught, so no arbitrary short guess slips through.
@@ -1279,7 +1388,7 @@ class LinguaFixDaemon:
         )
         # A 1-2 character token the user explicitly asks to fix: the ordinary
         # detector never sees it (below ``min_word_length``), so the hotkey
-        # resolves an unambiguous conversion (``фт`` -> ``an``) itself.
+        # resolves an unambiguous conversion (``ĐäĐé`` -> ``an``) itself.
         forced_short: str | None = None
         if force and len(buffer) < self.config.min_word_length:
             forced_short = self.detector.forced_short_layout(
@@ -1333,6 +1442,12 @@ class LinguaFixDaemon:
         # The hotkey may have resolved an unambiguous short-word conversion
         # itself; the ordinary detector would only see a below-min-length token.
         target = forced_short or self.detector.target_layout(buffer, current, neighbor)
+        # The detector returning the current layout is not a layout fix — it
+        # means the text already belongs to the active layout. Treat it as "no
+        # layout correction" and fall through to the opt-in typo pass, instead
+        # of retyping the buffer in place (which would deform it for nothing).
+        if target == current:
+            target = None
         if target is None:
             # Layout detection found nothing. A separate, opt-in step then looks
             # for a single-character typo in the language the user is typing;
@@ -1354,15 +1469,6 @@ class LinguaFixDaemon:
                 reason = "punctuation"
         else:
             reason = "layout"
-            if target == current:
-                # A layout fix must move to a *different* layout. The detector
-                # returning the current one is a bug; deleting and retyping in
-                # place would deform the text for no reason, so refuse it.
-                logger.warning(
-                    "Detector chose the current layout (%s); skipping to avoid deforming the buffer",
-                    current,
-                )
-                return
             converted = self.converter.convert(buffer, current, target)
         if converted == buffer:
             return
@@ -1404,7 +1510,7 @@ class LinguaFixDaemon:
         # When the flush came from a word-boundary key (Space/Enter/Tab), that
         # key is still being processed by the compositor. Deleting immediately
         # races it: Chromium/Electron coalesce the fast synthetic Backspaces and
-        # the first character survives (``руддщ `` -> ``рhello``). A short pause
+        # the first character survives (``ĐÇĐâđ┤đ┤Đë `` -> ``ĐÇhello``). A short pause
         # lets the boundary settle first. The idle fallback and an explicit
         # hotkey do not need it.
         if boundary and self.config.trigger_settle_ms > 0:
@@ -1421,7 +1527,7 @@ class LinguaFixDaemon:
         # Space is consumed and retyped: the replacement deletes one extra
         # character and types the corrected word followed by the Space again.
         # That is what stops the Space from being stranded in front of the word
-        # (``hello`` -> ``рhello``). Enter/Tab keep their place after the
+        # (``hello`` -> ``ĐÇhello``). Enter/Tab keep their place after the
         # corrected text, because deleting them without being able to retype
         # them would silently drop the user's newline or tab.
         replacement = converted
@@ -1443,6 +1549,12 @@ class LinguaFixDaemon:
             self._record_undo(
                 buffer + boundary_char, current, backspace_total, source=current, target=target
             )
+            # What is now on screen is the corrected word (plus the retyped
+            # boundary, which the toggle must not touch). Remember it so the
+            # reverse-conversion hotkey and a late double Shift act on the
+            # visible word, not the pre-fix text.
+            self._last_flushed_word = converted
+            self._last_flushed_corrected = True
             logger.debug("Flush complete, buffer cleared")
             if self.config.notify_on_fix:
                 self._notify()
@@ -1454,7 +1566,12 @@ class LinguaFixDaemon:
         # ``/proc`` or the journal.
         try:
             subprocess.run(
-                ["notify-send", "--app-name=LinguaFix", "LinguaFix", "Раскладка исправлена"],
+                [
+                    "notify-send",
+                    "--app-name=LinguaFix",
+                    "LinguaFix",
+                    "đáđ░Đüđ║đ╗đ░đ┤đ║đ░ đŞĐüđ┐ĐÇđ░đ▓đ╗đÁđŻđ░",
+                ],
                 check=False,
                 capture_output=True,
                 timeout=NOTIFY_TIMEOUT,
@@ -1489,6 +1606,8 @@ class LinguaFixDaemon:
         # Always re-read the user dictionary: the reload hotkey is also how a
         # user picks up words they just added to the file.
         self.detector.set_user_words(load_user_dictionary(new_config.dictionary_custom_path))
+        # Pick up a dictionary the user just downloaded/imported on reload.
+        self.detector.set_extended_dictionary_dir(new_config.extended_dictionary_dir)
         # The vocabularies may have changed, so any cached corrector is stale.
         self._typo_correctors.clear()
         self._punctuation = self._build_punctuation()
@@ -1502,6 +1621,7 @@ class LinguaFixDaemon:
             "toggle_mode": self._parse_hotkey(new_config.hotkey_toggle_mode),
             "reload": self._parse_hotkey(new_config.hotkey_reload_config),
             "selection_fix": self._parse_hotkey(new_config.selection_fix_hotkey),
+            "toggle_layout": self._parse_hotkey(new_config.hotkey_toggle_layout_last_word),
         }
         self._double_tap_hotkeys = self._build_double_tap_hotkeys(new_config)
         self._last_modifier_tap.clear()
@@ -1535,15 +1655,16 @@ class LinguaFixDaemon:
             " dry-run=on" if self.dry_run else "",
         )
         # Log the effective hotkeys so the user can see exactly which chords are
-        # bound. Binding names only — never typed text. The undo default is
+        # bound. Binding names only ÔÇö never typed text. The undo default is
         # ``SHIFT+BACKSPACE`` because ``CTRL+Z`` collides with the application's
         # own undo (the daemon cannot swallow it: the keyboard is not grabbed).
         logger.info(
-            "Hotkeys: fix=%s undo=%s toggle=%s reload=%s",
+            "Hotkeys: fix=%s undo=%s toggle=%s reload=%s toggle_layout=%s",
             self.config.hotkey_fix_last_word or "(none)",
             self.config.hotkey_undo_last_fix or "(none)",
             self.config.hotkey_toggle_mode or "(none)",
             self.config.hotkey_reload_config or "(none)",
+            self.config.hotkey_toggle_layout_last_word or "(none)",
         )
         devices = self._devices if self._devices is not None else self.discover_devices()
         if not devices:
@@ -1733,7 +1854,7 @@ class LinguaFixDaemon:
                     "notify-send",
                     "--app-name=LinguaFix",
                     "LinguaFix",
-                    f"Доступна версия {latest}",
+                    f"đöđżĐüĐéĐâđ┐đŻđ░ đ▓đÁĐÇĐüđŞĐĆ {latest}",
                 ],
                 check=False,
                 capture_output=True,

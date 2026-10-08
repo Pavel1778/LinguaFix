@@ -31,6 +31,39 @@ def _scrollable(page: Gtk.Widget) -> Gtk.ScrolledWindow:
     return scroll
 
 
+# Icon for each view-stack page, as ``page name -> icon name``. The Adwaita
+# names were verified against adwaita-icon-theme 48. ``test_icons_exist`` reads
+# this mapping so a rename that does not exist in the theme fails the suite.
+TAB_ICONS: dict[str, str] = {
+    "home": "go-home-symbolic",
+    "settings": "preferences-system-symbolic",
+    "dictionary": "accessories-dictionary-symbolic",
+    "typo": "input-keyboard-symbolic",
+    "history": "document-open-recent-symbolic",
+    "advanced": "preferences-other-symbolic",
+}
+
+
+def _safe_icon_name(icon_name: str) -> str | None:
+    """Return ``icon_name`` when the active theme has it, else ``None``.
+
+    A title whose ``icon_name`` is absent renders as a broken-image placeholder,
+    so the icon is only attached when it can actually resolve. Without a display
+    (headless), the name is kept so a real session still shows the icon.
+    """
+    try:
+        from gi.repository import Gdk
+
+        display = Gdk.Display.get_default()
+        if display is None:
+            return icon_name
+        if Gtk.IconTheme.get_for_display(display).has_icon(icon_name):
+            return icon_name
+        return None
+    except (ImportError, ValueError, AttributeError):  # pragma: no cover - no display
+        return icon_name
+
+
 class LinguaFixWindow(Adw.ApplicationWindow):
     """The top-level window with a responsive ``ViewSwitcher`` header."""
 
@@ -94,6 +127,12 @@ class LinguaFixWindow(Adw.ApplicationWindow):
         # switcher until the user reveals it, keeping the basic settings clean.
         self._advanced_page = self._stack.add_titled(self._advanced, "advanced", "Продвинутые")
         self._advanced_page.set_visible(False)
+        # Give every tab a real icon. Adwaita names verified against the theme;
+        # a name the theme lacks is skipped rather than shown as a placeholder.
+        for name, icon in TAB_ICONS.items():
+            safe = _safe_icon_name(icon)
+            if safe is not None:
+                self._stack.get_page(self._stack.get_child_by_name(name)).set_icon_name(safe)
         toolbar.set_content(self._stack)
 
         self._install_actions()

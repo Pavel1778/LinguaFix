@@ -353,6 +353,15 @@ the corrected word while the daemon's retype raced it. `hotkey_swallow` in the
 config is inert for the same reason and is kept only for forward compatibility.
 The daemon logs the effective hotkeys at startup so the binding is discoverable.
 
+The **toggle-layout** hotkey (default `CTRL+SHIFT+T`, configurable as
+`hotkey_toggle_layout_last_word`) force-retypes the last word in the other
+layout, the manual counterpart of an automatic correction. It deliberately
+bypasses the detector — a word that *looks* correct in its current layout is
+still converted when the user asks — and falls back to `_last_flushed_word`
+when the live buffer is empty because a Space boundary already consumed the
+word. A word already corrected by the boundary is remembered in
+`_last_flushed_corrected`, so a later double Shift does not revert it.
+
 ## Extension points
 
 - `LanguageDetector` — add a language by dropping `ngrams_<lang>.json` and a
@@ -374,7 +383,7 @@ The daemon logs the effective hotkeys at startup so the binding is discoverable.
 | `logging_setup.py` | Rotating file logger under `~/.local/state/linguafix/` |
 | `converter.py` | Character maps between layouts (`us`, `ru`, `uk`, `de`, `fr`) |
 | `detector.py` | Language detection, context, user dictionary, `target_layout` |
-| `dictionary.py` | Reading/writing the user dictionary file |
+| `dictionary.py` | User dictionary file, plus extended frequency dictionaries (`import-file`/`download`) |
 | `typo.py` | T9: bounded Damerau-Levenshtein + `TypoCorrector` (opt-in) |
 | `text_expander.py` | Snippet expansion (trigger -> text) |
 | `selection_fix.py` | Convert the layout of already-selected text |
