@@ -332,7 +332,7 @@ word is scored against the corpora whose *layout could have produced it*.
 `manual` only on the fix hotkey, and `hybrid` corrects automatically but keeps a
 short undo history.
 
-Hotkeys are matched in `daemon._parse_hotkey`. A chord such as `CTRL+Z` requires
+Hotkeys are matched in `daemon._parse_hotkey`. A chord such as `CTRL+F12` requires
 the modifier to be held; a **double tap** such as `SHIFT+SHIFT`, `CTRL+CTRL` or
 `ALT+ALT` fires when the same modifier is pressed twice within
 `hotkey_double_tap_ms` (default 300 ms) with nothing else in between. The default
@@ -342,6 +342,13 @@ family, a matching second tap within the window fires the action and clears the
 state, and any other key cancels the arm. A single Shift press never triggers a
 fix, so normal capitalisation is unaffected. Hotkeys are re-parsed on
 `reload_config`, so editing `config.toml` and sending `SIGHUP` rebinds them live.
+
+The default **undo** hotkey is `SHIFT+BACKSPACE`, not `CTRL+Z`. The daemon does
+not grab the keyboard (`EVIOCGRAB` is never issued), so it cannot swallow a
+chord: a bound `CTRL+Z` would fire the application's own undo as well, deleting
+the corrected word while the daemon's retype raced it. `hotkey_swallow` in the
+config is inert for the same reason and is kept only for forward compatibility.
+The daemon logs the effective hotkeys at startup so the binding is discoverable.
 
 ## Extension points
 

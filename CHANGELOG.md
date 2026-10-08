@@ -5,7 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.2.7] - 2026-10-08
+
+### Fixed
+
+- The undo hotkey documented in `README.md` and `docs/TROUBLESHOOTING.md` now
+  matches the real default, `SHIFT+BACKSPACE` (both files said `CTRL+Z`). The
+  default has been `SHIFT+BACKSPACE` since v0.2.2 precisely because `CTRL+Z`
+  collides with the application's own undo; the daemon does not grab the
+  keyboard, so it cannot swallow the chord. A user who followed the docs pressed
+  `CTRL+Z`, the daemon's undo never fired, and the *application* undid the
+  corrected word — deleting it without the daemon retyping the original, leaving
+  the cursor in an empty spot, exactly as reported. A regression test pins the
+  documented value to `DEFAULT_UNDO_HOTKEY`.
+
+### Added
+
+- The daemon logs the effective hotkeys at startup (`fix`, `undo`, `toggle`,
+  `reload`) so the binding is discoverable without opening the GUI. The log
+  holds the binding names only, never typed text. The undo path also logs
+  `backspace count` and the layout transition at DEBUG level.
 
 ### Changed
 

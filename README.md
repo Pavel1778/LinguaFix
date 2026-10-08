@@ -195,7 +195,9 @@ log_level = "INFO"         # DEBUG | INFO | WARNING | ERROR
 
 # Хоткеи. Двойной тап модификатора задаётся как SHIFT+SHIFT / CTRL+CTRL / ALT+ALT.
 hotkey_fix_last_word = "SHIFT+SHIFT"
-hotkey_undo_last_fix = "CTRL+Z"
+# Undo: SHIFT+BACKSPACE, НЕ Ctrl+Z. Ctrl+Z конфликтует с собственным undo
+# приложения (демон не перехватывает клавиатуру), поэтому взято Shift+Backspace.
+hotkey_undo_last_fix = "SHIFT+BACKSPACE"
 hotkey_reload_config = "CTRL+SHIFT+R"
 hotkey_double_tap_ms = 300  # окно двойного тапа, мс (100–1000)
 
@@ -392,7 +394,7 @@ Wine); свои приложения можно добавить в GUI (вкл�
 | `doctor` из TTY или ssh | Это ожидаемо: тип сессии `unknown` — см. [TROUBLESHOOTING: doctor из TTY/ssh](docs/TROUBLESHOOTING.md#doctor-запущен-из-tty-или-ssh) |
 | Переключает, но не заменяет текст | Смените `backend` на `uinput` |
 | Исправляет то, что не нужно | Включены проверки `plausibility_check`, `structural_boundaries`, `identifier_guard`; добавьте строку в `custom_skip_regex` — подробнее [TROUBLESHOOTING: ложные срабатывания](docs/TROUBLESHOOTING.md#a-string-i-typed-is-corrected-wrongly-false-positive) |
-| Нужно вернуть последнее исправление | Хоткей undo (`CTRL+Z`) или кнопка **«Отменить последнее исправление»** в GUI |
+| Нужно вернуть последнее исправление | Хоткей undo (`SHIFT+BACKSPACE`) или кнопка **«Отменить последнее исправление»** в GUI |
 | Хочу посмотреть журнал | `linguafix logs -f --level DEBUG` — набранный текст в журнал не попадает |
 | Кнопка «включить» показывает битый значок | Обновите тему иконок или переустановите пакет: LinguaFix рисует символ питания сам, если темы нет |
 | Не работает в терминале | Попробуйте `backend = "uinput"` |
