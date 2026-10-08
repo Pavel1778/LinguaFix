@@ -500,6 +500,10 @@ def test_settings_page_bindings(gui_state: Any, monkeypatch: pytest.MonkeyPatch)
     assert gui_state.config.mode == "hybrid"
     page._make_hotkey_handler("hotkey_fix_last_word")("CTRL+Q")
     assert gui_state.config.hotkey_fix_last_word == "CTRL+Q"
+    # The toggle-layout row is wired to its own config field.
+    assert page._hotkey_toggle_layout is not None
+    page._make_hotkey_handler("hotkey_toggle_layout_last_word")("CTRL+ALT+T")
+    assert gui_state.config.hotkey_toggle_layout_last_word == "CTRL+ALT+T"
 
 
 def test_settings_page_language_toggle(gui_state: Any, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -533,6 +537,7 @@ def test_advanced_page_handlers(gui_state: Any, monkeypatch: pytest.MonkeyPatch)
     assert gui_state.config.hotkey_toggle_mode == "CTRL+M"
     page._on_reset_hotkeys(None)
     assert gui_state.config.hotkey_reload_config == "CTRL+SHIFT+R"
+    assert gui_state.config.hotkey_toggle_layout_last_word == "CTRL+SHIFT+T"
 
 
 def test_advanced_page_typo_group_reflects_config(

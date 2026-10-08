@@ -67,6 +67,14 @@ class SettingsPage(BoundPreferencesPage):
             on_change=self._make_hotkey_handler("hotkey_undo_last_fix"),
         )
         group.add(self._hotkey_undo)
+        self._hotkey_toggle_layout = HotkeyRow(
+            "Сменить раскладку последнего слова",
+            "Разворачивает последнее слово в другую раскладку (привет → ghbdtn), "
+            "даже если слово выглядит правильным. Пустое значение — выключено.",
+            self._config.hotkey_toggle_layout_last_word,
+            on_change=self._make_hotkey_handler("hotkey_toggle_layout_last_word"),
+        )
+        group.add(self._hotkey_toggle_layout)
         self.add(group)
 
     def _make_hotkey_handler(self, field: str) -> Callable[[str], None]:
