@@ -1098,6 +1098,12 @@ class LinguaFixDaemon:
             return True
         current = self.switcher.get_current_layout()
         target = layout if layout else current
+        logger.debug(
+            "Undo: restoring %d chars, layout %s -> %s",
+            backspace_count,
+            current,
+            target,
+        )
         self.switcher.switch_to(target)
         time.sleep(0.05)
         # The fixed text has the same length as the original word; deleting that
@@ -1509,6 +1515,17 @@ class LinguaFixDaemon:
             getattr(self.switcher, "backend", "?"),
             getattr(self.injector, "backend", "?"),
             " dry-run=on" if self.dry_run else "",
+        )
+        # Log the effective hotkeys so the user can see exactly which chords are
+        # bound. Binding names only — never typed text. The undo default is
+        # ``SHIFT+BACKSPACE`` because ``CTRL+Z`` collides with the application's
+        # own undo (the daemon cannot swallow it: the keyboard is not grabbed).
+        logger.info(
+            "Hotkeys: fix=%s undo=%s toggle=%s reload=%s",
+            self.config.hotkey_fix_last_word or "(none)",
+            self.config.hotkey_undo_last_fix or "(none)",
+            self.config.hotkey_toggle_mode or "(none)",
+            self.config.hotkey_reload_config or "(none)",
         )
         devices = self._devices if self._devices is not None else self.discover_devices()
         if not devices:

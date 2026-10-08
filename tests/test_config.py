@@ -7,7 +7,31 @@ from pathlib import Path
 import pytest
 
 from linguafix import config as config_module
-from linguafix.config import DEFAULT_EXCEPTION_APPS, Config, load_config, save_config
+from linguafix.config import (
+    DEFAULT_EXCEPTION_APPS,
+    DEFAULT_UNDO_HOTKEY,
+    Config,
+    load_config,
+    save_config,
+)
+
+
+def test_documented_undo_hotkey_matches_the_default() -> None:
+    """The docs and the default must not drift apart.
+
+    A previous release documented ``CTRL+Z`` while the default was actually
+    ``SHIFT+BACKSPACE`` (Ctrl+Z collides with the application's own undo). A
+    user following the README pressed Ctrl+Z, the daemon's undo never fired, and
+    the *application* undid the corrected word leaving an empty spot. Pin the
+    documented value to the real default so the mismatch cannot recur.
+    """
+    root = Path(__file__).resolve().parents[1]
+    assert DEFAULT_UNDO_HOTKEY == "SHIFT+BACKSPACE"
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    assert 'hotkey_undo_last_fix = "SHIFT+BACKSPACE"' in readme
+    assert "Хоткей undo (`SHIFT+BACKSPACE`)" in readme
+    troubleshooting = (root / "docs/TROUBLESHOOTING.md").read_text(encoding="utf-8")
+    assert "`SHIFT+BACKSPACE` by default" in troubleshooting
 
 
 def test_defaults() -> None:

@@ -1,4 +1,4 @@
-export const VERSION = "0.2.6";
+export const VERSION = "0.2.7";
 
 export const REPO = "https://github.com/Pavel1778/LinguaFix";
 export const RELEASES = `${REPO}/releases`;

@@ -75,8 +75,15 @@ Set `mode = "manual"` if you want to decide each correction yourself.
 
 Undo the last correction in either of two ways:
 
-- Press the undo hotkey (`CTRL+Z` by default), or
+- Press the undo hotkey (`SHIFT+BACKSPACE` by default), or
 - Open the GUI and click **«Отменить последнее исправление»** on the main page.
+
+`CTRL+Z` is deliberately **not** the undo hotkey. The daemon does not grab the
+keyboard, so it cannot swallow the chord; if `CTRL+Z` were bound, the
+application's own undo would also fire and delete the corrected word without the
+daemon retyping the original — leaving the cursor in an empty spot. `SHIFT+BACKSPACE`
+is a chord no application uses for undo, so the daemon's replacement is the only
+one that runs. You can bind another key in the GUI if you prefer.
 
 The GUI button asks the running daemon to reverse its own last fix, so it works
 even when the application you typed in groups undo history differently. It
