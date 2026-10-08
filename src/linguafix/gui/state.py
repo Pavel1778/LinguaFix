@@ -22,7 +22,6 @@ from ..daemon_control import (
     last_error as daemon_last_error,
     read_history as daemon_read_history,
     reload_config as daemon_reload_config,
-    request_history as daemon_request_history,
     restart as daemon_restart,
     start as daemon_start,
     stop as daemon_stop,
@@ -132,12 +131,14 @@ class GuiState:
         return daemon_undo_last_fix()
 
     def read_history(self) -> list[dict[str, object]]:
-        """Ask the daemon to refresh its history and return the snapshot.
+        """Return the daemon's recent corrections from its on-disk snapshot.
 
-        Falls back to the last snapshot when no daemon is running. Every entry
-        is metadata only (word length, layouts, timestamp, undone flag).
+        The daemon writes ``history.json`` whenever its history changes (a fix
+        or an undo), so the GUI only reads the file here and never signals the
+        daemon. A signal on the poll timer was the source of the ``Received
+        SIGUSR2`` log spam. Every entry is metadata only (word length, layouts,
+        timestamp, undone flag).
         """
-        daemon_request_history()
         return daemon_read_history()
 
     def in_quiet_hours(self) -> bool:

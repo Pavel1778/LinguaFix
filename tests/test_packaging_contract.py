@@ -86,6 +86,14 @@ def test_build_script_strips_bytecode() -> None:
     assert "*.pyc" in script
 
 
+def test_postinst_reloads_systemd_user_daemon() -> None:
+    script = BUILD_DEB.read_text(encoding="utf-8")
+    # Without a daemon-reload after the unit file is replaced, the next
+    # ``systemctl --user restart linguafix.service`` warns that the unit changed
+    # on disk.
+    assert "systemctl --user daemon-reload" in script
+
+
 @pytest.mark.skipif(shutil.which("dpkg-deb") is None, reason="dpkg-deb not available")
 def test_deb_carries_css_and_unit(tmp_path: Path) -> None:
     """Build a throwaway .deb and assert the GUI CSS and unit are inside it."""

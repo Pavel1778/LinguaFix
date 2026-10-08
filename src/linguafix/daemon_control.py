@@ -360,11 +360,11 @@ def undo_last_fix() -> bool:
 
 
 def request_history() -> bool:
-    """Ask the running daemon to refresh its metadata-only history snapshot.
+    """Ask the running daemon to rewrite its metadata-only history snapshot.
 
-    The daemon answers asynchronously by writing ``history.json`` into the cache
-    directory (see :func:`read_history`). Returns ``False`` when no daemon is
-    running.
+    The daemon already writes ``history.json`` whenever its history changes, so
+    the GUI no longer needs this; it remains for a manual refresh. Returns
+    ``False`` when no daemon is running.
     """
     pid = read_pid()
     if pid is None:

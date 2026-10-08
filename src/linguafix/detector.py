@@ -313,6 +313,58 @@ class LanguageDetector:
             return None
         return self._taught_conversion(stripped, current_layout)
 
+    def forced_short_layout(self, text: str, current_layout: str) -> str | None:
+        """Return a layout to force a short token into, or ``None``.
+
+        A 1-2 character token is below :attr:`min_word_length`, so the ordinary
+        detector never considers it. When the user presses the explicit fix
+        hotkey on such a token (``фт`` -> ``an``), a conversion is applied only
+        when it is unambiguous: the converted form must be a word the detector
+        knows in the target language, the typed form must *not* be a known word
+        in its own language, and exactly one candidate layout must qualify.
+        Anything ambiguous is left untouched, because a wrong short-word guess
+        is worse than none.
+
+        Args:
+            text: The typed token (1-2 characters after stripping).
+            current_layout: The layout the token was typed in.
+
+        Returns:
+            A layout identifier to switch to, or ``None`` to leave the token.
+        """
+        stripped = text.strip()
+        if not stripped or len(stripped) >= self.min_word_length:
+            return None
+        if stripped.lower() in self._user_words:
+            return None
+        taught = self.forced_taught_layout(stripped, current_layout)
+        if taught is not None:
+            return taught
+
+        current_language = self._layout_language(current_layout)
+        if current_language and stripped.lower() in self._vocabularies.get(current_language, set()):
+            # The token already reads as a word where it was typed.
+            return None
+
+        best_layout: str | None = None
+        candidates = 0
+        for layout in self.converter.available_layouts:
+            if layout == current_layout:
+                continue
+            language = self._layout_language(layout)
+            if language is None or language not in self._vocabularies:
+                continue
+            converted = self.converter.convert(stripped, current_layout, layout).strip()
+            if not converted or converted == stripped:
+                continue
+            if converted.lower() not in self._vocabularies.get(language, set()):
+                continue
+            best_layout = layout
+            candidates += 1
+        if candidates != 1:
+            return None
+        return best_layout
+
     def _bigram_score(self, word: str, language: str) -> float:
         """Return the average log-probability of ``word`` in ``language``."""
         model = self._bigrams.get(language, {})

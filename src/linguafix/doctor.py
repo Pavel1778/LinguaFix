@@ -240,6 +240,27 @@ def check_tools() -> CheckResult:
     return CheckResult("Внешние утилиты", OK, detail)
 
 
+def check_gui_libraries() -> CheckResult:
+    """Check whether the GTK4/libadwaita GUI stack is present.
+
+    The GUI binary depends on the system PyGObject stack, which is only an
+    optional ``Recommends`` of the ``.deb`` (a headless server install never
+    needs it). A user who downloads the package and types ``linguafix gui``
+    would otherwise only see the bare "install GTK4" message; this check names
+    the exact packages up front.
+    """
+    from .gui import gtk_available
+
+    if gtk_available():
+        return CheckResult("Графический интерфейс", OK, "GTK4 и libadwaita доступны")
+    return CheckResult(
+        "Графический интерфейс",
+        WARN,
+        "нет GTK4/libadwaita (GUI недоступен)",
+        "sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1",
+    )
+
+
 def check_gnome_version() -> CheckResult:
     """Check the GNOME Shell version against the supported range."""
     version = _gnome_major_version()
@@ -317,6 +338,7 @@ def collect_checks(config: Config | None = None) -> list[CheckResult]:
         check_event_devices(),
         check_uinput(),
         check_tools(),
+        check_gui_libraries(),
         check_gnome_version(),
     ]
     results.extend(check_backends(cfg))

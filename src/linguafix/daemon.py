@@ -512,17 +512,22 @@ class LinguaFixDaemon:
         logger.info("Received SIGUSR2; scheduling history snapshot")
         self._history_requested = True
 
-    def _write_history_snapshot(self) -> None:
+    def _write_history_snapshot(self, history: list[dict[str, object]] | None = None) -> None:
         """Write the metadata-only history snapshot for the GUI to read.
 
         The file holds only word *lengths*, layouts and timestamps; the typed
         text is never included. It is written atomically so the GUI never reads
-        a half-written file.
+        a half-written file. ``history`` lets a background thread write the file
+        without the GUI ever signalling the daemon (see ``CLI cmd_fix``).
+
+        Args:
+            history: The entries to write. When ``None`` the daemon's own
+                in-memory history is used.
         """
         path = cache_dir() / HISTORY_FILE_NAME
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            payload = {"history": self.history_snapshot()}
+            payload = {"history": self.history_snapshot() if history is None else history}
             tmp = path.with_suffix(".tmp")
             tmp.write_text(json.dumps(payload), encoding="utf-8")
             os.replace(tmp, path)
@@ -877,11 +882,19 @@ class LinguaFixDaemon:
         self._persist_config()
 
     def _persist_config(self) -> None:
-        """Write the current configuration back to disk, best-effort."""
-        try:
-            from .config import save_config
+        """Write the current configuration back to disk, best-effort.
 
-            save_config(self.config)
+        Only the field the daemon changed is applied, onto the *current* file
+        contents. Dumping the daemon's whole in-memory copy would clobber a
+        setting the GUI just saved (for example ``typo_correction`` turned on in
+        the app) whenever the daemon's copy predates it.
+        """
+        try:
+            from .config import load_config, save_config
+
+            disk = load_config()
+            disk.mode = self.config.mode
+            save_config(disk)
         except Exception:
             logger.debug("Could not persist configuration", exc_info=True)
 
@@ -1029,6 +1042,12 @@ class LinguaFixDaemon:
             }
         )
         self._fix_history = self._fix_history[-self.config.history_size :]
+        # Refresh the on-disk snapshot here, on the event-loop thread, so the GUI
+        # only ever *reads* it. The GUI used to signal the daemon (SIGUSR2) on a
+        # 2 s timer to have it written, which spammed the log even when nothing
+        # had changed; writing only when the history actually changes removes the
+        # signal entirely.
+        self._write_history_snapshot()
         return entry_id
 
     def history_snapshot(self) -> list[dict[str, object]]:
@@ -1042,6 +1061,7 @@ class LinguaFixDaemon:
         for entry in self._fix_history:
             if entry["id"] == entry_id:
                 entry["undone"] = True
+                self._write_history_snapshot()
                 return
 
     def _undo_last_fix(self, entry_id: int | None = None) -> bool:
@@ -1233,9 +1253,16 @@ class LinguaFixDaemon:
             and len(buffer) < self.config.min_word_length
             and self.detector.forced_taught_layout(buffer, self.switcher.get_current_layout())
         )
-        if len(buffer) < self.config.min_word_length and not forced_taught:
+        # A 1-2 character token the user explicitly asks to fix: the ordinary
+        # detector never sees it (below ``min_word_length``), so the hotkey
+        # resolves an unambiguous conversion (``фт`` -> ``an``) itself.
+        forced_short: str | None = None
+        if force and len(buffer) < self.config.min_word_length:
+            forced_short = self.detector.forced_short_layout(
+                buffer, self.switcher.get_current_layout()
+            )
+        if len(buffer) < self.config.min_word_length and not (forced_taught or forced_short):
             return
-
         if self.detector.is_stop_word(buffer):
             logger.debug("Buffer of length %d is a stop word; skipping", len(buffer))
             return
@@ -1279,7 +1306,9 @@ class LinguaFixDaemon:
 
         neighbor = self._last_word or None
         current = self.switcher.get_current_layout()
-        target = self.detector.target_layout(buffer, current, neighbor)
+        # The hotkey may have resolved an unambiguous short-word conversion
+        # itself; the ordinary detector would only see a below-min-length token.
+        target = forced_short or self.detector.target_layout(buffer, current, neighbor)
         if target is None:
             # Layout detection found nothing. A separate, opt-in step then looks
             # for a single-character typo in the language the user is typing;
@@ -1572,7 +1601,6 @@ class LinguaFixDaemon:
             if self._history_requested:
                 self._history_requested = False
                 self._write_history_snapshot()
-
             if registered == 0:
                 # Every keyboard disappeared (for example a USB keyboard was
                 # unplugged). Retry discovery instead of spinning: systemd's

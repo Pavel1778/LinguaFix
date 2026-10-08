@@ -123,6 +123,14 @@ if command -v modprobe >/dev/null 2>&1; then
     modprobe uinput 2>/dev/null || true
 fi
 
+# Reload the systemd user manager after the unit file was replaced, so a later
+# ``systemctl --user restart linguafix.service`` does not warn that the unit
+# changed on disk. Best effort: an install without a running user bus still
+# succeeds.
+if command -v systemctl >/dev/null 2>&1; then
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+fi
+
 # Enable the user unit for every user, without touching anyone's session.
 # --global writes the symlink under /etc/systemd/user, which is what makes the
 # service start on the next login. Do not fail the install if systemd is absent.

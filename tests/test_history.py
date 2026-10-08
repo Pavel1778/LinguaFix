@@ -181,3 +181,76 @@ def test_request_history_without_daemon_is_false(
 ) -> None:
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     assert daemon_control.request_history() is False
+
+
+def test_recording_a_fix_writes_the_snapshot(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The daemon refreshes the snapshot itself on every fix.
+
+    The GUI used to signal the daemon (SIGUSR2) on a 2 s poll timer to have the
+    file written, which spammed the log; writing on change removes the signal.
+    """
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    daemon = make_daemon()
+    press(daemon, "ghbdtn")
+    tap(daemon, "KEY_SPACE")
+    # No explicit ``_write_history_snapshot`` call: recording the fix wrote it.
+    assert (daemon_control.cache_dir() / "history.json").exists()
+    assert daemon_control.read_history()[0]["length"] == 6
+
+
+def test_undo_refreshes_the_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    daemon = make_daemon()
+    press(daemon, "ghbdtn")
+    tap(daemon, "KEY_SPACE")
+    assert daemon._undo_last_fix() is True
+    assert daemon_control.read_history()[0]["undone"] is True
+
+
+def test_gui_reads_the_snapshot_without_signalling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The GUI reads the daemon-written snapshot; it never sends a signal.
+
+    Importing ``GuiState`` here (rather than in a GTK test) is deliberate: this
+    file has no display requirement, and reading history must not either.
+    """
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    from linguafix.gui.state import GuiState
+
+    daemon = make_daemon()
+    press(daemon, "ghbdtn")
+    tap(daemon, "KEY_SPACE")
+
+    entries = GuiState().read_history()
+    assert entries[0]["length"] == 6
+    assert entries[0]["source"] == "us"
+    assert entries[0]["target"] == "ru"
+
+
+def test_persist_config_does_not_clobber_other_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The daemon persists only the field it changed.
+
+    Regression: ``_persist_config`` used to dump its whole (possibly stale)
+    in-memory config, wiping a setting the GUI had just saved — for example
+    ``typo_correction`` turning back to false after the running daemon cycled
+    the mode.
+    """
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "cfg"))
+    from linguafix.config import Config as Cfg, load_config, save_config
+
+    saved = Cfg()
+    saved.typo_correction = True
+    saved.mode = "auto"
+    save_config(saved)
+
+    daemon = make_daemon(mode="manual")  # stale copy: T9 off, mode manual
+    daemon._persist_config()
+
+    reloaded = load_config()
+    assert reloaded.typo_correction is True  # not clobbered by the stale copy
+    assert reloaded.mode == "manual"  # the daemon's own change was applied
