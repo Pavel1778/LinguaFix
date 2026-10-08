@@ -38,10 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A config still carrying the old default exception `gedit` (not installed on
   Debian 13 / GNOME 48) is migrated to `texteditor` (GNOME Text Editor) on load,
   so the current default text editor is actually excepted.
-- In `manual` mode the layout-neutral passes (notably T9 typo correction) now
-  run: previously `mode = "manual"` gated *every* automatic correction, so the
-  opt-in T9 pass never fired (`langauge` → `language` did nothing). Only the
-  layout switch stays manual.
+- **`manual` mode semantics (contract change).** Previously `mode = "manual"`
+  gated *every* automatic correction, so an opt-in T9 pass never fired
+  (`langauge` → `language` did nothing). Now only the automatic *layout switch*
+  is manual; layout-neutral passes (T9 typo, punctuation) run whenever their own
+  switches are on, in every mode. A user who wants a fully quiet daemon turns
+  `typo_correction` and `punctuation_correction` off (both default off). The
+  settings-tab subtitle says so; `tests/test_typo_daemon.py` and
+  `tests/test_user_config_migration.py` pin the behaviour.
 
 ### Fixed
 

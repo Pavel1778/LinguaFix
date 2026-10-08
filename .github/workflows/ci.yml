@@ -90,6 +90,44 @@ jobs:
             --cov=linguafix --cov-config=coverage-gui.rc \
             --cov-report=term-missing --cov-fail-under=85
 
+  package:
+    name: Build .deb (downloadable artifact)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev
+
+      # Build the same ``.deb`` the release job publishes, so a reviewer can
+      # install and test the exact artifact from the PR's Checks page without
+      # cloning and building by hand. The version comes from ``pyproject.toml``.
+      - name: Build .deb
+        run: bash scripts/build_deb.sh
+
+      - name: Write SHA256
+        run: |
+          cd dist
+          sha256sum *.deb | tee SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload .deb artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linguafix-deb
+          path: |
+            dist/*.deb
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+
   site:
     name: Landing page build
     runs-on: ubuntu-latest

@@ -7,6 +7,8 @@ privacy invariant.
 
 from __future__ import annotations
 
+import logging
+import signal
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
@@ -282,3 +284,25 @@ def test_history_reader_never_signals_the_daemon(
     assert (
         gui_state.GuiState.read_history(gui_state.GuiState.__new__(gui_state.GuiState)) == sentinel
     )
+
+
+def test_sigusr2_handler_logs_at_debug_not_info(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The SIGUSR2 handler must never emit an INFO line.
+
+    Root cause of the live v0.2.7 ``Received SIGUSR2; scheduling history
+    snapshot`` spam: the handler logged at INFO. A single GUI poll tick, a stray
+    signal, or a chatty caller then filled the journal -- and INFO is the
+    default level, so the user saw it. The handler now logs at DEBUG, so even a
+    signal storm is invisible at the default level. This pins that contract: if
+    the handler is ever moved back to INFO, the live spam returns.
+    """
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    daemon = make_daemon()
+    with caplog.at_level(logging.INFO, logger="linguafix.daemon"):
+        daemon._handle_history(signal.SIGUSR2, None)
+    info_lines = [r for r in caplog.records if r.levelno >= logging.INFO]
+    assert not info_lines, [r.getMessage() for r in info_lines]
+    # The flag is still set: the snapshot is scheduled, just not announced.
+    assert daemon._history_requested is True

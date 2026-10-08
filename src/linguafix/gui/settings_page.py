@@ -38,7 +38,13 @@ class SettingsPage(BoundPreferencesPage):
             [MODE_LABELS[m] for m in MODE_ORDER],
             self._config.mode,
             self._on_mode_selected,
-            subtitle="Авто исправляет сразу, ручной — только по хоткею",
+            # The layout switch is what ``manual`` gates. The opt-in passes
+            # (T9, punctuation) are layout-neutral and still run unless their
+            # own switches are off, so a "fully quiet" manual needs those off.
+            subtitle=(
+                "Авто исправляет сразу, ручной — только по хоткею "
+                "(опечатки и пунктуация — по своим переключателям)"
+            ),
         )
         self.add(group)
 
