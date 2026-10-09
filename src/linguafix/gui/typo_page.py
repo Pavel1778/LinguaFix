@@ -141,8 +141,10 @@ class TypoPage(BoundPreferencesPage):
         )
         self.add(punct_group)
 
-        self._examples = self._build_examples_group()
-        self.add(self._examples)
+        examples = self._build_examples_group()
+        examples_group = Adw.PreferencesGroup()
+        examples_group.add(examples)
+        self.add(examples_group)
 
         check = Gtk.Button(label="Проверить сейчас")
         check.add_css_class("pill")
