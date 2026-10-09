@@ -326,11 +326,13 @@ class TypoPage(BoundPreferencesPage):
         self._sync_mode_combo(self._typo_mode_combo, self._config.typo_mode)
         self._sync_mode_combo(self._punct_mode_combo, self._config.punctuation_mode)
 
-    @staticmethod
-    def _sync_mode_combo(combo: Adw.ComboRow, mode: str) -> None:
-        combo.handler_block_by_func(TypoPage._on_combo)
+    def _sync_mode_combo(self, combo: Adw.ComboRow, mode: str) -> None:
+        # ``_on_combo`` is inherited from ``BoundPreferencesPage``; blocking must
+        # use the same *bound* method the signal was connected with, so the
+        # helper is an instance method rather than referencing ``TypoPage``.
+        combo.handler_block_by_func(self._on_combo)
         combo.set_selected(_MODE_OPTIONS.index(mode) if mode in _MODE_OPTIONS else 0)
-        combo.handler_unblock_by_func(TypoPage._on_combo)
+        combo.handler_unblock_by_func(self._on_combo)
 
     @property
     def toggle(self) -> BigToggle:
