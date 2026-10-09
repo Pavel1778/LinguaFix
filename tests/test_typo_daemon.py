@@ -127,9 +127,13 @@ def test_typo_is_silent_in_manual_mode_by_default() -> None:
     assert _injector(daemon).replacements == []
 
 
-def test_typo_runs_in_manual_mode_when_explicitly_enabled() -> None:
-    """``typo_in_manual = true`` restores the old automatic T9-in-manual opt-in."""
-    daemon = _make_daemon(typo_correction=True, mode="manual", typo_in_manual=True)
+def test_typo_runs_in_manual_mode_when_mode_is_auto() -> None:
+    """The T9 mode is independent of the layout mode.
+
+    A user who wants manual *layout* switching but automatic typo correction
+    sets ``typo_mode = "auto"`` while the global ``mode`` stays ``manual``.
+    """
+    daemon = _make_daemon(typo_mode="auto", mode="manual")
     _press(daemon, "langauge")
     _press(daemon, " ")
     assert _injector(daemon).replacements == [(9, "language ", "us")]

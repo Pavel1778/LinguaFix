@@ -295,6 +295,8 @@ class LinguaFixDaemon:
             "reload": self._parse_hotkey(config.hotkey_reload_config),
             "selection_fix": self._parse_hotkey(config.selection_fix_hotkey),
             "toggle_layout": self._parse_hotkey(config.hotkey_toggle_layout_last_word),
+            "typo_fix": self._parse_hotkey(config.typo_hotkey),
+            "punctuation_fix": self._parse_hotkey(config.punctuation_hotkey),
         }
         # Modifier families currently held down, used to match hotkeys.
         self._held_modifiers: set[str] = set()
@@ -966,6 +968,10 @@ class LinguaFixDaemon:
             self.selection_fix.convert_selection()
         elif action == "toggle_layout":
             self._toggle_last_word_layout()
+        elif action == "typo_fix":
+            self._force_typo_fix()
+        elif action == "punctuation_fix":
+            self._force_punctuation_fix()
 
     def _force_fix_memory_word(self) -> None:
         """Force a fix of the most recently flushed word.
@@ -1028,12 +1034,12 @@ class LinguaFixDaemon:
         Returns:
             The corrected word, or ``None`` when no confident fix exists.
         """
-        if not self.config.typo_correction:
-            return None
-        if self.config.mode == "manual" and not (force or self.config.typo_in_manual):
-            # In manual mode the user is not asking for automatic rewriting, so
-            # an unsolicited T9 guess is exactly the "T9-спам" they reported.
-            # Auto/hybrid keep honouring ``typo_correction``.
+        # The per-feature mode is authoritative: ``off`` never corrects,
+        # ``manual`` corrects only on the explicit hotkey (``force``), and
+        # ``auto``/``hybrid`` correct automatically. An unsolicited guess in
+        # ``manual`` is exactly the "T9-спам" that was reported.
+        mode = self.config.typo_mode
+        if mode == "off" or (mode == "manual" and not force):
             return None
         word = buffer.strip()
         if len(word) < self.config.typo_min_word_length or not word.isalpha():
@@ -1120,7 +1126,9 @@ class LinguaFixDaemon:
             fix_spacing=cfg.punctuation_fix_spacing,
         )
 
-    def _punctuation_correction(self, buffer: str, current: str) -> str | None:
+    def _punctuation_correction(
+        self, buffer: str, current: str, *, force: bool = False
+    ) -> str | None:
         """Return a punctuation-cleaned buffer, or ``None`` when nothing changes.
 
         Punctuation is not buffered when ``on_punctuation`` consumes it, so this
@@ -1128,7 +1136,10 @@ class LinguaFixDaemon:
         backend cannot type (the ``uinput`` backend cannot produce an em dash or
         an ellipsis) is refused wholesale rather than left half-applied.
         """
-        if not self.config.punctuation_correction:
+        # The per-feature mode mirrors T9: ``off`` never runs, ``manual`` only
+        # on the explicit hotkey, ``auto``/``hybrid`` on the boundary trigger.
+        mode = self.config.punctuation_mode
+        if mode == "off" or (mode == "manual" and not force):
             return None
         corrected = self._punctuation.correct(buffer, current)
         if corrected == buffer:
@@ -1303,6 +1314,69 @@ class LinguaFixDaemon:
                 self._scancodes = []
             self._last_flushed_word = converted
             self._last_flushed_corrected = False
+        return True
+
+    def _force_typo_fix(self) -> bool:
+        """Apply the T9 typo pass to the last word, on the explicit hotkey.
+
+        Manual T9 corrects only the word the user is looking at, and it must
+        never switch layout (that is the double-Shift hotkey's job), so this
+        runs the typo pass alone rather than ``_process_buffer_inner(force=True)``.
+        """
+        return self._force_lexical_fix(
+            lambda word, layout: self._typo_correction(word, layout, force=True), "typo"
+        )
+
+    def _force_punctuation_fix(self) -> bool:
+        """Apply the punctuation pass to the last word, on the explicit hotkey."""
+        return self._force_lexical_fix(
+            lambda word, layout: self._punctuation_correction(word, layout, force=True),
+            "punctuation",
+        )
+
+    def _force_lexical_fix(self, correct: Callable[[str, str], str | None], label: str) -> bool:
+        """Replace the on-screen last word with ``correct``'s suggestion.
+
+        Shared by the manual T9 and punctuation hotkeys: both are layout-neutral
+        single-word rewrites, so neither switches layout. The live buffer is
+        used when present, otherwise the word remembered from the last flush.
+        """
+        with self._lock:
+            if self.buffer:
+                word = self.buffer.strip()
+                backspace_count = len(self._scancodes)
+                from_buffer = True
+            else:
+                word = self._last_flushed_word
+                backspace_count = len(word)
+                from_buffer = False
+        if not word:
+            logger.debug("%s hotkey ignored: no word to correct", label)
+            return False
+        current = self.switcher.get_current_layout()
+        fixed = correct(word, current)
+        if fixed is None or fixed == word:
+            logger.debug("%s hotkey: no confident correction", label)
+            return False
+        logger.info("Manual %s fix of length %d", label, len(word))
+        if self.dry_run:
+            logger.info("Dry run: skipping text replacement")
+            return True
+        if self._shutdown_requested:
+            logger.info("Shutdown requested; skipping replacement")
+            return False
+        if not self.injector.replace_text(backspace_count, fixed, current):
+            logger.warning("Manual %s fix failed to replace text", label)
+            return False
+        self._record_undo(word, current, backspace_count, source=current, target=current)
+        with self._lock:
+            if from_buffer:
+                self.buffer = ""
+                self._scancodes = []
+            # The on-screen word is now the corrected form; keep the memory in
+            # step so a repeat hotkey does not re-fix already-correct text.
+            self._last_flushed_word = fixed
+            self._last_flushed_corrected = True
         return True
 
     def _key_to_char(self, code: int) -> str | None:
@@ -1537,7 +1611,7 @@ class LinguaFixDaemon:
                 # Neither layout detection nor typo correction applied. A final
                 # opt-in pass fixes punctuation (dashes, ellipsis, spacing),
                 # staying in the current layout and never touching letters.
-                punctuated = self._punctuation_correction(buffer, current)
+                punctuated = self._punctuation_correction(buffer, current, force=force)
                 if punctuated is None:
                     return
                 converted = punctuated
@@ -1699,6 +1773,8 @@ class LinguaFixDaemon:
             "reload": self._parse_hotkey(new_config.hotkey_reload_config),
             "selection_fix": self._parse_hotkey(new_config.selection_fix_hotkey),
             "toggle_layout": self._parse_hotkey(new_config.hotkey_toggle_layout_last_word),
+            "typo_fix": self._parse_hotkey(new_config.typo_hotkey),
+            "punctuation_fix": self._parse_hotkey(new_config.punctuation_hotkey),
         }
         self._double_tap_hotkeys = self._build_double_tap_hotkeys(new_config)
         self._last_modifier_tap.clear()

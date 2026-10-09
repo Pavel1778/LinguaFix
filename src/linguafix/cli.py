@@ -539,7 +539,7 @@ def _typo_correction_for_cli(
     from .daemon import _INTERNAL_SEPARATOR_RE
     from .typo import TypoCorrector
 
-    if not config.typo_correction:
+    if config.typo_mode == "off":
         return None
     word = text.strip()
     if len(word) < config.typo_min_word_length or not word.isalpha():

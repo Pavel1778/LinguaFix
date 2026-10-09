@@ -116,15 +116,25 @@ DEFAULT_TYPO_TOP1_RATIO_STRICT: Final[float] = 10.0
 # may see the same on-screen word twice (a boundary flush then a late idle
 # flush), and re-correcting it would rewrite already-correct text.
 DEFAULT_TYPO_DEBOUNCE_SECONDS: Final[float] = 5.0
-# T9 stays opt-in in every mode, but in ``manual`` the user is deliberately not
-# asking for automatic rewriting, so a wrong T9 guess is especially unwelcome.
-# Off here means manual mode fixes typos only on the explicit hotkey; auto and
-# hybrid keep honouring ``typo_correction``.
-DEFAULT_TYPO_IN_MANUAL: Final[bool] = False
-# Punctuation cleanup. Off by default: rewriting punctuation inside code,
-# formulas or URLs does more harm than good, so the user opts in. The
-# sub-flags stay on so enabling the master switch is useful out of the box.
-DEFAULT_PUNCTUATION_CORRECTION: Final[bool] = False
+# T9 mode is independent of the global ``mode``: a user may want automatic
+# layout switching but manual (hotkey-only) typo correction, or the reverse.
+# ``off`` disables T9 entirely; ``auto``/``hybrid`` correct on a word boundary;
+# ``manual`` corrects only on the explicit hotkey. ``typo_correction`` is the
+# legacy boolean and is derived from this mode (``mode != "off"``).
+DEFAULT_TYPO_MODE: Final[str] = "off"
+# Punctuation cleanup has its own mode for the same reason. Off by default:
+# rewriting punctuation inside code, formulas or URLs does more harm than good.
+DEFAULT_PUNCTUATION_MODE: Final[str] = "off"
+# The per-feature modes share the global mode vocabulary plus ``off``.
+VALID_FEATURE_MODES: Final[tuple[str, ...]] = ("auto", "manual", "hybrid", "off")
+# Default hotkeys for the manual T9 / punctuation actions.
+DEFAULT_TYPO_HOTKEY: Final[str] = "CTRL+SHIFT+F"
+DEFAULT_PUNCTUATION_HOTKEY: Final[str] = "CTRL+SHIFT+P"
+# The pre-0.2.8 T9 mode migrates from the legacy ``typo_correction`` boolean
+# (and, in ``manual``, from the now-removed ``typo_in_manual`` opt-in).
+#
+# Punctuation sub-flags. They stay on so that switching the punctuation mode on
+# is useful out of the box.
 DEFAULT_PUNCTUATION_DASHES: Final[bool] = True
 DEFAULT_PUNCTUATION_ELLIPSIS: Final[bool] = True
 DEFAULT_PUNCTUATION_SMART_QUOTES: Final[bool] = False
@@ -173,6 +183,24 @@ FORBIDDEN_HOTKEY_KEYS: Final[frozenset[str]] = frozenset(
     {"ESC", "ESCAPE", "ENTER", "RETURN", "KPENTER", "SPACE", "TAB"}
 )
 _HOTKEY_TOKEN_RE: Final[re.Pattern[str]] = re.compile(r"^[A-Z0-9+_]+$")
+
+
+def _derive_feature_mode(enabled: bool, global_mode: str) -> str:
+    """Return the per-feature mode implied by a legacy boolean and global mode.
+
+    ``off`` when the feature was disabled; ``manual`` when it was enabled and
+    the global mode is manual (preserving the old "hotkey only" behaviour);
+    otherwise the global mode itself.
+    """
+    if not enabled:
+        return "off"
+    if global_mode == "manual":
+        return "manual"
+    if global_mode in VALID_FEATURE_MODES:
+        return global_mode
+    return "auto"
+
+
 _HHMM_RE: Final[re.Pattern[str]] = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
 
@@ -468,6 +496,11 @@ class Config:
     quiet_hours_end: str = "08:00"
 
     # --- Task F: T9 typo correction ----------------------------------------
+    # ``typo_mode`` is the source of truth (auto/manual/hybrid/off).
+    # ``typo_correction`` is the legacy on/off boolean: it is kept in sync as
+    # ``typo_mode != "off"`` so old configs, the CLI and any external reader
+    # keep working. New code must read ``typo_mode``.
+    typo_mode: str = DEFAULT_TYPO_MODE
     typo_correction: bool = False
     typo_max_distance: int = DEFAULT_TYPO_MAX_DISTANCE
     typo_min_word_length: int = DEFAULT_TYPO_MIN_WORD_LENGTH
@@ -475,10 +508,14 @@ class Config:
     typo_long_word_threshold: int = DEFAULT_TYPO_LONG_WORD_THRESHOLD
     typo_top1_ratio_strict: float = DEFAULT_TYPO_TOP1_RATIO_STRICT
     typo_debounce_seconds: float = DEFAULT_TYPO_DEBOUNCE_SECONDS
-    typo_in_manual: bool = DEFAULT_TYPO_IN_MANUAL
+    typo_hotkey: str = DEFAULT_TYPO_HOTKEY
 
     # --- punctuation cleanup ----------------------------------------------
-    punctuation_correction: bool = DEFAULT_PUNCTUATION_CORRECTION
+    # Same pattern as T9: ``punctuation_mode`` is authoritative and
+    # ``punctuation_correction`` mirrors ``punctuation_mode != "off"``.
+    punctuation_mode: str = DEFAULT_PUNCTUATION_MODE
+    punctuation_correction: bool = False
+    punctuation_hotkey: str = DEFAULT_PUNCTUATION_HOTKEY
     punctuation_dashes: bool = DEFAULT_PUNCTUATION_DASHES
     punctuation_ellipsis: bool = DEFAULT_PUNCTUATION_ELLIPSIS
     punctuation_smart_quotes: bool = DEFAULT_PUNCTUATION_SMART_QUOTES
@@ -694,7 +731,19 @@ class Config:
         self.quiet_hours_end = _validate_hhmm(self.quiet_hours_end, "quiet_hours_end")
 
         # --- T9 typo correction --------------------------------------------
-        self.typo_correction = bool(self.typo_correction)
+        self.typo_mode = str(self.typo_mode).lower()
+        if self.typo_mode not in VALID_FEATURE_MODES:
+            raise ValueError(f"typo_mode must be one of {VALID_FEATURE_MODES}")
+        # ``typo_mode`` is authoritative; the legacy boolean is derived from it
+        # so the rest of the code may read either field. When a caller sets only
+        # the legacy boolean (``Config(typo_correction=True)``, or the GUI
+        # toggling it), the mode is reconstructed from the global mode so the
+        # setting still takes effect. Legacy files are handled in
+        # :meth:`from_dict`, before validation.
+        if self.typo_correction and self.typo_mode == "off":
+            self.typo_mode = _derive_feature_mode(True, self.mode)
+        self.typo_correction = self.typo_mode != "off"
+        self.typo_hotkey = normalise_hotkey(self.typo_hotkey)
         self.typo_max_distance = int(self.typo_max_distance)
         if self.typo_max_distance not in (1, 2):
             raise ValueError("typo_max_distance must be 1 or 2")
@@ -713,10 +762,17 @@ class Config:
         self.typo_debounce_seconds = _round_float(float(self.typo_debounce_seconds))
         if self.typo_debounce_seconds < 0:
             raise ValueError("typo_debounce_seconds must be >= 0")
-        self.typo_in_manual = bool(self.typo_in_manual)
 
         # --- punctuation cleanup -------------------------------------------
-        self.punctuation_correction = bool(self.punctuation_correction)
+        self.punctuation_mode = str(self.punctuation_mode).lower()
+        if self.punctuation_mode not in VALID_FEATURE_MODES:
+            raise ValueError(f"punctuation_mode must be one of {VALID_FEATURE_MODES}")
+        # Mirror of the T9 reconciliation above: ``punctuation_mode`` is
+        # authoritative and the legacy boolean follows it.
+        if self.punctuation_correction and self.punctuation_mode == "off":
+            self.punctuation_mode = _derive_feature_mode(True, self.mode)
+        self.punctuation_correction = self.punctuation_mode != "off"
+        self.punctuation_hotkey = normalise_hotkey(self.punctuation_hotkey)
         self.punctuation_dashes = bool(self.punctuation_dashes)
         self.punctuation_ellipsis = bool(self.punctuation_ellipsis)
         self.punctuation_smart_quotes = bool(self.punctuation_smart_quotes)
@@ -757,7 +813,8 @@ class Config:
         """
         known = set(cls.__dataclass_fields__)
         filtered: dict[str, Any] = {}
-        for key, value in _flatten_sections(data).items():
+        flat = _flatten_sections(data)
+        for key, value in flat.items():
             if key in known:
                 filtered[key] = value
                 continue
@@ -767,6 +824,7 @@ class Config:
                 if key.startswith(prefix) and key[len(prefix) :] in known:
                     filtered[key[len(prefix) :]] = value
                     break
+        cls._migrate_feature_modes(flat, filtered)
         try:
             return cls(**filtered)
         except (TypeError, ValueError) as exc:
@@ -776,6 +834,35 @@ class Config:
             # settings back to defaults.
             logger.warning("Invalid configuration value (%s); dropping invalid keys", exc)
             return cls(**cls._drop_invalid(filtered))
+
+    @classmethod
+    def _migrate_feature_modes(cls, flat: dict[str, Any], filtered: dict[str, Any]) -> None:
+        """Derive the per-feature modes from a legacy config's booleans.
+
+        A file written before the independent modes has ``typo_correction``
+        (and/or ``punctuation_correction``) but no ``*_mode``. The mode is
+        derived so the previous behaviour is preserved:
+
+        * the boolean off -> the feature's mode is ``off``;
+        * the boolean on and the global ``mode`` is ``manual`` -> the feature's
+          mode is ``manual`` (hotkey-only, matching the old opt-in);
+        * the boolean on otherwise -> the feature's mode equals the global
+          ``mode``.
+
+        An explicit ``*_mode`` in the file always wins, so re-reading a file the
+        new code wrote is a no-op.
+        """
+        global_mode = str(flat.get("mode", "auto")).lower()
+        if global_mode not in VALID_MODES:
+            global_mode = "auto"
+        for feature in ("typo", "punctuation"):
+            if f"{feature}_mode" in filtered:
+                continue
+            if f"{feature}_correction" not in filtered:
+                continue
+            filtered[f"{feature}_mode"] = _derive_feature_mode(
+                bool(filtered[f"{feature}_correction"]), global_mode
+            )
 
     @classmethod
     def _drop_invalid(cls, values: dict[str, Any]) -> dict[str, Any]:
@@ -816,8 +903,21 @@ class Config:
         return subset
 
     def to_dict(self) -> dict[str, Any]:
-        """Return a plain ``dict`` representation suitable for TOML dumping."""
-        return asdict(self)
+        """Return a plain ``dict`` representation suitable for TOML dumping.
+
+        The per-feature mode and its legacy boolean are reconciled here as well
+        as in :meth:`validate`, so a config whose boolean was set directly (the
+        GUI toggling ``typo_correction``) still dumps a consistent pair and
+        never persists an enabled feature as ``*_mode = "off"``.
+        """
+        data = asdict(self)
+        for feature in ("typo", "punctuation"):
+            mode = data[f"{feature}_mode"]
+            if bool(data[f"{feature}_correction"]) and mode == "off":
+                mode = _derive_feature_mode(True, data["mode"])
+            data[f"{feature}_mode"] = mode
+            data[f"{feature}_correction"] = mode != "off"
+        return data
 
 
 def _write_default(path: Path, config: Config) -> None:
@@ -852,6 +952,13 @@ def _migrations_for(data: dict[str, Any], config: Config) -> list[tuple[str, Any
     changes: list[tuple[str, Any, Any]] = []
     for key, value in config.to_dict().items():
         if key not in flat:
+            # A missing independent-mode key that the load derived from a legacy
+            # boolean is a migration worth persisting, even though the file
+            # never mentioned it.
+            if key in ("typo_mode", "punctuation_mode"):
+                feature = key.removesuffix("_mode")
+                if f"{feature}_correction" in flat:
+                    changes.append((key, "(derived)", value))
             continue
         old = flat[key]
         if old != value:

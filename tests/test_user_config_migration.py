@@ -133,6 +133,38 @@ def test_other_exception_entries_are_kept(tmp_path: Path) -> None:
         assert app in config.exceptions_apps
 
 
+def test_legacy_typo_flag_migrates_to_mode(tmp_path: Path) -> None:
+    """A v0.2.7 file has no ``typo_mode``; it is derived from the boolean.
+
+    The user's file has ``mode = "manual"`` and ``typo_correction = true``, so
+    the previous behaviour was "T9 on, hotkey only": ``typo_mode = "manual"``.
+    """
+    config = _load_user_config(tmp_path)
+    assert config.typo_mode == "manual"
+    assert config.punctuation_mode == "manual"
+
+
+def test_derived_mode_is_persisted_to_file(tmp_path: Path) -> None:
+    """The derived mode must reach the file, like every other migration."""
+    path = tmp_path / "config.toml"
+    path.write_text(USER_CONFIG_V027, encoding="utf-8")
+    load_config(path)
+    text = path.read_text(encoding="utf-8")
+    assert 'typo_mode = "manual"' in text
+    assert 'punctuation_mode = "manual"' in text
+
+
+def test_typo_mode_round_trips_without_rederivation(tmp_path: Path) -> None:
+    """Once written, the explicit mode wins and a second load is a no-op."""
+    path = tmp_path / "config.toml"
+    path.write_text(USER_CONFIG_V027, encoding="utf-8")
+    load_config(path)
+    first = path.read_text(encoding="utf-8")
+    loaded = load_config(path)
+    assert loaded.typo_mode == "manual"
+    assert path.read_text(encoding="utf-8") == first
+
+
 def test_migrated_config_round_trips(tmp_path: Path) -> None:
     """Saving the migrated config must persist the new values (config show)."""
     from linguafix.config import save_config
