@@ -221,6 +221,11 @@ class TypoPage(BoundPreferencesPage):
         mode = "auto" if enabled else "off"
         self._config.typo_mode = mode
         self._config.punctuation_mode = mode
+        # Keep the legacy booleans in step too: ``validate`` treats a ``True``
+        # boolean with an ``off`` mode as "mode unset" and re-derives it from the
+        # global mode, so clearing the mode alone would silently turn it back on.
+        self._config.typo_correction = enabled
+        self._config.punctuation_correction = enabled
         self._config.validate()
         # ``_save`` persists the config and pushes it to a running daemon, so no
         # separate reload is needed here.
@@ -294,10 +299,12 @@ class TypoPage(BoundPreferencesPage):
 
     def _on_reset(self, _button: Gtk.Button) -> None:
         self._config.typo_mode = "off"
+        self._config.typo_correction = False
         self._config.typo_max_distance = 1
         self._config.typo_max_distance_long = 2
         self._config.typo_min_word_length = 4
         self._config.punctuation_mode = "off"
+        self._config.punctuation_correction = False
         self._config.punctuation_dashes = True
         self._config.punctuation_ellipsis = True
         self._config.punctuation_smart_quotes = False
