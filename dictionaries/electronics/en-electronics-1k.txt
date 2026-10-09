@@ -118,7 +118,6 @@ interface
 protocol
 UART
 SPI
-I2C
 PWM
 modulation
 multiplexing
