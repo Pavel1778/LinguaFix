@@ -946,6 +946,46 @@ def test_typo_page_punctuation_switch_persists(
     assert saved == ["save"]
 
 
+def test_typo_page_mode_combo_sets_independent_mode(
+    gui_state: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gui_state, "save", lambda: None)
+    from linguafix.gui.typo_page import TypoPage
+
+    class _Toasts:
+        def add_toast(self, _t: object) -> None:
+            pass
+
+    page = TypoPage(gui_state, _Toasts())
+    page.typo_mode_combo.set_selected(2)  # auto
+    assert gui_state.config.typo_mode == "auto"
+    assert gui_state.config.typo_correction is True
+    # The punctuation mode is untouched by the T9 combo.
+    assert gui_state.config.punctuation_mode == "off"
+    page.typo_mode_combo.set_selected(0)  # off
+    assert gui_state.config.typo_mode == "off"
+    assert gui_state.config.typo_correction is False
+
+
+def test_typo_page_switch_enables_auto_mode(
+    gui_state: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(gui_state, "save", lambda: None)
+    from linguafix.gui.typo_page import TypoPage
+
+    class _Toasts:
+        def add_toast(self, _t: object) -> None:
+            pass
+
+    page = TypoPage(gui_state, _Toasts())
+    assert gui_state.config.typo_mode == "off"
+    page._typo_switch.set_active(True)
+    assert gui_state.config.typo_correction is True
+    assert gui_state.config.typo_mode == "auto"
+    page._typo_switch.set_active(False)
+    assert gui_state.config.typo_mode == "off"
+
+
 def test_desktop_entry_matches_app_id() -> None:
     """The launcher must declare the same app-id the GUI runs under.
 
