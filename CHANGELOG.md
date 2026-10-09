@@ -37,6 +37,12 @@ an independent-mode model for T9 and punctuation.
   words, long-word threshold, confidence margin), an expander with examples, a
   "Проверить сейчас" preview dialog, and a link to the documentation. The tab
   was previously a plain on/off toggle.
+- **Expanded thematic dictionaries to 1000+ words.** The priority categories
+  were too small for professional text (T9 could not recognise terms like
+  `kubectl`, `фотосинтез`, `энтальпия`). Now: `it` ru 328→1010 / en 295→1263,
+  `medicine` ru 228→1579 / en 215→2136, `science` ru 149→1077 / en 152→1692.
+  The remaining categories keep their current size. README counts are
+  regenerated from the files (`scripts/refresh_dict_readmes.py`).
 - Expanded `README.md` and `docs/FAQ.md` with honest dictionary numbers.
 
 ### Changed
