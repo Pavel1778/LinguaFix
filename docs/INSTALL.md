@@ -8,7 +8,7 @@ Wayland. Python 3.10 or newer is required.
 This is the path for regular users. Nothing has to be configured by hand:
 
 ```bash
-sudo apt install ./linguafix_0.2.8.1_all.deb
+sudo apt install ./linguafix_0.2.8.2_all.deb
 ```
 
 That is the whole procedure. The package:

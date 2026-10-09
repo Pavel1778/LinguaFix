@@ -63,6 +63,24 @@ def test_category_files_are_non_trivial() -> None:
             assert all(" " not in w.strip() for w in words[:20])
 
 
+def test_category_readme_counts_are_accurate() -> None:
+    """The documented count must equal the shipped file, so the docs stay honest.
+
+    The READMEs used to say ``~430 слов`` next to a 328-word file; the site reads
+    the real number, so a stale README is a visible inconsistency.
+    """
+    import re
+
+    for cat in CATEGORIES:
+        text = (DICTIONARIES / cat.slug / "README.md").read_text(encoding="utf-8")
+        for language in cat.languages:
+            source = repo_category_source(cat.slug, language)
+            assert source is not None
+            count = len([w for w in source.read_text(encoding="utf-8").splitlines() if w.strip()])
+            pattern = rf"`{language}-{cat.slug}-1k\.txt` \| [^|]+ \| {count} слов"
+            assert re.search(pattern, text), f"{cat.slug}/{language} README count is stale"
+
+
 def test_category_slugs_are_unique() -> None:
     slugs = category_slugs()
     assert len(slugs) == len(set(slugs))

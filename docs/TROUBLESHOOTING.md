@@ -441,6 +441,29 @@ If a specific typo is missed, either add the intended word to the dictionary
 `typo_max_distance_long` for long words) to `2`. Raising it increases the chance
 of a wrong correction, so prefer the dictionary when you can.
 
+## Correct words keep getting rewritten ("T9-спам")
+
+If T9 rewrites words that are already correct — and it repeats every few seconds
+— the automatic pass is running when you do not want it to. Since v0.2.8.2 the
+typo pass has its **own** mode, independent of the global layout `mode`:
+
+```toml
+typo_mode = "manual"   # off | manual | auto | hybrid
+```
+
+- `off` — T9 never runs;
+- `manual` — T9 runs only on the explicit hotkey (default `CTRL+SHIFT+F`);
+- `auto` / `hybrid` — T9 runs on a word boundary (Space / Enter).
+
+A user who wants automatic *layout* switching but hotkey-only *typo* fixing sets
+`typo_mode = "manual"` and leaves `mode = "auto"`. The two modes no longer
+interfere. On the **Т9** tab of `linguafix gui` each feature has its own mode
+combo.
+
+If T9 still rewrites a specific correct word, add it to the dictionary
+(`linguafix dict add загадка`) — a word known in any loaded language is never
+touched, so this both silences the false positive and teaches the word.
+
 ## Correction does not trigger for a newer language (uk/de/fr)
 
 By default only `en` and `ru` are active. The Latin layouts (`us`, `de`, `fr`)

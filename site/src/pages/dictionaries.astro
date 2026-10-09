@@ -9,7 +9,6 @@ import {
   DICTIONARY_ASSET_BASE as RAW,
   humanSize,
   thematicCategories,
-  thematicWordTotal,
 } from "../lib/dictionaries";
 
 const title = pick("Расширенные словари — LinguaFix", "Extended dictionaries — LinguaFix");
@@ -22,6 +21,10 @@ const importCode = `linguafix dict download ru
 linguafix dict install it --lang ru
 # или вручную:
 linguafix dict import-file ~/Downloads/ru-50k.txt`;
+
+const totalWords = categoryCards
+  .flatMap((cat) => cat.files)
+  .reduce((sum, file) => sum + file.words, 0);
 ---
 
 <Base title={title} description={description}>
@@ -40,94 +43,121 @@ linguafix dict import-file ~/Downloads/ru-50k.txt`;
             )
           }
         </p>
+        <dl class="mx-auto mt-8 grid max-w-xl grid-cols-3 gap-3 text-center">
+          {
+            [
+              { value: String(thematicCategories.length), label: pick("разделов", "categories") },
+              { value: totalWords.toLocaleString(pick("ru-RU", "en-US")), label: pick("слов всего", "words total") },
+              { value: "MIT", label: pick("лицензия", "licence") },
+            ].map((stat) => (
+              <div class="rounded-xl border border-[#e5e5e5] bg-white px-3 py-4 dark:border-[#3d3d3d] dark:bg-[#2d2d2d]">
+                <dt class="text-2xl font-bold tracking-tight">{stat.value}</dt>
+                <dd class="mt-1 text-xs text-[#0a0a0a]/60 dark:text-[#fafafa]/60">{stat.label}</dd>
+              </div>
+            ))
+          }
+        </dl>
       </div>
     </section>
 
     <section class="py-16 sm:py-20">
-      <div class="container-page mx-auto max-w-3xl">
-        <div class="overflow-hidden rounded-lg border border-[#e5e5e5] dark:border-[#3d3d3d]">
-          <table class="w-full text-left text-sm">
-            <thead class="bg-[#fafafa] dark:bg-[#2d2d2d]">
-              <tr>
-                <th class="px-4 py-3 font-semibold">{pick("Язык", "Language")}</th>
-                <th class="px-4 py-3 font-semibold">{pick("Файл", "File")}</th>
-                <th class="px-4 py-3 font-semibold">{pick("Скачать", "Download")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {
-                languages.map((entry) => (
-                  <tr class="border-t border-[#e5e5e5] dark:border-[#3d3d3d]">
-                    <td class="px-4 py-3">{entry.title}</td>
-                    <td class="px-4 py-3 font-mono text-xs">{entry.code}-50k.txt</td>
-                    <td class="px-4 py-3">
-                      <a
-                        class="text-[#1c71d8] underline dark:text-[#3584e4]"
-                        href={`${RAW}/${entry.code}-50k.txt`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {entry.code}-50k.txt
-                      </a>
-                    </td>
-                  </tr>
-                ))
-              }
-            </tbody>
-          </table>
-        </div>
-
-        <h2 class="mt-16 text-2xl font-bold">
-          {pick("Тематические словари", "Thematic dictionaries")}
+      <div class="container-page">
+        <h2 class="text-2xl font-bold sm:text-3xl">
+          {pick("Базовые частотные списки", "Base frequency lists")}
         </h2>
-        <p class="mt-3 text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
+        <p class="mt-3 max-w-2xl text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
           {
             pick(
-              `Профессиональная лексика по разделам — ${thematicWordTotal.toLocaleString("ru-RU")} слов в ${thematicCategories.length} разделах. Подключаются поверх базового словаря и не входят в .deb — ставятся одной командой.`,
-              `Professional vocabulary by field — ${thematicWordTotal.toLocaleString("en-US")} words across ${thematicCategories.length} categories. Loaded on top of the base list and not bundled in the .deb — install with one command.`,
+              "Топ-50k самых частых слов языка, упорядочены по частоте. Входят в .deb, но можно скачать отдельно.",
+              "Top-50k most frequent words per language, ordered by frequency. Bundled in the .deb, but downloadable on their own.",
             )
           }
         </p>
-
-        <div class="mt-6 grid gap-4 sm:grid-cols-2">
+        <div class="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {
-            categoryCards.map((cat) => (
-              <div class="rounded-lg border border-[#e5e5e5] p-4 dark:border-[#3d3d3d]">
-                <div class="flex items-start justify-between gap-2">
-                  <h3 class="font-semibold">{pick(cat.title.ru, cat.title.en)}</h3>
-                  <span class="shrink-0 rounded bg-[#fafafa] px-2 py-0.5 text-xs text-[#0a0a0a]/60 dark:bg-[#2d2d2d] dark:text-[#fafafa]/60">
-                    {cat.license}
+            languages.map((entry) => (
+              <a
+                href={`${RAW}/${entry.code}-50k.txt`}
+                class="card group flex items-center justify-between gap-3 transition-colors hover:border-[#1c71d8]/50 dark:hover:border-[#3584e4]/50"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span class="flex items-center gap-3">
+                  <span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[#1c71d8]/10 font-mono text-xs font-bold uppercase text-[#1c71d8] dark:bg-[#3584e4]/15 dark:text-[#3584e4]">
+                    {entry.code}
                   </span>
-                </div>
-                <p class="mt-2 text-sm text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
-                  {pick(cat.blurb.ru, cat.blurb.en)}
-                </p>
-                <ul class="mt-3 space-y-1 text-xs">
-                  {cat.files.map((file) => (
-                    <li class="flex items-center justify-between gap-2">
-                      <span>
-                        {file.title} · <span class="font-mono">{file.lang}-{cat.slug}-1k.txt</span> · {file.words}{" "}
-                        {pick("слов", "words")} · {humanSize(file.size)}
-                      </span>
-                      <a
-                        class="shrink-0 text-[#1c71d8] underline dark:text-[#3584e4]"
-                        href={`${RAW}/linguafix-dict-${cat.slug}.tar.gz`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        .tar.gz
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-                <pre class="mt-3 overflow-x-auto rounded bg-[#1e1e1e] p-2 text-[11px] text-[#fafafa]"><code>{`linguafix dict install ${cat.slug} --lang ru`}</code></pre>
-              </div>
+                  <span class="font-semibold">{entry.title}</span>
+                </span>
+                <span class="font-mono text-xs text-[#1c71d8] group-hover:underline dark:text-[#3584e4]">
+                  ↓ 50k
+                </span>
+              </a>
             ))
           }
         </div>
 
-        <h2 class="mt-16 text-2xl font-bold">{pick("Как подключить", "How to load")}</h2>
-        <p class="mt-3 text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
+        <h2 class="mt-16 text-2xl font-bold sm:text-3xl">
+          {pick("Тематические словари", "Thematic dictionaries")}
+        </h2>
+        <p class="mt-3 max-w-2xl text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
+          {
+            pick(
+              `Профессиональная лексика по разделам — ${totalWords.toLocaleString("ru-RU")} слов в ${thematicCategories.length} разделах. Подключаются поверх базового словаря и не входят в .deb — ставятся одной командой.`,
+              `Professional vocabulary by field — ${totalWords.toLocaleString("en-US")} words across ${thematicCategories.length} categories. Loaded on top of the base list and not bundled in the .deb — install with one command.`,
+            )
+          }
+        </p>
+
+        <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {
+            categoryCards.map((cat) => (
+              <article class="card flex flex-col">
+                <div class="flex items-start gap-3">
+                  <span
+                    class="grid h-10 w-10 shrink-0 place-items-center rounded-lg font-bold text-white"
+                    style={`background:${cat.color}`}
+                  >
+                    {cat.slug.slice(0, 2).toUpperCase()}
+                  </span>
+                  <div class="min-w-0 flex-1">
+                    <h3 class="font-semibold leading-tight">{pick(cat.title.ru, cat.title.en)}</h3>
+                    <p class="mt-1 text-xs text-[#0a0a0a]/60 dark:text-[#fafafa]/60">
+                      {cat.files.reduce((n, f) => n + f.words, 0).toLocaleString(pick("ru-RU", "en-US"))}{" "}
+                      {pick("слов", "words")} · {cat.license}
+                    </p>
+                  </div>
+                </div>
+                <p class="mt-3 flex-1 text-sm text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
+                  {pick(cat.blurb.ru, cat.blurb.en)}
+                </p>
+                <ul class="mt-4 divide-y divide-[#e5e5e5] text-xs dark:divide-[#3d3d3d]">
+                  {cat.files.map((file) => (
+                    <li class="flex items-center justify-between gap-2 py-1.5">
+                      <span>
+                        <span class="font-medium">{file.title}</span>
+                        <span class="text-[#0a0a0a]/50 dark:text-[#fafafa]/50">
+                          {" "}· {file.words} {pick("слов", "words")} · {humanSize(file.size)}
+                        </span>
+                      </span>
+                      <a
+                        class="shrink-0 font-mono text-[#1c71d8] underline dark:text-[#3584e4]"
+                        href={`${RAW}/linguafix-dict-${cat.slug}.tar.gz`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        ↓ tar.gz
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+                <pre class="mt-4 overflow-x-auto rounded-lg bg-[#1e1e1e] p-2.5 text-[11px] text-[#fafafa]"><code>{`linguafix dict install ${cat.slug} --lang ru`}</code></pre>
+              </article>
+            ))
+          }
+        </div>
+
+        <h2 class="mt-16 text-2xl font-bold sm:text-3xl">{pick("Как подключить", "How to load")}</h2>
+        <p class="mt-3 max-w-2xl text-[#0a0a0a]/70 dark:text-[#fafafa]/70">
           {
             pick(
               "Скачайте файл и импортируйте его — или просто попросите LinguaFix скачать словарь самостоятельно.",
@@ -135,13 +165,13 @@ linguafix dict import-file ~/Downloads/ru-50k.txt`;
             )
           }
         </p>
-        <pre class="mt-4 overflow-x-auto rounded-lg bg-[#1e1e1e] p-4 text-xs text-[#fafafa]"><code>{importCode}</code></pre>
+        <pre class="mt-4 max-w-2xl overflow-x-auto rounded-xl bg-[#1e1e1e] p-4 text-xs text-[#fafafa]"><code>{importCode}</code></pre>
 
-        <p class="mt-8 text-xs text-[#0a0a0a]/60 dark:text-[#fafafa]/60">
+        <p class="mt-8 max-w-2xl text-xs text-[#0a0a0a]/60 dark:text-[#fafafa]/60">
           {
             pick(
-              "Источник словарей: FrequencyWords (hermitdave/FrequencyWords), лицензия MIT. Файлы в репозитории содержат только столбец слов.",
-              "Dictionary source: FrequencyWords (hermitdave/FrequencyWords), MIT licence. The repository files keep only the word column.",
+              "Источник базовых словарей: FrequencyWords (hermitdave/FrequencyWords), лицензия MIT. Тематические списки составлены вручную для LinguaFix. Файлы в репозитории содержат только столбец слов.",
+              "Base dictionaries source: FrequencyWords (hermitdave/FrequencyWords), MIT licence. Thematic lists are curated by hand for LinguaFix. The repository files keep only the word column.",
             )
           }
         </p>

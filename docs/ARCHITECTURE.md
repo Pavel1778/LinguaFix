@@ -334,11 +334,18 @@ word is scored against the corpora whose *layout could have produced it*.
   `set_thematic_categories` is called on `reload_config`. Thematic files are
   never bundled in the `.deb`; they are fetched from the GitHub Release
   (`linguafix-dict-<slug>.tar.gz`) or the offline repository copy.
-- **Typo correction (T9)** (`typo_correction`, `typo_max_distance`,
+- **Typo correction (T9)** (`typo_mode`, `typo_max_distance`,
   `typo_max_distance_long`, `typo_min_word_length`). A second, independent
-  correction path, off by default. It runs only when `target_layout` returned
-  `None` — that is, when the layout is already right — so it can never fight the
-  layout switcher. It uses the same vocabulary the detector scores against
+  correction path, off by default. Its own `typo_mode` (`off` / `manual` /
+  `auto` / `hybrid`) decides when it runs, *independently* of the global layout
+  `mode`: `manual` fires only on `CTRL+SHIFT+F`, `auto`/`hybrid` on a word
+  boundary, `off` never. The legacy boolean `typo_correction` is kept mirrored to
+  `typo_mode != "off"` for compatibility (and for the GUI switch). A legacy file
+  is migrated on load: `typo_correction = true` with `mode = "manual"` becomes
+  `typo_mode = "manual"`, otherwise the global mode is used. It runs only when
+  `target_layout` returned `None` — that is, when the layout is already right —
+  so it can never fight the layout switcher. It uses the same vocabulary the
+  detector scores against
   (`LanguageDetector.ordered_vocabulary`, which preserves the corpus frequency
   order that `vocabulary` loses in a set) and accepts a replacement only when
   the word is absent from the vocabulary and within `typo_max_distance` edits of
@@ -353,9 +360,15 @@ word is scored against the corpora whose *layout could have produced it*.
 
 ## Modes and hotkeys
 
-`mode` selects how much the daemon acts on its own: `auto` corrects every word,
-`manual` only on the fix hotkey, and `hybrid` corrects automatically but keeps a
-short undo history.
+`mode` selects how much the daemon acts on its own for the *layout* pass:
+`auto` corrects every word, `manual` only on the fix hotkey, and `hybrid`
+corrects automatically but keeps a short undo history.
+
+Each optional feature has its own mode on top of that (`typo_mode`,
+`punctuation_mode`): `off`, `manual` (explicit hotkey only), `auto` (on a word
+boundary) or `hybrid`. This lets a user keep automatic layout switching while
+making T9 hotkey-only — the combination behind the "T9-спам" report, where a
+correct word was auto-rewritten because the typo pass inherited the global mode.
 
 Hotkeys are matched in `daemon._parse_hotkey`. A chord such as `CTRL+F12` requires
 the modifier to be held; a **double tap** such as `SHIFT+SHIFT`, `CTRL+CTRL` or

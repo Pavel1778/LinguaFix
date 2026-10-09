@@ -108,7 +108,7 @@ Caramba Switcher for Windows.
 ### Для пользователей: пакет .deb (ничего настраивать не нужно)
 
 ```bash
-sudo apt install ./linguafix_0.2.8.1_all.deb
+sudo apt install ./linguafix_0.2.8.2_all.deb
 ```
 
 Пакет **самодостаточен**: он ставит udev-правило с `TAG+="uaccess"`, включает
@@ -316,6 +316,11 @@ linguafix dict install it --lang ru       # скачать и подключит
 linguafix dict list-installed             # что уже включено
 linguafix dict remove-category it         # отключить
 ```
+
+В каждом разделе — от ~130 до ~330 слов на язык (точные числа смотрите в
+`dictionaries/<раздел>/README.md` и на странице `/dictionaries`). Это реальные
+списки терминов, а не «1000 слов»: числа на сайте считаются из самих файлов при
+сборке и всегда совпадают с тем, что скачивается.
 
 Включённые разделы хранятся в `installed_dict_categories` (по умолчанию
 `["base"]`). Приоритет при детекции: **пользовательский словарь → тематический →

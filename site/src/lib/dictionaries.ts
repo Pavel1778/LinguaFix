@@ -29,6 +29,8 @@ export type ThematicCategory = {
   title: { ru: string; en: string };
   blurb: { ru: string; en: string };
   license: string;
+  /** Accent hex used for the card monogram (light and dark share it). */
+  color: string;
 };
 
 /** Thematic (professional) categories, one release archive each. */
@@ -41,6 +43,7 @@ export const thematicCategories: ThematicCategory[] = [
       en: "Languages, frameworks, git, databases, networks, DevOps.",
     },
     license: "MIT",
+    color: "#3584e4",
   },
   {
     slug: "medicine",
@@ -50,12 +53,14 @@ export const thematicCategories: ThematicCategory[] = [
       en: "Anatomy, diseases, drugs, diagnostics.",
     },
     license: "MIT",
+    color: "#e01b24",
   },
   {
     slug: "legal",
     title: { ru: "Юриспруденция", en: "Law" },
     blurb: { ru: "Кодексы, процессы, договоры, суд.", en: "Codes, proceedings, contracts, courts." },
     license: "MIT",
+    color: "#986a44",
   },
   {
     slug: "finance",
@@ -65,6 +70,7 @@ export const thematicCategories: ThematicCategory[] = [
       en: "Banking, taxes, reporting, investments.",
     },
     license: "MIT",
+    color: "#2ec27e",
   },
   {
     slug: "engineering",
@@ -74,6 +80,7 @@ export const thematicCategories: ThematicCategory[] = [
       en: "Mechanics, materials, drawings, standards.",
     },
     license: "MIT",
+    color: "#e66100",
   },
   {
     slug: "science",
@@ -83,6 +90,7 @@ export const thematicCategories: ThematicCategory[] = [
       en: "Physics, chemistry, mathematics, biology, astronomy.",
     },
     license: "MIT",
+    color: "#9141ac",
   },
   {
     slug: "business",
@@ -92,6 +100,7 @@ export const thematicCategories: ThematicCategory[] = [
       en: "Management, marketing, sales, finance, HR.",
     },
     license: "MIT",
+    color: "#1c71d8",
   },
   {
     slug: "electronics",
@@ -101,6 +110,7 @@ export const thematicCategories: ThematicCategory[] = [
       en: "Circuits, components, microcontrollers, Arduino, RTOS.",
     },
     license: "MIT",
+    color: "#f5c211",
   },
   {
     slug: "media",
@@ -110,6 +120,7 @@ export const thematicCategories: ThematicCategory[] = [
       en: "Journalism, editing, genres, publishing.",
     },
     license: "MIT",
+    color: "#c061cb",
   },
   {
     slug: "education",
@@ -119,6 +130,7 @@ export const thematicCategories: ThematicCategory[] = [
       en: "Pedagogy, methodology, statistics, ML terms.",
     },
     license: "MIT",
+    color: "#26a269",
   },
   {
     slug: "gaming",
@@ -128,6 +140,7 @@ export const thematicCategories: ThematicCategory[] = [
       en: "Genres, engines, gaming jargon, esports.",
     },
     license: "MIT",
+    color: "#ff7800",
   },
   {
     slug: "sport",
@@ -137,6 +150,7 @@ export const thematicCategories: ThematicCategory[] = [
       en: "Sports, terms, rules, equipment.",
     },
     license: "MIT",
+    color: "#33d17a",
   },
 ];
 
